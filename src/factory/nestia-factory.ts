@@ -1,5 +1,6 @@
 import { Scanner } from "../core/scanner";
 import { Container, globalContainer } from "../core/container";
+import { RoutesResolver } from "../core/router/routes-resolver";
 import { ElysiaAdapter } from "../platform/elysia-adapter";
 import { Logger } from "../services/logger.service";
 import { BusRegistry } from "../cqrs/bus";
@@ -21,16 +22,17 @@ export class BnestFactory {
 
     const container = options?.container || globalContainer;
     const scanner = new Scanner({ logger: loggerEnabled, container });
-    const routes = scanner.scan(module);
+    scanner.scan(module);
     const buses = new BusRegistry(container);
     buses.register();
     buses.registerFromClasses([...scanner.getProviders(), ...scanner.getControllers()]);
 
+    const adapter = new ElysiaAdapter({ logger: loggerEnabled, container });
+    const routesResolver = new RoutesResolver(scanner);
+    const routes = routesResolver.resolve(adapter);
+
     logger.log("Dependencies initialized");
     logger.log(`Mapped ${routes.length} routes`);
-
-    const adapter = new ElysiaAdapter({ logger: loggerEnabled });
-    adapter.registerRoutes(routes);
 
     return adapter.getInstance();
   }

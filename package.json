@@ -1,11 +1,19 @@
 {
-  "name": "bnest",
-  "module": "index.ts",
+  "name": "@kaonashi-dev/bnest",
+  "version": "0.1.0",
+  "description": "NestJS-like framework for Bun, powered by Elysia.js",
+  "module": "src/index.ts",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
   "type": "module",
   "bin": {
-    "bnest": "./src/cli/index.ts"
+    "bnest": "src/cli/index.ts"
   },
-  "private": true,
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",

@@ -1,5 +1,6 @@
 import { test, expect, describe } from "bun:test";
 import { NestiaFactory } from "../src/factory/nestia-factory";
+import { Container } from "../src/core/container";
 import { Module } from "../src/decorators/module.decorator";
 import { Controller } from "../src/decorators/controller.decorator";
 import { Get, Post } from "../src/decorators/routes.decorator";
@@ -151,5 +152,34 @@ describe("Elysia Adapter via NestiaFactory", () => {
 
     const response = await app.handle(req).then((r) => r.json());
     expect(response).toEqual({ name: "Alice" });
+  });
+
+  test("should use the application container for guards", async () => {
+    class AuthGuard {
+      canActivate(context: any) {
+        return context.query?.token === "secret";
+      }
+    }
+
+    @Controller("protected")
+    @UseGuards(AuthGuard)
+    class ProtectedController {
+      @Get("/data")
+      getData() {
+        return { ok: true };
+      }
+    }
+
+    @Module({ controllers: [ProtectedController] })
+    class AppModule {}
+
+    const container = new Container();
+    container.addProvider({ provide: AuthGuard, useValue: new AuthGuard() });
+
+    const app = NestiaFactory.create(AppModule, { logger: false, container });
+    const response = await app.handle(new Request("http://localhost/protected/data?token=secret"));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true });
   });
 });

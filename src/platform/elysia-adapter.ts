@@ -1,10 +1,7 @@
 import { Elysia } from "elysia";
-import type { RouteDefinition } from "../core/scanner";
-import { PARAMS_METADATA } from "../common/constants";
-import type { ParamMetadata } from "../decorators/params.decorator";
-import { Container, globalContainer } from "../core/container";
 import { Logger } from "../services/logger.service";
-import { ForbiddenException, HttpException, InternalServerErrorException } from "../exceptions";
+import { Container, globalContainer } from "../core/container";
+import type { CompiledRouteDefinition } from "../core/router/router-execution-context";
 
 interface ElysiaAdapterOptions {
   logger?: boolean;
@@ -36,21 +33,18 @@ export class ElysiaAdapter {
     this.app.onAfterHandle(({ request, set }) => {
       const start = this.requestStartTimes.get(request) || Date.now();
       const duration = Date.now() - start;
-      const url = new URL(request.url);
-      this.logger.log(
-        `${request.method} ${url.pathname} ${set.status || 200} +${duration}ms`,
-        "HTTP",
-      );
+      const path = this.getRequestPath(request.url);
+      this.logger.log(`${request.method} ${path} ${set.status || 200} +${duration}ms`, "HTTP");
       this.requestStartTimes.delete(request);
     });
 
     this.app.onError(({ request, code, error, set }) => {
       const start = this.requestStartTimes.get(request) || Date.now();
       const duration = Date.now() - start;
-      const url = new URL(request.url);
+      const path = this.getRequestPath(request.url);
       const stack = error instanceof Error ? error.stack : undefined;
       this.logger.error(
-        `${request.method} ${url.pathname} ${set.status || 500} +${duration}ms (${code})`,
+        `${request.method} ${path} ${set.status || 500} +${duration}ms (${code})`,
         stack,
         "HTTP",
       );
@@ -58,103 +52,55 @@ export class ElysiaAdapter {
     });
   }
 
-  public registerRoutes(routes: RouteDefinition[]) {
+  public registerRoutes(routes: CompiledRouteDefinition[]) {
     for (const route of routes) {
-      const {
-        method,
-        fullPath,
-        controller,
-        controllerInstance,
-        handlerName,
-        schema,
-        middlewares,
-        guards,
-      } = route;
-      const elysiaMethod = method.toLowerCase() as "get" | "post" | "put" | "patch" | "delete";
-
-      const methodParams: ParamMetadata[] =
-        (Reflect.getMetadata(PARAMS_METADATA, controller) || ({} as any))[handlerName] || [];
-
-      // Create handler
-      const handler = async (context: any) => {
-        // Build arguments based on param decorators
-        const args: any[] = [];
-
-        // Ensure the args array is properly sized
-        const maxIndex =
-          methodParams.length > 0 ? Math.max(...methodParams.map((p) => p.index)) : -1;
-        if (maxIndex >= 0) {
-          args.length = maxIndex + 1;
-        }
-
-        for (const param of methodParams) {
-          switch (param.type) {
-            case "body":
-              args[param.index] = param.name ? context.body?.[param.name] : context.body;
-              break;
-            case "param":
-              args[param.index] = param.name ? context.params?.[param.name] : context.params;
-              break;
-            case "query":
-              args[param.index] = param.name ? context.query?.[param.name] : context.query;
-              break;
-          }
-        }
-
-        try {
-          return await controllerInstance[handlerName](...args);
-        } catch (error) {
-          const exception =
-            error instanceof HttpException
-              ? error
-              : new InternalServerErrorException("Internal Server Error");
-          context.set.status = exception.statusCode;
-          return exception.toJSON();
-        }
-      };
+      const elysiaMethod = route.method.toLowerCase() as
+        | "get"
+        | "post"
+        | "put"
+        | "patch"
+        | "delete";
 
       const elysiaOptions: any = {};
-      if (schema) {
-        if (schema.body) elysiaOptions.body = schema.body;
-        if (schema.query) elysiaOptions.query = schema.query;
-        if (schema.params) elysiaOptions.params = schema.params;
-        if (schema.response) elysiaOptions.response = schema.response;
+      if (route.schema) {
+        if (route.schema.body) elysiaOptions.body = route.schema.body;
+        if (route.schema.query) elysiaOptions.query = route.schema.query;
+        if (route.schema.params) elysiaOptions.params = route.schema.params;
+        if (route.schema.response) elysiaOptions.response = route.schema.response;
       }
 
-      const elysiaGuards = (guards || []).map((guardClass: any) => {
-        return async (context: any) => {
-          const guardInstance = this.container.get<any>(guardClass);
-          try {
-            const canActivate = await guardInstance.canActivate(context);
-            if (!canActivate) {
-              throw new ForbiddenException();
-            }
-          } catch (error) {
-            const exception =
-              error instanceof HttpException
-                ? error
-                : new InternalServerErrorException("Internal Server Error");
-            context.set.status = exception.statusCode;
-            return exception.toJSON();
-          }
-        };
-      });
-
-      const allBeforeHooks = [...elysiaGuards, ...(middlewares || [])];
-
-      if (allBeforeHooks.length > 0) {
-        elysiaOptions.beforeHandle = allBeforeHooks;
+      if (route.beforeHandle && route.beforeHandle.length > 0) {
+        elysiaOptions.beforeHandle = route.beforeHandle;
       }
 
-      (this.app as any)[elysiaMethod](fullPath, handler, elysiaOptions);
+      (this.app as any)[elysiaMethod](route.fullPath, route.handler, elysiaOptions);
 
       if (this.options?.logger !== false) {
-        this.logger.debug(`Mapped {${fullPath}, ${method}} route`, "Router");
+        this.logger.debug(`Mapped {${route.fullPath}, ${route.method}} route`, "Router");
       }
     }
   }
 
+  public getContainer() {
+    return this.container;
+  }
+
   public getInstance() {
     return this.app;
+  }
+
+  private getRequestPath(url: string): string {
+    const protocolIndex = url.indexOf("://");
+    if (protocolIndex === -1) {
+      return url;
+    }
+
+    const pathStart = url.indexOf("/", protocolIndex + 3);
+    if (pathStart === -1) {
+      return "/";
+    }
+
+    const queryStart = url.indexOf("?", pathStart);
+    return queryStart === -1 ? url.slice(pathStart) : url.slice(pathStart, queryStart);
   }
 }

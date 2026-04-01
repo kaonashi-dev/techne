@@ -1,5 +1,6 @@
 import { test, expect, describe } from "bun:test";
 import { Scanner } from "../src/core/scanner";
+import { RouterExplorer } from "../src/core/router/router-explorer";
 import { Module } from "../src/decorators/module.decorator";
 import { Controller } from "../src/decorators/controller.decorator";
 import { Get, Post } from "../src/decorators/routes.decorator";
@@ -34,7 +35,8 @@ describe("Scanner", () => {
     })
     class AppModule {}
 
-    const routes = scanner.scan(AppModule);
+    scanner.scan(AppModule);
+    const routes = new RouterExplorer(scanner).explore();
 
     expect(routes).toHaveLength(3);
 

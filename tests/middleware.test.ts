@@ -1,5 +1,6 @@
 import { test, expect } from "bun:test";
 import { Scanner } from "../src/core/scanner";
+import { RoutesResolver } from "../src/core/router/routes-resolver";
 import { ElysiaAdapter } from "../src/platform/elysia-adapter";
 import { Controller, Get, Module, Middleware } from "../src/decorators";
 
@@ -30,10 +31,10 @@ test("middleware - should apply controller and route middlewares", async () => {
   class TestModule {}
 
   const scanner = new Scanner();
-  const routes = scanner.scan(TestModule);
+  scanner.scan(TestModule);
 
   const adapter = new ElysiaAdapter();
-  adapter.registerRoutes(routes);
+  new RoutesResolver(scanner).resolve(adapter);
 
   const app = adapter.getInstance();
 
