@@ -1,4 +1,4 @@
-import { Module } from "nestia";
+import { Module } from "@kaonashi-dev/bnest";
 
 @Module({
   controllers: [],

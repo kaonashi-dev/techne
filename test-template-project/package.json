@@ -1,18 +1,27 @@
 {
   "name": "test-template-project",
-  "version": "1.0.0",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
   "scripts": {
+    "dev": "bun --hot run src/main.ts",
     "start": "bun run src/main.ts",
-    "dev": "bun --hot run src/main.ts"
+    "build": "bun build src/main.ts --target=bun --outfile=dist/app.bun --minify",
+    "build:node": "bun build src/main.ts --target=node --outdir=dist --format=esm --minify",
+    "lint": "oxlint .",
+    "lint:fix": "oxlint --fix .",
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check .",
+    "check": "bun run lint && bun run format:check",
+    "check:fix": "bun run lint:fix && bun run format"
   },
   "dependencies": {
-    "elysia": "^1.0.0",
-    "nestia": "latest",
-    "reflect-metadata": "^0.13.0",
-    "@sinclair/typebox": "^0.32.0"
+    "@kaonashi-dev/bnest": "latest"
   },
   "devDependencies": {
-    "bun-types": "latest",
+    "@types/bun": "latest",
+    "oxfmt": "^0.41.0",
+    "oxlint": "^1.56.0",
     "typescript": "^5.0.0"
   }
 }

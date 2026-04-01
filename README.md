@@ -59,7 +59,7 @@ app.listen(3000, () => {
 
 ```bash
 # Create a new project
-bunx bnest new my-project
+bunx kaonashi-dev/bnest new my-project
 cd my-project && bun install && bun run dev
 
 # Generate files
@@ -71,6 +71,8 @@ bunx bnest g resource users    # module + controller + service with CRUD
 # Build
 bunx bnest build src/main.ts --out dist/app.bun --minify
 ```
+
+`bnest new` scaffolds a ready-to-run project with `src/main.ts`, `src/app.module.ts`, `src/app.controller.ts`, `src/app.service.ts`, `.gitignore`, `tsconfig.json`, `oxlint.json`, `.oxfmtrc.json`, and common scripts for build, lint, format, and checks.
 
 ## Core Concepts
 

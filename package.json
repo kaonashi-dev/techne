@@ -1,7 +1,7 @@
 {
   "name": "@kaonashi-dev/bnest",
-  "version": "0.1.0",
-  "description": "NestJS-like framework for Bun, powered by Elysia.js",
+  "version": "0.1.2",
+  "description": "Framework for Bun, powered by Elysia.js",
   "module": "src/index.ts",
   "main": "src/index.ts",
   "types": "src/index.ts",
@@ -25,7 +25,6 @@
     "check": "bun run lint && bun run format:check",
     "check:fix": "bun run lint:fix && bun run format",
     "build": "bun build src/index.ts --target=bun --outfile=dist/bnest.bun --minify",
-    "build:node": "bun build src/index.ts --target=node --outdir=dist --format=esm --minify",
     "prepublishOnly": "bun run build"
   },
   "devDependencies": {

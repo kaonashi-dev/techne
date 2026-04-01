@@ -1,8 +1,9 @@
-import { Module } from "nestia";
+import { Module } from "@kaonashi-dev/bnest";
+import { AppController } from "./app.controller";
+import { AppService } from "./app.service";
 
 @Module({
-  imports: [],
-  controllers: [],
-  providers: [],
+  controllers: [AppController],
+  providers: [AppService],
 })
 export class AppModule {}
