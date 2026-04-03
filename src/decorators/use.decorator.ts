@@ -1,4 +1,4 @@
-import "reflect-metadata";
+import "../reflect-setup";
 import { MIDDLEWARE_METADATA } from "../common/constants";
 
 function _Middleware(...middlewares: any[]): MethodDecorator & ClassDecorator {

@@ -1,4 +1,4 @@
-import "reflect-metadata";
+import "../reflect-setup";
 import { Container, type Provider, isCustomProvider } from "../core/container";
 import { Scanner } from "../core/scanner";
 import type { ModuleMetadata } from "../decorators/module.decorator";

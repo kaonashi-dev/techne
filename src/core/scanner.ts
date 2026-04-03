@@ -1,4 +1,4 @@
-import "reflect-metadata";
+import "../reflect-setup";
 import { MODULE_METADATA } from "../common/constants";
 import { Container, globalContainer, isCustomProvider } from "./container";
 import { Logger } from "../services/logger.service";

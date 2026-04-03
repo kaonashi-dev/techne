@@ -1,4 +1,4 @@
-import "reflect-metadata";
+import "../reflect-setup";
 import { ROUTES_METADATA } from "../common/constants";
 import type { TSchema } from "@sinclair/typebox";
 

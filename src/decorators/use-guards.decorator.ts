@@ -1,4 +1,4 @@
-import "reflect-metadata";
+import "../reflect-setup";
 import { GUARDS_METADATA } from "../common/constants";
 
 export function UseGuards(...guards: any[]): MethodDecorator & ClassDecorator {

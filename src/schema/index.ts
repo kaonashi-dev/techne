@@ -1,42 +1,58 @@
-import "reflect-metadata";
+import "../reflect-setup";
 import { Type } from "@sinclair/typebox";
 import { enumType } from "./enum";
+import { setPropertyMetadata, buildSchemaFromClass, Dto, getDtoSchema } from "./dto";
 
-const PROPERTY_METADATA_KEY = "schema:properties";
+// ─── Property decorators (class-validator style) ─────────────────────────────
 
-export function String(options?: Parameters<typeof Type.String>[0]) {
+export function IsString(options?: Parameters<typeof Type.String>[0]) {
   return (target: any, key: string) => {
-    _setPropertyMetadata(target, key, { type: "string", options });
+    setPropertyMetadata(target, key, { type: "string", options });
   };
 }
 
-export function Number(options?: Parameters<typeof Type.Number>[0]) {
+export function IsNumber(options?: Parameters<typeof Type.Number>[0]) {
   return (target: any, key: string) => {
-    _setPropertyMetadata(target, key, { type: "number", options });
+    setPropertyMetadata(target, key, { type: "number", options });
   };
 }
 
-export function Integer(options?: Parameters<typeof Type.Integer>[0]) {
+export function IsInteger(options?: Parameters<typeof Type.Integer>[0]) {
   return (target: any, key: string) => {
-    _setPropertyMetadata(target, key, { type: "integer", options });
+    setPropertyMetadata(target, key, { type: "integer", options });
   };
 }
 
-export function Boolean() {
+export function IsBoolean() {
   return (target: any, key: string) => {
-    _setPropertyMetadata(target, key, { type: "boolean" });
+    setPropertyMetadata(target, key, { type: "boolean" });
   };
 }
 
-export function Enum(values: any) {
+export function IsEnum(values: any) {
   return (target: any, key: string) => {
-    _setPropertyMetadata(target, key, { enum: values });
+    setPropertyMetadata(target, key, { enum: values });
   };
 }
+
+// ─── Legacy aliases (backwards compatible) ───────────────────────────────────
+
+/** @deprecated Use `IsString` instead */
+export const String = IsString;
+/** @deprecated Use `IsNumber` instead */
+export const Number = IsNumber;
+/** @deprecated Use `IsInteger` instead */
+export const Integer = IsInteger;
+/** @deprecated Use `IsBoolean` instead */
+export const Boolean = IsBoolean;
+/** @deprecated Use `IsEnum` instead */
+export const Enum = IsEnum;
 
 export function Optional(schema: any) {
   return Type.Optional(schema);
 }
+
+// ─── Schema builder object ────────────────────────────────────────────────────
 
 export const Schema = {
   Object: (...args: any[]) => {
@@ -44,7 +60,7 @@ export const Schema = {
     const [schemaOrClass] = args;
 
     if (typeof schemaOrClass === "function" && schemaOrClass.prototype !== undefined) {
-      return _classToObject(schemaOrClass);
+      return buildSchemaFromClass(schemaOrClass);
     }
 
     return Type.Object(schemaOrClass);
@@ -72,51 +88,4 @@ export const Schema = {
   enum: enumType,
 };
 
-function _setPropertyMetadata(target: any, key: string, meta: any) {
-  const existing: Record<string, any> = Reflect.getMetadata(PROPERTY_METADATA_KEY, target) || {};
-  existing[key] = meta;
-  Reflect.defineMetadata(PROPERTY_METADATA_KEY, existing, target);
-}
-
-function _classToObject(klass: new (...args: any[]) => any) {
-  const properties: Record<string, any> =
-    Reflect.getMetadata(PROPERTY_METADATA_KEY, klass.prototype) || {};
-
-  const keys = Object.keys(properties);
-  if (keys.length === 0) return Type.Object({});
-
-  const objSchema: Record<string, any> = {};
-
-  for (const key of keys) {
-    const meta = properties[key];
-    objSchema[key] = _inferSchema(meta);
-  }
-
-  return Type.Object(objSchema);
-}
-
-function _inferSchema(meta: any): any {
-  if (!meta) return Type.Any();
-
-  if (meta.type) {
-    switch (meta.type) {
-      case "string":
-        return Type.String(meta.options || {});
-      case "number":
-        return Type.Number(meta.options || {});
-      case "integer":
-        return Type.Integer(meta.options || {});
-      case "boolean":
-        return Type.Boolean();
-      default:
-        return Type.Any();
-    }
-  }
-
-  if (meta.enum) return enumType(meta.enum);
-  if (meta.schema) return meta.schema;
-
-  return Type.Any();
-}
-
-export { Type, enumType };
+export { Type, enumType, Dto, getDtoSchema };

@@ -6,14 +6,18 @@ export interface WorkerOptions {
   queue: QueueAdapter;
   handler: JobHandler;
   concurrency?: number;
+  /** @deprecated Use minPollingInterval / maxPollingInterval instead */
   pollingInterval?: number;
+  minPollingInterval?: number;
+  maxPollingInterval?: number;
 }
 
 export class Worker {
   private queue: QueueAdapter;
   private handler: JobHandler;
   private concurrency: number;
-  private pollingInterval: number;
+  private minPollingInterval: number;
+  private maxPollingInterval: number;
   private isRunning: boolean = false;
   private activeJobs: number = 0;
 
@@ -21,54 +25,51 @@ export class Worker {
     this.queue = options.queue;
     this.handler = options.handler;
     this.concurrency = options.concurrency ?? 1;
-    this.pollingInterval = options.pollingInterval ?? 1000;
+    // pollingInterval kept for backwards compatibility: treated as minPollingInterval
+    this.minPollingInterval = options.minPollingInterval ?? options.pollingInterval ?? 100;
+    this.maxPollingInterval = options.maxPollingInterval ?? 30_000;
   }
 
   start() {
     if (this.isRunning) return;
     this.isRunning = true;
-    this.poll();
+    this.poll(this.minPollingInterval);
   }
 
   stop() {
     this.isRunning = false;
   }
 
-  private async poll() {
+  private async poll(currentInterval: number) {
     if (!this.isRunning) return;
 
     if (this.activeJobs >= this.concurrency) {
-      // If we are fully saturated, wait a bit before checking again
-      setTimeout(() => this.poll(), this.pollingInterval);
+      setTimeout(() => this.poll(currentInterval), currentInterval);
       return;
     }
 
     try {
-      // Try to get a job
       const job = await this.queue.dequeue();
 
       if (job) {
-        // We found a job! Let's process it.
         this.activeJobs++;
 
-        // Don't await here, process it concurrently
         this.processJob(job).finally(() => {
           this.activeJobs--;
-          // Immediately try to poll again after finishing a job
-          // (setImmediate/setTimeout to avoid max call stack)
-          setTimeout(() => this.poll(), 0);
+          setTimeout(() => this.poll(this.minPollingInterval), 0);
         });
 
-        // We might be able to handle more jobs, poll again immediately
-        setTimeout(() => this.poll(), 0);
+        // Reset backoff — there may be more jobs waiting
+        setTimeout(() => this.poll(this.minPollingInterval), 0);
       } else {
-        // No jobs in queue, wait a bit before polling again
-        setTimeout(() => this.poll(), this.pollingInterval);
+        // No jobs: back off exponentially up to maxPollingInterval
+        const nextInterval = Math.min(currentInterval * 2, this.maxPollingInterval);
+        setTimeout(() => this.poll(nextInterval), currentInterval);
       }
     } catch (err) {
       console.error("[Worker] Error while polling queue:", err);
-      // Wait before retrying to prevent hot loop on error
-      setTimeout(() => this.poll(), this.pollingInterval);
+      const nextInterval = Math.min(currentInterval * 2, this.maxPollingInterval);
+      setTimeout(() => this.poll(nextInterval), currentInterval);
     }
   }
 

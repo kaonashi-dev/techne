@@ -1,4 +1,4 @@
-import "reflect-metadata";
+import "../../reflect-setup";
 import { MESSAGE_PATTERN_METADATA } from "../../common/constants";
 
 export function MessagePattern(pattern: string): MethodDecorator {

@@ -1,4 +1,4 @@
-import "reflect-metadata";
+import "../../reflect-setup";
 import { EVENT_HANDLER_METADATA } from "../../common/constants";
 
 export function EventHandler(event: any): ClassDecorator {

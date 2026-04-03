@@ -1,4 +1,4 @@
-import "reflect-metadata";
+import "../../reflect-setup";
 import { EVENT_PATTERN_METADATA } from "../../common/constants";
 
 export function EventPattern(pattern: string): MethodDecorator {

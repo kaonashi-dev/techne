@@ -1,4 +1,4 @@
-import "reflect-metadata";
+import "../reflect-setup";
 
 export interface ModuleMetadata {
   imports?: any[];

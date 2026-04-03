@@ -1,4 +1,4 @@
-import "reflect-metadata";
+import "../reflect-setup";
 import { CONTROLLER_METADATA } from "../common/constants";
 
 export function Controller(prefixOrOptions?: string | { path?: string }): ClassDecorator {

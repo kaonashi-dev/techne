@@ -7,6 +7,7 @@ import {
 } from "../../common/constants";
 import type { ParamMetadata } from "../../decorators/params.decorator";
 import type { RouteMetadata } from "../../decorators/routes.decorator";
+import { getDtoSchema } from "../../schema/dto";
 import type { Scanner } from "../scanner";
 
 export interface DiscoveredRouteDefinition extends RouteMetadata {
@@ -40,20 +41,45 @@ export class RouterExplorer {
         const routeMiddlewares: any[] =
           Reflect.getMetadata(MIDDLEWARE_METADATA, routeHandler) || [];
         const routeGuards: any[] = Reflect.getMetadata(GUARDS_METADATA, routeHandler) || [];
+        const paramsMetadata = paramsByHandler[route.handlerName] || [];
+
+        // Auto-inject DTO schema when @Body(MyDto) is used and no explicit
+        // body schema was provided on the route decorator.
+        const schema = this.resolveSchema(route, paramsMetadata);
 
         routes.push({
           ...route,
+          schema,
           controller,
           controllerInstance,
           fullPath: this.normalizePath(prefix, route.path),
           middlewares: [...controllerMiddlewares, ...routeMiddlewares],
           guards: [...controllerGuards, ...routeGuards],
-          paramsMetadata: paramsByHandler[route.handlerName] || [],
+          paramsMetadata,
         });
       }
     }
 
     return routes;
+  }
+
+  private resolveSchema(
+    route: RouteMetadata,
+    paramsMetadata: ParamMetadata[],
+  ): RouteMetadata["schema"] {
+    // If the route already declares an explicit body schema, respect it.
+    if (route.schema?.body) return route.schema;
+
+    for (const param of paramsMetadata) {
+      if (param.type === "body" && param.dtoClass) {
+        const dtoSchema = getDtoSchema(param.dtoClass);
+        if (dtoSchema) {
+          return { ...route.schema, body: dtoSchema };
+        }
+      }
+    }
+
+    return route.schema;
   }
 
   private normalizePath(prefix: string, path: string): string {

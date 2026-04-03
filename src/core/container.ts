@@ -1,4 +1,4 @@
-import "reflect-metadata";
+import "../reflect-setup";
 import { INJECT_METADATA } from "../common/constants";
 
 export interface ClassProvider {
@@ -49,6 +49,9 @@ export function isCustomProvider(provider: any): boolean {
   );
 }
 
+const paramTypesCache = new Map<Function, any[]>();
+const injectTokensCache = new Map<Function, Record<number, any>>();
+
 export class Container {
   private instances = new Map<any, any>();
   private resolutionStack = new Set<any>();
@@ -92,11 +95,19 @@ export class Container {
     this.resolutionStack.add(target);
 
     try {
-      // Get the dependencies from the constructor
-      const tokens: any[] = Reflect.getMetadata("design:paramtypes", target) || [];
+      // Get the dependencies from the constructor (cached to avoid repeated reflection)
+      let tokens = paramTypesCache.get(target);
+      if (!tokens) {
+        tokens = Reflect.getMetadata("design:paramtypes", target) || [];
+        paramTypesCache.set(target, tokens);
+      }
 
-      // Resolve injected tokens (from @Inject decorator)
-      const injectTokens: Record<number, any> = Reflect.getMetadata(INJECT_METADATA, target) || {};
+      // Resolve injected tokens from @Inject decorator (cached)
+      let injectTokens = injectTokensCache.get(target);
+      if (!injectTokens) {
+        injectTokens = Reflect.getMetadata(INJECT_METADATA, target) || {};
+        injectTokensCache.set(target, injectTokens);
+      }
 
       // Resolve all dependencies recursively
       const injections = tokens.map((token: any, index: number) => {
@@ -149,6 +160,8 @@ export class Container {
     this.instances.clear();
     this.resolutionStack.clear();
     this.providers.clear();
+    paramTypesCache.clear();
+    injectTokensCache.clear();
   }
 }
 

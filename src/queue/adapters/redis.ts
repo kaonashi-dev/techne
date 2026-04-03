@@ -40,9 +40,11 @@ export class RedisQueue implements QueueAdapter {
   }
 
   async dequeue(): Promise<Job | null> {
-    // Atomically pop from pending queue and push to processing queue
-    // rpoplpush is used or lmove
-    const id = await this.client.rpoplpush(this.queueKey, this.processingKey);
+    // Blocking pop: sleeps server-side until a job arrives (or timeout expires).
+    // This eliminates busy-polling and reduces latency to ~1 ms.
+    // brpoplpush returns [sourceKey, value] or null on timeout.
+    const result = await this.client.brpoplpush(this.queueKey, this.processingKey, 30);
+    const id = Array.isArray(result) ? result[1] : result;
 
     if (!id) return null;
 

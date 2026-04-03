@@ -1,4 +1,4 @@
-import "reflect-metadata";
+import "../reflect-setup";
 import { INJECTABLE_METADATA } from "../common/constants";
 
 export function Injectable(): ClassDecorator {

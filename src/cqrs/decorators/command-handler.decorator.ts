@@ -1,4 +1,4 @@
-import "reflect-metadata";
+import "../../reflect-setup";
 import { COMMAND_HANDLER_METADATA } from "../../common/constants";
 
 export function CommandHandler(command: any): ClassDecorator {
