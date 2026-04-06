@@ -4,6 +4,7 @@ import { RoutesResolver } from "../core/router/routes-resolver";
 import { ElysiaAdapter } from "../platform/elysia-adapter";
 import { Logger } from "../services/logger.service";
 import { BusRegistry } from "../cqrs/bus";
+import { BnestApplication } from "../core/bnest-application";
 import { MicroservicesAdapter } from "../microservices/adapter";
 import type { MicroserviceOptions } from "../microservices/types";
 
@@ -13,7 +14,10 @@ export interface BnestApplicationOptions {
 }
 
 export class BnestFactory {
-  public static create(module: any, options?: BnestApplicationOptions) {
+  public static async create(
+    module: any,
+    options?: BnestApplicationOptions,
+  ): Promise<BnestApplication> {
     const loggerEnabled = options?.logger !== false;
     Logger.setEnabled(loggerEnabled);
 
@@ -22,7 +26,7 @@ export class BnestFactory {
 
     const container = options?.container || globalContainer;
     const scanner = new Scanner({ logger: loggerEnabled, container });
-    scanner.scan(module);
+    await scanner.scan(module);
     const buses = new BusRegistry(container);
     buses.register();
     buses.registerFromClasses([...scanner.getProviders(), ...scanner.getControllers()]);
@@ -34,13 +38,18 @@ export class BnestFactory {
     logger.log("Dependencies initialized");
     logger.log(`Mapped ${routes.length} routes`);
 
-    return adapter.getInstance();
+    return new BnestApplication(
+      adapter.getInstance(),
+      scanner,
+      container,
+      routesResolver.executionContext,
+    );
   }
 
-  public static createMicroservice(module: any, options: MicroserviceOptions) {
+  public static async createMicroservice(module: any, options: MicroserviceOptions) {
     const container = new Container();
     const scanner = new Scanner({ logger: false, container });
-    scanner.scan(module);
+    await scanner.scan(module);
 
     const buses = new BusRegistry(container);
     buses.register();
@@ -50,6 +59,3 @@ export class BnestFactory {
     return adapter.create([...scanner.getProviders(), ...scanner.getControllers()], options);
   }
 }
-
-/** @deprecated Use BnestFactory instead */
-export const NestiaFactory = BnestFactory;

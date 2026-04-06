@@ -59,8 +59,8 @@ class UserController {
 })
 class AppModule {}
 
-const app = BnestFactory.create(AppModule);
+const app = await BnestFactory.create(AppModule);
 
 app.listen(3000, () => {
-  console.log(`🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`);
+  console.log(`🦊 Bnest is running at ${app.getUrl()}`);
 });

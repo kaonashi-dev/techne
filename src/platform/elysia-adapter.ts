@@ -27,20 +27,20 @@ export class ElysiaAdapter {
     }
 
     this.app.onRequest(({ request }) => {
-      this.requestStartTimes.set(request, Date.now());
+      this.requestStartTimes.set(request, performance.now());
     });
 
     this.app.onAfterHandle(({ request, set }) => {
-      const start = this.requestStartTimes.get(request) || Date.now();
-      const duration = Date.now() - start;
+      const start = this.requestStartTimes.get(request) || performance.now();
+      const duration = Math.round(performance.now() - start);
       const path = this.getRequestPath(request.url);
       this.logger.log(`${request.method} ${path} ${set.status || 200} +${duration}ms`, "HTTP");
       this.requestStartTimes.delete(request);
     });
 
     this.app.onError(({ request, code, error, set }) => {
-      const start = this.requestStartTimes.get(request) || Date.now();
-      const duration = Date.now() - start;
+      const start = this.requestStartTimes.get(request) || performance.now();
+      const duration = Math.round(performance.now() - start);
       const path = this.getRequestPath(request.url);
       const stack = error instanceof Error ? error.stack : undefined;
       this.logger.error(

@@ -1,5 +1,5 @@
 import { test, expect, describe, afterEach } from "bun:test";
-import { MemoryQueue, DBQueue, Worker } from "./index";
+import { MemoryQueue, DBQueue, Worker } from "../src/queue/index";
 
 describe("Queue System", () => {
   describe("MemoryQueue", () => {

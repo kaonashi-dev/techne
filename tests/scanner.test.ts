@@ -6,7 +6,7 @@ import { Controller } from "../src/decorators/controller.decorator";
 import { Get, Post } from "../src/decorators/routes.decorator";
 
 describe("Scanner", () => {
-  test("should scan modules and extract controllers routes", () => {
+  test("should scan modules and extract controllers routes", async () => {
     const scanner = new Scanner();
 
     @Controller("users")
@@ -35,7 +35,7 @@ describe("Scanner", () => {
     })
     class AppModule {}
 
-    scanner.scan(AppModule);
+    await scanner.scan(AppModule);
     const routes = new RouterExplorer(scanner).explore();
 
     expect(routes).toHaveLength(3);

@@ -5,4 +5,7 @@ export * from "./routes.decorator";
 export * from "./params.decorator";
 export * from "./use.decorator";
 export * from "./use-guards.decorator";
+export * from "./use-filters.decorator";
+export * from "./use-interceptors.decorator";
+export * from "./use-pipes.decorator";
 export * from "./inject.decorator";

@@ -1,8 +1,9 @@
 export * from "./decorators";
 export * from "./interfaces";
 export * from "./core/container";
-export * from "./factory/nestia-factory";
-export type { BnestApplicationOptions } from "./factory/nestia-factory";
+export * from "./core/bnest-application";
+export * from "./factory/bnest-factory";
+export type { BnestApplicationOptions } from "./factory/bnest-factory";
 export * from "./schema";
 export * from "./services/logger.service";
 export * from "./exceptions";

@@ -332,7 +332,7 @@ export class AppModule {}
     `import { BnestFactory } from "@kaonashi-dev/bnest";
 import { AppModule } from "./app.module";
 
-const app = BnestFactory.create(AppModule);
+const app = await BnestFactory.create(AppModule);
 const port = Number(Bun.env.PORT ?? 3000);
 
 app.listen(port, () => {

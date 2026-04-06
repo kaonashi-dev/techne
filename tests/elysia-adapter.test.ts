@@ -1,5 +1,5 @@
 import { test, expect, describe } from "bun:test";
-import { NestiaFactory } from "../src/factory/nestia-factory";
+import { BnestFactory } from "../src/factory/bnest-factory";
 import { Container } from "../src/core/container";
 import { Module } from "../src/decorators/module.decorator";
 import { Controller } from "../src/decorators/controller.decorator";
@@ -7,7 +7,7 @@ import { Get, Post } from "../src/decorators/routes.decorator";
 import { Body, Param, Query } from "../src/decorators/params.decorator";
 import { UseGuards } from "../src/decorators/use-guards.decorator";
 
-describe("Elysia Adapter via NestiaFactory", () => {
+describe("Elysia Adapter via BnestFactory", () => {
   test("should handle GET requests", async () => {
     @Controller("test")
     class TestController {
@@ -20,7 +20,7 @@ describe("Elysia Adapter via NestiaFactory", () => {
     @Module({ controllers: [TestController] })
     class AppModule {}
 
-    const app = NestiaFactory.create(AppModule);
+    const app = await BnestFactory.create(AppModule);
 
     const response = await app
       .handle(new Request("http://localhost/test/hello"))
@@ -40,7 +40,7 @@ describe("Elysia Adapter via NestiaFactory", () => {
     @Module({ controllers: [UserController] })
     class AppModule {}
 
-    const app = NestiaFactory.create(AppModule);
+    const app = await BnestFactory.create(AppModule);
 
     const response = await app
       .handle(new Request("http://localhost/users/123"))
@@ -60,7 +60,7 @@ describe("Elysia Adapter via NestiaFactory", () => {
     @Module({ controllers: [UserController] })
     class AppModule {}
 
-    const app = NestiaFactory.create(AppModule);
+    const app = await BnestFactory.create(AppModule);
 
     const req = new Request("http://localhost/users/create", {
       method: "POST",
@@ -84,7 +84,7 @@ describe("Elysia Adapter via NestiaFactory", () => {
     @Module({ controllers: [SearchController] })
     class AppModule {}
 
-    const app = NestiaFactory.create(AppModule);
+    const app = await BnestFactory.create(AppModule);
 
     const response = await app
       .handle(new Request("http://localhost/search?q=bun"))
@@ -111,7 +111,7 @@ describe("Elysia Adapter via NestiaFactory", () => {
     @Module({ controllers: [ProtectedController], providers: [AuthGuard] })
     class AppModule {}
 
-    const app = NestiaFactory.create(AppModule);
+    const app = await BnestFactory.create(AppModule);
 
     const req1 = new Request("http://localhost/protected/data");
     const res1 = await app.handle(req1);
@@ -142,7 +142,7 @@ describe("Elysia Adapter via NestiaFactory", () => {
     @Module({ controllers: [ValidatedController] })
     class AppModule {}
 
-    const app = NestiaFactory.create(AppModule);
+    const app = await BnestFactory.create(AppModule);
 
     const req = new Request("http://localhost/validated", {
       method: "POST",
@@ -176,7 +176,7 @@ describe("Elysia Adapter via NestiaFactory", () => {
     const container = new Container();
     container.addProvider({ provide: AuthGuard, useValue: new AuthGuard() });
 
-    const app = NestiaFactory.create(AppModule, { logger: false, container });
+    const app = await BnestFactory.create(AppModule, { logger: false, container });
     const response = await app.handle(new Request("http://localhost/protected/data?token=secret"));
 
     expect(response.status).toBe(200);

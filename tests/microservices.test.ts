@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Injectable, Module, NestiaFactory } from "../src";
+import { Injectable, Module, BnestFactory } from "../src";
 import { EventPattern, LocalClient, LocalServer, MessagePattern } from "../src/microservices";
 
 @Injectable()
@@ -32,7 +32,7 @@ describe("microservices", () => {
     @Module({ providers: [MessageController] })
     class AppModule {}
 
-    const { server, client, container } = NestiaFactory.createMicroservice(AppModule, {
+    const { server, client, container } = await BnestFactory.createMicroservice(AppModule, {
       transport: "local",
     });
 

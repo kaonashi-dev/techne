@@ -7,7 +7,7 @@ import { RouterResponseController } from "./router-response-controller";
 export class RoutesResolver {
   private readonly explorer: RouterExplorer;
   private readonly responseController = new RouterResponseController();
-  private readonly executionContext = new RouterExecutionContext(this.responseController);
+  public readonly executionContext = new RouterExecutionContext(this.responseController);
 
   constructor(private readonly scanner: Scanner) {
     this.explorer = new RouterExplorer(scanner);
