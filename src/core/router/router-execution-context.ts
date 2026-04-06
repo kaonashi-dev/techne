@@ -123,11 +123,7 @@ export class RouterExecutionContext {
     });
   }
 
-  private applyPipes(
-    args: any[],
-    paramsMetadata: ParamMetadata[],
-    pipes: PipeTransform[],
-  ): any[] {
+  private applyPipes(args: any[], paramsMetadata: ParamMetadata[], pipes: PipeTransform[]): any[] {
     const result = [...args];
     for (const param of paramsMetadata) {
       if (param.type === "request") continue; // Don't pipe raw request

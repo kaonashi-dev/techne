@@ -84,7 +84,9 @@ async function bench(name: string, handler: (req: Request) => Promise<Response>)
   return { listRps, paramRps };
 }
 
-console.log(`Benchmark: ${ITERATIONS.toLocaleString()} iterations, ${WARMUP.toLocaleString()} warmup\n`);
+console.log(
+  `Benchmark: ${ITERATIONS.toLocaleString()} iterations, ${WARMUP.toLocaleString()} warmup\n`,
+);
 
 const elysia = await bench("Raw Elysia", (req) => elysiaApp.handle(req));
 const bnest = await bench("Bnest", (req) => bnestApp.handle(req));

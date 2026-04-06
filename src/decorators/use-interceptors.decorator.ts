@@ -8,8 +8,7 @@ export function UseInterceptors(...interceptors: any[]): MethodDecorator & Class
     descriptor?: TypedPropertyDescriptor<any>,
   ) => {
     if (descriptor) {
-      const existing: any[] =
-        Reflect.getMetadata(INTERCEPTORS_METADATA, descriptor.value) || [];
+      const existing: any[] = Reflect.getMetadata(INTERCEPTORS_METADATA, descriptor.value) || [];
       Reflect.defineMetadata(
         INTERCEPTORS_METADATA,
         [...existing, ...interceptors],

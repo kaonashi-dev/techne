@@ -20,7 +20,7 @@ describe("Elysia Adapter via BnestFactory", () => {
     @Module({ controllers: [TestController] })
     class AppModule {}
 
-    const app = await await BnestFactory.create(AppModule);
+    const app = await BnestFactory.create(AppModule);
 
     const response = await app
       .handle(new Request("http://localhost/test/hello"))
