@@ -1,16 +1,44 @@
 {
   "name": "@kaonashi-dev/bnest",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Framework for Bun, powered by Elysia.js",
   "module": "src/index.ts",
   "main": "src/index.ts",
-  "types": "src/index.ts",
+  "types": "dist/types/index.d.ts",
   "type": "module",
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "import": "./src/index.ts",
+      "types": "./dist/types/index.d.ts"
+    },
+    "./testing": {
+      "bun": "./src/testing/index.ts",
+      "import": "./src/testing/index.ts",
+      "types": "./dist/types/testing/index.d.ts"
+    },
+    "./cqrs": {
+      "bun": "./src/cqrs/index.ts",
+      "import": "./src/cqrs/index.ts",
+      "types": "./dist/types/cqrs/index.d.ts"
+    },
+    "./microservices": {
+      "bun": "./src/microservices/index.ts",
+      "import": "./src/microservices/index.ts",
+      "types": "./dist/types/microservices/index.d.ts"
+    },
+    "./queue": {
+      "bun": "./src/queue/index.ts",
+      "import": "./src/queue/index.ts",
+      "types": "./dist/types/queue/index.d.ts"
+    }
+  },
   "bin": {
     "bnest": "src/cli/index.ts"
   },
   "files": [
     "src",
+    "dist/types",
     "README.md",
     "LICENSE"
   ],
@@ -19,16 +47,17 @@
     "format:check": "oxfmt --check .",
     "lint": "oxlint .",
     "lint:fix": "oxlint --fix .",
-    "test": "bun test tests/*.test.ts src/queue/queue.test.ts",
-    "test:watch": "bun test --watch tests/*.test.ts src/queue/queue.test.ts",
+    "test": "bun test tests/*.test.ts",
+    "test:watch": "bun test --watch tests/*.test.ts",
     "test:nestjs": "bun test tests/nestjs/",
     "check": "bun run lint && bun run format:check",
     "check:fix": "bun run lint:fix && bun run format",
-    "build": "bun build src/index.ts --target=bun --outfile=dist/bnest.bun --minify",
+    "bench": "bun run benchmarks/http.ts",
+    "build": "tsc -p tsconfig.build.json",
     "prepublishOnly": "bun run build"
   },
   "devDependencies": {
-    "@types/bun": "latest",
+    "@types/bun": "^1.3.11",
     "oxfmt": "^0.41.0",
     "oxlint": "^1.56.0"
   },

@@ -29,7 +29,7 @@ describe("Lifecycle Hooks", () => {
 
     const container = new Container();
     const scanner = new Scanner({ logger: false, container });
-    scanner.scan(AppModule);
+    await scanner.scan(AppModule);
 
     expect(events).toContain("db:init");
     expect(events).toContain("cache:init");
@@ -52,7 +52,7 @@ describe("Lifecycle Hooks", () => {
 
     const container = new Container();
     const scanner = new Scanner({ logger: false, container });
-    scanner.scan(AppModule);
+    await scanner.scan(AppModule);
 
     await scanner.callLifecycleHook("onModuleDestroy");
     expect(events).toContain("connection:destroyed");
@@ -75,7 +75,7 @@ describe("Lifecycle Hooks", () => {
 
     const container = new Container();
     const scanner = new Scanner({ logger: false, container });
-    scanner.scan(AppModule);
+    await scanner.scan(AppModule);
 
     await scanner.callLifecycleHook("onApplicationBootstrap");
     expect(events).toContain("health:ready");
@@ -99,7 +99,7 @@ describe("Lifecycle Hooks", () => {
 
     const container = new Container();
     const scanner = new Scanner({ logger: false, container });
-    scanner.scan(AppModule);
+    await scanner.scan(AppModule);
 
     // onModuleInit is called during scan, but async hooks may need explicit await
     await scanner.callLifecycleHook("onModuleInit");
@@ -123,7 +123,7 @@ describe("Lifecycle Hooks", () => {
     const scanner = new Scanner({ logger: false, container });
 
     // Should not throw
-    expect(() => scanner.scan(AppModule)).not.toThrow();
+    await scanner.scan(AppModule);
     await scanner.callLifecycleHook("onModuleDestroy");
   });
 });

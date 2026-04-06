@@ -98,21 +98,21 @@ export class Container {
       // Get the dependencies from the constructor (cached to avoid repeated reflection)
       let tokens = paramTypesCache.get(target);
       if (!tokens) {
-        tokens = Reflect.getMetadata("design:paramtypes", target) || [];
-        paramTypesCache.set(target, tokens);
+        tokens = Reflect.getMetadata("design:paramtypes", target) ?? [];
+        paramTypesCache.set(target, tokens!);
       }
 
       // Resolve injected tokens from @Inject decorator (cached)
       let injectTokens = injectTokensCache.get(target);
       if (!injectTokens) {
-        injectTokens = Reflect.getMetadata(INJECT_METADATA, target) || {};
-        injectTokensCache.set(target, injectTokens);
+        injectTokens = Reflect.getMetadata(INJECT_METADATA, target) ?? {};
+        injectTokensCache.set(target, injectTokens!);
       }
 
       // Resolve all dependencies recursively
-      const injections = tokens.map((token: any, index: number) => {
+      const injections = tokens!.map((token: any, index: number) => {
         // If @Inject was used at this index, use that token instead
-        const resolvedToken = injectTokens[index] !== undefined ? injectTokens[index] : token;
+        const resolvedToken = injectTokens![index] !== undefined ? injectTokens![index] : token;
         return this.get(resolvedToken);
       });
 
@@ -160,8 +160,6 @@ export class Container {
     this.instances.clear();
     this.resolutionStack.clear();
     this.providers.clear();
-    paramTypesCache.clear();
-    injectTokensCache.clear();
   }
 }
 

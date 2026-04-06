@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { Injectable } from "../src/decorators/injectable.decorator";
 import { Module } from "../src/decorators/module.decorator";
-import { NestiaFactory } from "../src/factory/nestia-factory";
+import { BnestFactory } from "../src/factory/bnest-factory";
 import {
   BusRegistry,
   Command,
@@ -88,12 +88,12 @@ describe("CQRS", () => {
     expect(await eventStore.getEvents("Ada")).toHaveLength(1);
   });
 
-  test("wires CQRS buses through NestiaFactory", async () => {
+  test("wires CQRS buses through BnestFactory", async () => {
     @Module({
       providers: [UsersRepo, CreateUserHandler, ListUsersHandler, AuditUserCreatedHandler],
     })
     class AppModule {}
 
-    NestiaFactory.create(AppModule, { logger: false });
+    await BnestFactory.create(AppModule, { logger: false });
   });
 });

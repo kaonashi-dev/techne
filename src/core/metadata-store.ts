@@ -31,10 +31,7 @@ export function getMetadata<T = any>(key: string | symbol, target: object): T | 
  * Returns a class decorator that stores `value` under `key`.
  * TypeScript emits `Reflect.metadata(key, value)` — this is the handler.
  */
-export function metadata(
-  key: string | symbol,
-  value: any,
-): (target: object) => void {
+export function metadata(key: string | symbol, value: any): (target: object) => void {
   return (target: object) => {
     defineMetadata(key, value, target);
   };

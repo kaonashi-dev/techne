@@ -73,7 +73,7 @@ export class TestingModuleBuilder {
       Reflect.defineMetadata("exports", this.metadata.exports || [], TempModule);
 
       const scanner = new Scanner({ logger: false, container });
-      scanner.scan(TempModule);
+      await scanner.scan(TempModule);
     } else {
       // Eagerly resolve class providers (that aren't overridden)
       for (const provider of providers) {
@@ -86,9 +86,9 @@ export class TestingModuleBuilder {
       for (const provider of providers) {
         const token = isCustomProvider(provider) ? provider.provide : provider;
         try {
-          const instance = container.get(token);
+          const instance = container.get(token) as any;
           if (instance && typeof instance.onModuleInit === "function") {
-            instance.onModuleInit();
+            await instance.onModuleInit();
           }
         } catch {
           // skip unresolvable

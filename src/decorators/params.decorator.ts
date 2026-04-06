@@ -1,7 +1,7 @@
 import "../reflect-setup";
 import { PARAMS_METADATA } from "../common/constants";
 
-export type ParamType = "body" | "param" | "query";
+export type ParamType = "body" | "param" | "query" | "headers" | "request";
 
 export interface ParamMetadata {
   index: number;
@@ -62,3 +62,12 @@ export function Body(nameOrDto?: string | Function): ParameterDecorator {
 
 export const Param = createParamDecorator("param");
 export const Query = createParamDecorator("query");
+export const Headers = createParamDecorator("headers");
+
+/** Injects the raw `Request` object into a handler parameter. */
+export function Req(): ParameterDecorator {
+  return (target: object, propertyKey: string | symbol | undefined, parameterIndex: number) => {
+    if (!propertyKey) return;
+    _addParam(target, global.String(propertyKey), parameterIndex, { type: "request" });
+  };
+}

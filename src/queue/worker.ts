@@ -1,4 +1,5 @@
 import type { QueueAdapter, Job } from "./types";
+import { Logger } from "../services/logger.service";
 
 export type JobHandler<T = any> = (job: Job<T>) => Promise<void> | void;
 
@@ -10,6 +11,7 @@ export interface WorkerOptions {
   pollingInterval?: number;
   minPollingInterval?: number;
   maxPollingInterval?: number;
+  logger?: Logger;
 }
 
 export class Worker {
@@ -20,11 +22,13 @@ export class Worker {
   private maxPollingInterval: number;
   private isRunning: boolean = false;
   private activeJobs: number = 0;
+  private logger: Logger;
 
   constructor(options: WorkerOptions) {
     this.queue = options.queue;
     this.handler = options.handler;
     this.concurrency = options.concurrency ?? 1;
+    this.logger = options.logger ?? new Logger("Worker");
     // pollingInterval kept for backwards compatibility: treated as minPollingInterval
     this.minPollingInterval = options.minPollingInterval ?? options.pollingInterval ?? 100;
     this.maxPollingInterval = options.maxPollingInterval ?? 30_000;
@@ -67,7 +71,7 @@ export class Worker {
         setTimeout(() => this.poll(nextInterval), currentInterval);
       }
     } catch (err) {
-      console.error("[Worker] Error while polling queue:", err);
+      this.logger.error(`Error while polling queue: ${err}`);
       const nextInterval = Math.min(currentInterval * 2, this.maxPollingInterval);
       setTimeout(() => this.poll(nextInterval), currentInterval);
     }
@@ -78,7 +82,7 @@ export class Worker {
       await this.handler(job);
       await this.queue.complete(job.id);
     } catch (error: any) {
-      console.error(`[Worker] Job ${job.id} failed:`, error.message);
+      this.logger.error(`Job ${job.id} failed: ${error.message}`);
       await this.queue.fail(job.id, error instanceof Error ? error : new Error(String(error)));
     }
   }

@@ -16,7 +16,7 @@ export class Scanner {
     this.container = options?.container || globalContainer;
   }
 
-  public scan(module: any): void {
+  public async scan(module: any): Promise<void> {
     this.scanModule(module);
 
     for (const provider of this.providers) {
@@ -35,7 +35,7 @@ export class Scanner {
       }
     }
 
-    this.callLifecycleHookSync("onModuleInit");
+    await this.callLifecycleHook("onModuleInit");
   }
 
   public getProviders(): any[] {
@@ -54,56 +54,39 @@ export class Scanner {
     return this.moduleExports;
   }
 
-  private callLifecycleHookSync(
-    hook: "onModuleInit" | "onModuleDestroy" | "onApplicationBootstrap",
-  ) {
-    for (const provider of this.providers) {
-      const token = isCustomProvider(provider) ? provider.provide : provider;
-      try {
-        const instance = this.container.get(token);
-        if (instance && typeof instance[hook] === "function") {
-          instance[hook]();
-        }
-      } catch {
-        // Provider may not be resolvable yet during init
-      }
-    }
-
-    for (const controller of this.controllers) {
-      try {
-        const instance = this.container.get(controller);
-        if (instance && typeof instance[hook] === "function") {
-          instance[hook]();
-        }
-      } catch {
-        // Controller may not be resolvable yet during init
-      }
-    }
-  }
-
   public async callLifecycleHook(
     hook: "onModuleInit" | "onModuleDestroy" | "onApplicationBootstrap",
   ) {
     for (const provider of this.providers) {
       const token = isCustomProvider(provider) ? provider.provide : provider;
       try {
-        const instance = this.container.get(token);
+        const instance = this.container.get(token) as any;
         if (instance && typeof instance[hook] === "function") {
           await instance[hook]();
         }
-      } catch {
-        // Provider may not be resolvable yet during init
+      } catch (error: any) {
+        const name = token?.name || String(token);
+        this.logger.error(
+          `Failed to call ${hook} on provider ${name}: ${error?.message || error}`,
+          error?.stack,
+          "Lifecycle",
+        );
       }
     }
 
     for (const controller of this.controllers) {
       try {
-        const instance = this.container.get(controller);
+        const instance = this.container.get(controller) as any;
         if (instance && typeof instance[hook] === "function") {
           await instance[hook]();
         }
-      } catch {
-        // Controller may not be resolvable yet during init
+      } catch (error: any) {
+        const name = controller?.name || String(controller);
+        this.logger.error(
+          `Failed to call ${hook} on controller ${name}: ${error?.message || error}`,
+          error?.stack,
+          "Lifecycle",
+        );
       }
     }
   }

@@ -31,7 +31,7 @@ test("middleware - should apply controller and route middlewares", async () => {
   class TestModule {}
 
   const scanner = new Scanner();
-  scanner.scan(TestModule);
+  await scanner.scan(TestModule);
 
   const adapter = new ElysiaAdapter();
   new RoutesResolver(scanner).resolve(adapter);

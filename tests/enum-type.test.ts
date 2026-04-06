@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { NestiaFactory } from "../src/factory/nestia-factory";
+import { BnestFactory } from "../src/factory/bnest-factory";
 import { Body } from "../src/decorators/params.decorator";
 import { Controller } from "../src/decorators/controller.decorator";
 import { Module } from "../src/decorators/module.decorator";
@@ -34,7 +34,7 @@ describe("enumType schema helper", () => {
     })
     class AppModule {}
 
-    const app = NestiaFactory.create(AppModule);
+    const app = await BnestFactory.create(AppModule);
 
     const valid = await app.handle(
       new Request("http://localhost/roles", {
@@ -81,7 +81,7 @@ describe("enumType schema helper", () => {
     })
     class AppModule {}
 
-    const app = NestiaFactory.create(AppModule);
+    const app = await BnestFactory.create(AppModule);
 
     const response = await app.handle(
       new Request("http://localhost/array-roles", {
@@ -128,7 +128,7 @@ describe("enumType schema helper", () => {
     })
     class AppModule {}
 
-    const app = NestiaFactory.create(AppModule);
+    const app = await BnestFactory.create(AppModule);
 
     const valid = await app.handle(
       new Request("http://localhost/class-users", {
@@ -174,7 +174,7 @@ describe("enumType schema helper", () => {
     })
     class AppModule {}
 
-    const app = NestiaFactory.create(AppModule);
+    const app = await BnestFactory.create(AppModule);
 
     const response = await app.handle(
       new Request("http://localhost/complex", {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { NestiaFactory } from "../src/factory/nestia-factory";
+import { BnestFactory } from "../src/factory/bnest-factory";
 import { Body } from "../src/decorators/params.decorator";
 import { Controller } from "../src/decorators/controller.decorator";
 import { Module } from "../src/decorators/module.decorator";
@@ -48,7 +48,7 @@ describe("@Dto() + @Body(DtoClass) — auto schema injection", () => {
     @Module({ controllers: [UsersController] })
     class AppModule {}
 
-    const app = NestiaFactory.create(AppModule, { logger: false });
+    const app = await BnestFactory.create(AppModule, { logger: false });
 
     const res = await app.handle(
       new Request("http://localhost/users", {
@@ -74,7 +74,7 @@ describe("@Dto() + @Body(DtoClass) — auto schema injection", () => {
     @Module({ controllers: [UsersInvalidController] })
     class AppModule {}
 
-    const app = NestiaFactory.create(AppModule, { logger: false });
+    const app = await BnestFactory.create(AppModule, { logger: false });
 
     // name too short
     const res = await app.handle(
@@ -106,7 +106,7 @@ describe("@Dto() + @Body(DtoClass) — auto schema injection", () => {
     @Module({ controllers: [ExplicitController] })
     class AppModule {}
 
-    const app = NestiaFactory.create(AppModule, { logger: false });
+    const app = await BnestFactory.create(AppModule, { logger: false });
 
     // Valid against the explicit schema only (CreateUserDto fields are absent)
     const res = await app.handle(
@@ -132,7 +132,7 @@ describe("@Dto() + @Body(DtoClass) — auto schema injection", () => {
     @Module({ controllers: [ProductsController] })
     class AppModule {}
 
-    const app = NestiaFactory.create(AppModule, { logger: false });
+    const app = await BnestFactory.create(AppModule, { logger: false });
 
     const valid = await app.handle(
       new Request("http://localhost/products", {
@@ -168,7 +168,7 @@ describe("@Dto() + @Body(DtoClass) — auto schema injection", () => {
     @Module({ controllers: [RawController] })
     class AppModule {}
 
-    const app = NestiaFactory.create(AppModule, { logger: false });
+    const app = await BnestFactory.create(AppModule, { logger: false });
 
     const res = await app.handle(
       new Request("http://localhost/raw", {

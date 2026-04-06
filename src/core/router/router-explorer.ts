@@ -1,8 +1,11 @@
 import {
   CONTROLLER_METADATA,
+  EXCEPTION_FILTERS_METADATA,
   GUARDS_METADATA,
+  INTERCEPTORS_METADATA,
   MIDDLEWARE_METADATA,
   PARAMS_METADATA,
+  PIPES_METADATA,
   ROUTES_METADATA,
 } from "../../common/constants";
 import type { ParamMetadata } from "../../decorators/params.decorator";
@@ -16,6 +19,9 @@ export interface DiscoveredRouteDefinition extends RouteMetadata {
   fullPath: string;
   middlewares: any[];
   guards: any[];
+  filters: any[];
+  interceptors: any[];
+  pipes: any[];
   paramsMetadata: ParamMetadata[];
 }
 
@@ -33,6 +39,11 @@ export class RouterExplorer {
       const controllerMiddlewares: any[] =
         Reflect.getMetadata(MIDDLEWARE_METADATA, controller) || [];
       const controllerGuards: any[] = Reflect.getMetadata(GUARDS_METADATA, controller) || [];
+      const controllerFilters: any[] =
+        Reflect.getMetadata(EXCEPTION_FILTERS_METADATA, controller) || [];
+      const controllerInterceptors: any[] =
+        Reflect.getMetadata(INTERCEPTORS_METADATA, controller) || [];
+      const controllerPipes: any[] = Reflect.getMetadata(PIPES_METADATA, controller) || [];
       const paramsByHandler: Record<string, ParamMetadata[]> =
         Reflect.getMetadata(PARAMS_METADATA, controller) || {};
 
@@ -41,6 +52,11 @@ export class RouterExplorer {
         const routeMiddlewares: any[] =
           Reflect.getMetadata(MIDDLEWARE_METADATA, routeHandler) || [];
         const routeGuards: any[] = Reflect.getMetadata(GUARDS_METADATA, routeHandler) || [];
+        const routeFilters: any[] =
+          Reflect.getMetadata(EXCEPTION_FILTERS_METADATA, routeHandler) || [];
+        const routeInterceptors: any[] =
+          Reflect.getMetadata(INTERCEPTORS_METADATA, routeHandler) || [];
+        const routePipes: any[] = Reflect.getMetadata(PIPES_METADATA, routeHandler) || [];
         const paramsMetadata = paramsByHandler[route.handlerName] || [];
 
         // Auto-inject DTO schema when @Body(MyDto) is used and no explicit
@@ -55,6 +71,9 @@ export class RouterExplorer {
           fullPath: this.normalizePath(prefix, route.path),
           middlewares: [...controllerMiddlewares, ...routeMiddlewares],
           guards: [...controllerGuards, ...routeGuards],
+          filters: [...controllerFilters, ...routeFilters],
+          interceptors: [...controllerInterceptors, ...routeInterceptors],
+          pipes: [...controllerPipes, ...routePipes],
           paramsMetadata,
         });
       }
