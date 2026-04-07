@@ -1,19 +1,20 @@
 import "../reflect-setup";
 import { ROUTES_METADATA } from "../common/constants";
-import type { TSchema } from "@sinclair/typebox";
 
 export type RequestMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+
+export type RouteSchema = {
+  body?: unknown;
+  query?: unknown;
+  params?: unknown;
+  response?: unknown;
+};
 
 export interface RouteMetadata {
   path: string;
   method: RequestMethod;
   handlerName: string;
-  schema?: {
-    body?: TSchema;
-    query?: TSchema;
-    params?: TSchema;
-    response?: TSchema;
-  };
+  schema?: RouteSchema;
 }
 
 const createRouteDecorator = (method: RequestMethod) => {
