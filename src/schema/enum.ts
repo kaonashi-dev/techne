@@ -1,4 +1,4 @@
-import { Type, type TLiteral, type TSchema } from "@sinclair/typebox";
+import { t } from "elysia";
 
 type PrimitiveEnumValue = string | number;
 type EnumLike = Record<string, PrimitiveEnumValue>;
@@ -28,24 +28,18 @@ const extractEnumValues = (
   return [...new Set(values)];
 };
 
-export function enumType(input: EnumLike | readonly PrimitiveEnumValue[]): TSchema {
+export function enumType(input: EnumLike | readonly PrimitiveEnumValue[]) {
   const values = extractEnumValues(input);
 
   if (values.length === 0) {
     throw new Error("enumType requires at least one enum value");
   }
 
-  const literals = values.map((value) => Type.Literal(value)) as TLiteral<PrimitiveEnumValue>[];
+  const literals = values.map((value) => t.Literal(value));
 
   if (literals.length === 1) {
     return literals[0];
   }
 
-  return Type.Union(
-    literals as [
-      TLiteral<PrimitiveEnumValue>,
-      TLiteral<PrimitiveEnumValue>,
-      ...TLiteral<PrimitiveEnumValue>[],
-    ],
-  );
+  return t.Union(literals as [any, any, ...any[]]);
 }

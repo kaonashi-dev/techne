@@ -1,5 +1,5 @@
 import "../reflect-setup";
-import { Type } from "@sinclair/typebox";
+import { t } from "elysia";
 import { enumType } from "./enum";
 import {
   setPropertyMetadata,
@@ -18,19 +18,21 @@ import {
 
 // ─── Property decorators (class-validator style) ─────────────────────────────
 
-export function IsString(options?: Parameters<typeof Type.String>[0]) {
+export const Type: any = t;
+
+export function IsString(options?: Parameters<typeof t.String>[0]) {
   return (target: any, key: string) => {
     setPropertyMetadata(target, key, { type: "string", options });
   };
 }
 
-export function IsNumber(options?: Parameters<typeof Type.Number>[0]) {
+export function IsNumber(options?: Parameters<typeof t.Number>[0]) {
   return (target: any, key: string) => {
     setPropertyMetadata(target, key, { type: "number", options });
   };
 }
 
-export function IsInteger(options?: Parameters<typeof Type.Integer>[0]) {
+export function IsInteger(options?: Parameters<typeof t.Integer>[0]) {
   return (target: any, key: string) => {
     setPropertyMetadata(target, key, { type: "integer", options });
   };
@@ -153,47 +155,46 @@ export const Boolean = IsBoolean;
 export const Enum = IsEnum;
 
 export function Optional(schema: any) {
-  return Type.Optional(schema);
+  return t.Optional(schema);
 }
 
 // ─── Schema builder object ────────────────────────────────────────────────────
 
-export const Schema = {
+export const Schema: Record<string, any> = {
   Object: (...args: any[]) => {
-    if (args.length === 0) return Type.Object({});
+    if (args.length === 0) return t.Object({});
     const [schemaOrClass] = args;
 
     if (typeof schemaOrClass === "function" && schemaOrClass.prototype !== undefined) {
       return buildSchemaFromClass(schemaOrClass);
     }
 
-    return Type.Object(schemaOrClass);
+    return t.Object(schemaOrClass);
   },
 
-  Array: Type.Array,
-  String: Type.String,
-  Number: Type.Number,
-  Boolean: Type.Boolean,
-  Integer: Type.Integer,
-  Literal: Type.Literal,
-  Union: Type.Union,
-  Intersect: Type.Intersect,
-  Optional: Type.Optional,
-  Readonly: Type.Readonly,
-  Record: Type.Record,
-  Tuple: Type.Tuple,
-  Any: Type.Any,
-  Unknown: Type.Unknown,
-  Never: Type.Never,
-  Partial: Type.Partial,
-  Required: Type.Required,
-  Pick: Type.Pick,
-  Omit: Type.Omit,
+  Array: t.Array,
+  String: t.String,
+  Number: t.Number,
+  Boolean: t.Boolean,
+  Integer: t.Integer,
+  Literal: t.Literal,
+  Union: t.Union,
+  Intersect: t.Intersect,
+  Optional: t.Optional,
+  Readonly: t.Readonly,
+  Record: t.Record,
+  Tuple: t.Tuple,
+  Any: t.Any,
+  Unknown: t.Unknown,
+  Never: t.Never,
+  Partial: t.Partial,
+  Required: t.Required,
+  Pick: t.Pick,
+  Omit: t.Omit,
   enum: enumType,
 };
 
 export {
-  Type,
   enumType,
   Dto,
   getDtoSchema,
