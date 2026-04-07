@@ -23,3 +23,5 @@ export const PIPES_METADATA = "pipes";
 export const ON_MODULE_INIT = "onModuleInit";
 export const ON_MODULE_DESTROY = "onModuleDestroy";
 export const ON_APPLICATION_BOOTSTRAP = "onApplicationBootstrap";
+export const QUEUE_PROCESSOR_METADATA = "queue_processor";
+export const QUEUE_PROCESS_METADATA = "queue_process";
