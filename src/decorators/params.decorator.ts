@@ -9,6 +9,19 @@ export interface ParamMetadata {
   name?: string;
   /** DTO class passed to `@Body(MyDto)` — used to auto-inject the TypeBox schema. */
   dtoClass?: Function;
+  /** Reflected parameter type for `@Body() dto: CreateDto`. */
+  metatype?: Function;
+}
+
+function getParameterMetatype(
+  target: object,
+  propertyKey: string,
+  parameterIndex: number,
+): Function | undefined {
+  const paramTypes = Reflect.getMetadata("design:paramtypes", target, propertyKey) as
+    | Function[]
+    | undefined;
+  return paramTypes?.[parameterIndex];
 }
 
 function _addParam(
@@ -31,7 +44,12 @@ const createParamDecorator = (type: ParamType) => {
   return (name?: string): ParameterDecorator => {
     return (target: object, propertyKey: string | symbol | undefined, parameterIndex: number) => {
       if (!propertyKey) return;
-      _addParam(target, global.String(propertyKey), parameterIndex, { type, name });
+      const key = global.String(propertyKey);
+      _addParam(target, key, parameterIndex, {
+        type,
+        name,
+        metatype: getParameterMetatype(target, key, parameterIndex),
+      });
     };
   };
 };
@@ -49,13 +67,14 @@ export function Body(nameOrDto?: string | Function): ParameterDecorator {
   return (target: object, propertyKey: string | symbol | undefined, parameterIndex: number) => {
     if (!propertyKey) return;
     const key = global.String(propertyKey);
+    const metatype = getParameterMetatype(target, key, parameterIndex);
 
     if (typeof nameOrDto === "function") {
       // Called as @Body(MyDto)
-      _addParam(target, key, parameterIndex, { type: "body", dtoClass: nameOrDto });
+      _addParam(target, key, parameterIndex, { type: "body", dtoClass: nameOrDto, metatype });
     } else {
       // Called as @Body() or @Body('fieldName')
-      _addParam(target, key, parameterIndex, { type: "body", name: nameOrDto });
+      _addParam(target, key, parameterIndex, { type: "body", name: nameOrDto, metatype });
     }
   };
 }
@@ -68,6 +87,10 @@ export const Headers = createParamDecorator("headers");
 export function Req(): ParameterDecorator {
   return (target: object, propertyKey: string | symbol | undefined, parameterIndex: number) => {
     if (!propertyKey) return;
-    _addParam(target, global.String(propertyKey), parameterIndex, { type: "request" });
+    const key = global.String(propertyKey);
+    _addParam(target, key, parameterIndex, {
+      type: "request",
+      metatype: getParameterMetatype(target, key, parameterIndex),
+    });
   };
 }

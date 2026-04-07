@@ -53,17 +53,18 @@ export class RouterExecutionContext {
 
     // Resolve filter instances
     const filters = this.resolveInstances<ExceptionFilter>(route.filters, container);
-    const allFilters = [...this.globalFilters, ...filters];
 
     // Resolve interceptor instances
     const interceptors = this.resolveInstances<BnestInterceptor>(route.interceptors, container);
-    const allInterceptors = [...this.globalInterceptors, ...interceptors];
 
     // Resolve pipe instances
     const pipes = this.resolveInstances<PipeTransform>(route.pipes, container);
-    const allPipes = [...this.globalPipes, ...pipes];
 
     const handler = (context: RequestHandlerContext) => {
+      const allFilters = [...this.globalFilters, ...filters];
+      const allInterceptors = [...this.globalInterceptors, ...interceptors];
+      const allPipes = [...this.globalPipes, ...pipes];
+
       const handleException = (error: unknown) => {
         // Try exception filters first (route-specific take priority)
         for (let i = allFilters.length - 1; i >= 0; i--) {
@@ -127,7 +128,11 @@ export class RouterExecutionContext {
     const result = [...args];
     for (const param of paramsMetadata) {
       if (param.type === "request") continue; // Don't pipe raw request
-      const metadata: ArgumentMetadata = { type: param.type as any, name: param.name };
+      const metadata: ArgumentMetadata = {
+        type: param.type as any,
+        name: param.name,
+        metatype: param.dtoClass ?? param.metatype,
+      };
       let value = result[param.index];
       for (const pipe of pipes) {
         value = pipe.transform(value, metadata);

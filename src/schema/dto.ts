@@ -1,88 +1,361 @@
 import "../reflect-setup";
-import { Type } from "@sinclair/typebox";
-import type { TSchema } from "@sinclair/typebox";
+import { Type, type TSchema } from "@sinclair/typebox";
+import { Value } from "@sinclair/typebox/value";
 import { enumType } from "./enum";
 
 const PROPERTY_METADATA_KEY = "schema:properties";
 
-/** Module-level registry: DTO class → compiled TypeBox schema. */
-const _dtoRegistry = new Map<Function, TSchema>();
+export type ClassConstructor<T = any> = new (...args: any[]) => T;
 
-/**
- * Class decorator.  Compiles all `@Is*` property decorators on the class into
- * a TypeBox `Object` schema and registers it so `@Body(MyDto)` can inject it
- * automatically into Elysia's validation pipeline.
- *
- * @example
- * ```ts
- * @Dto()
- * class CreateUserDto {
- *   @IsString({ minLength: 2 })
- *   name: string;
- *
- *   @IsNumber({ minimum: 0 })
- *   age: number;
- * }
- * ```
- */
+export interface ValidationError {
+  property: string;
+  value?: unknown;
+  constraints?: Record<string, string>;
+  children?: ValidationError[];
+}
+
+export interface PropertyMetadata {
+  type?: "string" | "number" | "integer" | "boolean" | "array";
+  options?: Record<string, unknown>;
+  optional?: boolean;
+  enumValues?: Record<string, string | number> | readonly (string | number)[];
+  nested?: { each?: boolean };
+  constraints: ValidationConstraint[];
+}
+
+type ValidationConstraint =
+  | { type: "min"; value: number }
+  | { type: "max"; value: number }
+  | { type: "minLength"; value: number }
+  | { type: "maxLength"; value: number }
+  | { type: "pattern"; value: string }
+  | { type: "format"; value: string }
+  | { type: "minItems"; value: number }
+  | { type: "maxItems"; value: number };
+
+/** Module-level registry: DTO class → compiled TypeBox schema. */
+const dtoRegistry = new Map<Function, TSchema>();
+
 export function Dto(): ClassDecorator {
   return (target: Function) => {
-    const schema = _buildSchema(target as new (...args: any[]) => any);
-    _dtoRegistry.set(target, schema);
+    dtoRegistry.set(target, buildSchemaFromClass(target as ClassConstructor));
   };
 }
 
-/** Returns the TypeBox schema registered for `target`, or `undefined`. */
 export function getDtoSchema(target: Function): TSchema | undefined {
-  return _dtoRegistry.get(target);
+  return dtoRegistry.get(target);
 }
 
-// ─── internal helpers (shared with schema/index.ts) ─────────────────────────
+export function getOrCreateDtoSchema(target: Function): TSchema | undefined {
+  const existing = dtoRegistry.get(target);
+  if (existing) return existing;
+  if (!hasValidationMetadata(target)) return undefined;
+  const schema = buildSchemaFromClass(target as ClassConstructor);
+  dtoRegistry.set(target, schema);
+  return schema;
+}
 
-export function setPropertyMetadata(target: any, key: string, meta: any): void {
-  const existing: Record<string, any> = Reflect.getMetadata(PROPERTY_METADATA_KEY, target) ?? {};
-  existing[key] = meta;
+export function hasValidationMetadata(target: Function): boolean {
+  const properties = getClassPropertyMetadata(target as ClassConstructor);
+  return Object.keys(properties).length > 0;
+}
+
+export function getClassPropertyMetadata(
+  klass: ClassConstructor,
+): Record<string, PropertyMetadata> {
+  return Reflect.getMetadata(PROPERTY_METADATA_KEY, klass.prototype) ?? {};
+}
+
+export function setPropertyMetadata(
+  target: any,
+  key: string,
+  updater: Partial<PropertyMetadata> | ((meta: PropertyMetadata) => void),
+): void {
+  const existing: Record<string, PropertyMetadata> =
+    Reflect.getMetadata(PROPERTY_METADATA_KEY, target) ?? {};
+  const current: PropertyMetadata = existing[key] ?? { constraints: [] };
+
+  if (typeof updater === "function") {
+    updater(current);
+  } else {
+    existing[key] = mergePropertyMetadata(current, updater);
+  }
+
+  if (!existing[key]) {
+    existing[key] = current;
+  }
+
   Reflect.defineMetadata(PROPERTY_METADATA_KEY, existing, target);
+  const ctor = target.constructor as Function | undefined;
+  if (ctor) dtoRegistry.delete(ctor);
 }
 
-export function buildSchemaFromClass(klass: new (...args: any[]) => any): TSchema {
-  return _buildSchema(klass);
-}
-
-function _buildSchema(klass: new (...args: any[]) => any): TSchema {
-  const properties: Record<string, any> =
-    Reflect.getMetadata(PROPERTY_METADATA_KEY, klass.prototype) ?? {};
-
+export function buildSchemaFromClass(klass: ClassConstructor): TSchema {
+  const properties = getClassPropertyMetadata(klass);
   const keys = Object.keys(properties);
   if (keys.length === 0) return Type.Object({});
 
-  const objSchema: Record<string, any> = {};
+  const objSchema: Record<string, TSchema> = {};
   for (const key of keys) {
-    objSchema[key] = _inferSchema(properties[key]);
+    objSchema[key] = inferSchema(klass, key, properties[key]);
   }
   return Type.Object(objSchema);
 }
 
-function _inferSchema(meta: any): TSchema {
-  if (!meta) return Type.Any();
+export function validateDto(value: unknown, metatype: Function): ValidationError[] {
+  const schema = getOrCreateDtoSchema(metatype);
+  if (!schema) return [];
 
-  if (meta.type) {
-    switch (meta.type) {
-      case "string":
-        return Type.String(meta.options ?? {});
-      case "number":
-        return Type.Number(meta.options ?? {});
-      case "integer":
-        return Type.Integer(meta.options ?? {});
-      case "boolean":
-        return Type.Boolean();
-      default:
-        return Type.Any();
-    }
+  return normalizeValidationErrors([...Value.Errors(schema, value)]);
+}
+
+export async function validate(value: object): Promise<ValidationError[]> {
+  return validateSync(value);
+}
+
+export function validateSync(value: object): ValidationError[] {
+  return validateDto(value, value.constructor);
+}
+
+export async function validateOrReject(value: object): Promise<void> {
+  const errors = validateSync(value);
+  if (errors.length > 0) {
+    throw errors;
+  }
+}
+
+export function plainToInstance<T>(metatype: ClassConstructor<T>, value: unknown): T {
+  if (value === null || value === undefined) {
+    return value as T;
   }
 
-  if (meta.enum) return enumType(meta.enum);
-  if (meta.schema) return meta.schema as TSchema;
+  if (Array.isArray(value)) {
+    return value.map((item) => plainToInstance(metatype, item)) as T;
+  }
 
-  return Type.Any();
+  if (typeof value !== "object") {
+    return value as T;
+  }
+
+  const instance = new metatype();
+  const metadata = getClassPropertyMetadata(metatype);
+
+  for (const [key, property] of Object.entries(value as Record<string, unknown>)) {
+    const propertyMeta = metadata[key];
+    if (!propertyMeta?.nested) {
+      (instance as Record<string, unknown>)[key] = property;
+      continue;
+    }
+
+    const nestedType = Reflect.getMetadata("design:type", metatype.prototype, key) as
+      | ClassConstructor
+      | undefined;
+
+    if (!nestedType || nestedType === Array) {
+      (instance as Record<string, unknown>)[key] = property;
+      continue;
+    }
+
+    if (propertyMeta.nested.each && Array.isArray(property)) {
+      (instance as Record<string, unknown>)[key] = property.map((item) =>
+        plainToInstance(nestedType, item),
+      );
+      continue;
+    }
+
+    (instance as Record<string, unknown>)[key] = plainToInstance(nestedType, property);
+  }
+
+  return instance;
+}
+
+export function stripUnknownProperties<T extends Record<string, unknown>>(
+  value: T,
+  metatype: Function,
+): T {
+  const knownKeys = new Set(Object.keys(getClassPropertyMetadata(metatype as ClassConstructor)));
+  return Object.fromEntries(Object.entries(value).filter(([key]) => knownKeys.has(key))) as T;
+}
+
+export function getUnknownPropertyKeys(value: unknown, metatype: Function): string[] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+  const knownKeys = new Set(Object.keys(getClassPropertyMetadata(metatype as ClassConstructor)));
+  return Object.keys(value as Record<string, unknown>).filter((key) => !knownKeys.has(key));
+}
+
+function mergePropertyMetadata(
+  current: PropertyMetadata,
+  next: Partial<PropertyMetadata>,
+): PropertyMetadata {
+  return {
+    ...current,
+    ...next,
+    options: { ...current.options, ...next.options },
+    constraints: [...current.constraints, ...(next.constraints ?? [])],
+  };
+}
+
+function inferSchema(klass: ClassConstructor, key: string, meta: PropertyMetadata): TSchema {
+  const baseSchema = inferBaseSchema(klass, key, meta);
+  return meta.optional ? Type.Optional(baseSchema) : baseSchema;
+}
+
+function inferBaseSchema(klass: ClassConstructor, key: string, meta: PropertyMetadata): TSchema {
+  if (meta.enumValues) {
+    return enumType(meta.enumValues);
+  }
+
+  if (meta.nested) {
+    const nestedType = Reflect.getMetadata("design:type", klass.prototype, key) as
+      | ClassConstructor
+      | undefined;
+    const nestedSchema =
+      nestedType && nestedType !== Array
+        ? (getOrCreateDtoSchema(nestedType) ?? Type.Any())
+        : Type.Any();
+    if (meta.nested.each || meta.type === "array" || nestedType === Array) {
+      return Type.Array(nestedSchema, getArrayOptions(meta));
+    }
+    return nestedSchema;
+  }
+
+  const designType = Reflect.getMetadata("design:type", klass.prototype, key) as
+    | Function
+    | undefined;
+  const resolvedType = meta.type ?? inferTypeFromMetadata(meta, designType);
+
+  switch (resolvedType) {
+    case "string":
+      return Type.String(getStringOptions(meta));
+    case "number":
+      return Type.Number(getNumberOptions(meta));
+    case "integer":
+      return Type.Integer(getNumberOptions(meta));
+    case "boolean":
+      return Type.Boolean();
+    case "array":
+      return Type.Array(Type.Any(), getArrayOptions(meta));
+    default:
+      return Type.Any();
+  }
+}
+
+function inferTypeFromMetadata(
+  meta: PropertyMetadata,
+  designType?: Function,
+): PropertyMetadata["type"] | undefined {
+  if (
+    meta.constraints.some(
+      (constraint) => constraint.type === "minItems" || constraint.type === "maxItems",
+    )
+  ) {
+    return "array";
+  }
+  if (
+    meta.constraints.some((constraint) =>
+      ["minLength", "maxLength", "pattern", "format"].includes(constraint.type),
+    )
+  ) {
+    return "string";
+  }
+  if (
+    meta.constraints.some((constraint) => constraint.type === "min" || constraint.type === "max")
+  ) {
+    return "number";
+  }
+  if (designType === String) return "string";
+  if (designType === Number) return "number";
+  if (designType === Boolean) return "boolean";
+  if (designType === Array) return "array";
+  return undefined;
+}
+
+function getStringOptions(meta: PropertyMetadata): Record<string, unknown> {
+  const options: Record<string, unknown> = { ...meta.options };
+  for (const constraint of meta.constraints) {
+    if (constraint.type === "minLength") options.minLength = constraint.value;
+    if (constraint.type === "maxLength") options.maxLength = constraint.value;
+    if (constraint.type === "pattern") options.pattern = constraint.value;
+    if (constraint.type === "format") options.format = constraint.value;
+  }
+  return options;
+}
+
+function getNumberOptions(meta: PropertyMetadata): Record<string, unknown> {
+  const options: Record<string, unknown> = { ...meta.options };
+  for (const constraint of meta.constraints) {
+    if (constraint.type === "min") options.minimum = constraint.value;
+    if (constraint.type === "max") options.maximum = constraint.value;
+  }
+  return options;
+}
+
+function getArrayOptions(meta: PropertyMetadata): Record<string, unknown> {
+  const options: Record<string, unknown> = { ...meta.options };
+  for (const constraint of meta.constraints) {
+    if (constraint.type === "minItems") options.minItems = constraint.value;
+    if (constraint.type === "maxItems") options.maxItems = constraint.value;
+  }
+  return options;
+}
+
+function normalizeValidationErrors(errors: Array<Record<string, any>>): ValidationError[] {
+  const grouped = new Map<string, ValidationError>();
+
+  for (const error of errors) {
+    const path = normalizeErrorPath(error.path);
+    const [property, ...rest] = path.split(".").filter(Boolean);
+    if (!property) continue;
+
+    const existing = grouped.get(property) ?? {
+      property,
+      value: error.value,
+      constraints: {},
+      children: [],
+    };
+    grouped.set(property, existing);
+
+    if (rest.length === 0) {
+      (existing.constraints as Record<string, string>)[
+        error.type ?? `rule_${existing.children!.length}`
+      ] = error.message ?? "Validation failed";
+      continue;
+    }
+
+    addChildError(existing, rest, error);
+  }
+
+  return [...grouped.values()].map((entry) => {
+    if (entry.constraints && Object.keys(entry.constraints).length === 0) delete entry.constraints;
+    if (entry.children && entry.children.length === 0) delete entry.children;
+    return entry;
+  });
+}
+
+function addChildError(parent: ValidationError, path: string[], error: Record<string, any>): void {
+  const [segment, ...rest] = path;
+  parent.children ??= [];
+  let child = parent.children.find((entry) => entry.property === segment);
+  if (!child) {
+    child = { property: segment, value: error.value, constraints: {}, children: [] };
+    parent.children.push(child);
+  }
+
+  if (rest.length === 0) {
+    child.constraints ??= {};
+    (child.constraints as Record<string, string>)[
+      error.type ?? `rule_${child.children?.length ?? 0}`
+    ] = error.message ?? "Validation failed";
+    return;
+  }
+
+  addChildError(child, rest, error);
+}
+
+function normalizeErrorPath(path: string | undefined): string {
+  if (!path) return "";
+  return path
+    .replace(/^\//, "")
+    .replace(/\//g, ".")
+    .replace(/\[(\d+)\]/g, ".$1");
 }
