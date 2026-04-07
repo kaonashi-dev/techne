@@ -5,6 +5,7 @@ export * from "./core/bnest-application";
 export * from "./factory/bnest-factory";
 export type { BnestApplicationOptions } from "./factory/bnest-factory";
 export * from "./schema";
+export * from "./pipes";
 export * from "./services/logger.service";
 export * from "./exceptions";
 export * from "./queue";

@@ -10,7 +10,7 @@ import {
 } from "../../common/constants";
 import type { ParamMetadata } from "../../decorators/params.decorator";
 import type { RouteMetadata } from "../../decorators/routes.decorator";
-import { getDtoSchema } from "../../schema/dto";
+import { getOrCreateDtoSchema } from "../../schema/dto";
 import type { Scanner } from "../scanner";
 
 export interface DiscoveredRouteDefinition extends RouteMetadata {
@@ -49,6 +49,10 @@ export class RouterExplorer {
 
       for (const route of routeMetadata) {
         const routeHandler = controller.prototype[route.handlerName];
+        const paramTypes =
+          (Reflect.getMetadata("design:paramtypes", controller.prototype, route.handlerName) as
+            | Function[]
+            | undefined) ?? [];
         const routeMiddlewares: any[] =
           Reflect.getMetadata(MIDDLEWARE_METADATA, routeHandler) || [];
         const routeGuards: any[] = Reflect.getMetadata(GUARDS_METADATA, routeHandler) || [];
@@ -57,7 +61,10 @@ export class RouterExplorer {
         const routeInterceptors: any[] =
           Reflect.getMetadata(INTERCEPTORS_METADATA, routeHandler) || [];
         const routePipes: any[] = Reflect.getMetadata(PIPES_METADATA, routeHandler) || [];
-        const paramsMetadata = paramsByHandler[route.handlerName] || [];
+        const paramsMetadata = (paramsByHandler[route.handlerName] || []).map((param) => ({
+          ...param,
+          metatype: param.dtoClass ?? param.metatype ?? paramTypes[param.index],
+        }));
 
         // Auto-inject DTO schema when @Body(MyDto) is used and no explicit
         // body schema was provided on the route decorator.
@@ -91,7 +98,14 @@ export class RouterExplorer {
 
     for (const param of paramsMetadata) {
       if (param.type === "body" && param.dtoClass) {
-        const dtoSchema = getDtoSchema(param.dtoClass);
+        const dtoSchema = getOrCreateDtoSchema(param.dtoClass);
+        if (dtoSchema) {
+          return { ...route.schema, body: dtoSchema };
+        }
+      }
+
+      if (param.type === "body" && param.metatype) {
+        const dtoSchema = getOrCreateDtoSchema(param.metatype);
         if (dtoSchema) {
           return { ...route.schema, body: dtoSchema };
         }
