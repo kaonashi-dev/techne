@@ -71,7 +71,8 @@ export function setPropertyMetadata(
   key: string,
   updater: Partial<PropertyMetadata> | ((meta: PropertyMetadata) => void),
 ): void {
-  const existing: Record<string, PropertyMetadata> = Reflect.getMetadata(PROPERTY_METADATA_KEY, target) ?? {};
+  const existing: Record<string, PropertyMetadata> =
+    Reflect.getMetadata(PROPERTY_METADATA_KEY, target) ?? {};
   const current: PropertyMetadata = existing[key] ?? { constraints: [] };
 
   if (typeof updater === "function") {
@@ -189,7 +190,7 @@ function mergePropertyMetadata(
   return {
     ...current,
     ...next,
-    options: { ...(current.options ?? {}), ...(next.options ?? {}) },
+    options: { ...current.options, ...next.options },
     constraints: [...current.constraints, ...(next.constraints ?? [])],
   };
 }
@@ -209,14 +210,18 @@ function inferBaseSchema(klass: ClassConstructor, key: string, meta: PropertyMet
       | ClassConstructor
       | undefined;
     const nestedSchema =
-      nestedType && nestedType !== Array ? getOrCreateDtoSchema(nestedType) ?? Type.Any() : Type.Any();
+      nestedType && nestedType !== Array
+        ? (getOrCreateDtoSchema(nestedType) ?? Type.Any())
+        : Type.Any();
     if (meta.nested.each || meta.type === "array" || nestedType === Array) {
       return Type.Array(nestedSchema, getArrayOptions(meta));
     }
     return nestedSchema;
   }
 
-  const designType = Reflect.getMetadata("design:type", klass.prototype, key) as Function | undefined;
+  const designType = Reflect.getMetadata("design:type", klass.prototype, key) as
+    | Function
+    | undefined;
   const resolvedType = meta.type ?? inferTypeFromMetadata(meta, designType);
 
   switch (resolvedType) {
@@ -239,7 +244,11 @@ function inferTypeFromMetadata(
   meta: PropertyMetadata,
   designType?: Function,
 ): PropertyMetadata["type"] | undefined {
-  if (meta.constraints.some((constraint) => constraint.type === "minItems" || constraint.type === "maxItems")) {
+  if (
+    meta.constraints.some(
+      (constraint) => constraint.type === "minItems" || constraint.type === "maxItems",
+    )
+  ) {
     return "array";
   }
   if (
@@ -249,7 +258,9 @@ function inferTypeFromMetadata(
   ) {
     return "string";
   }
-  if (meta.constraints.some((constraint) => constraint.type === "min" || constraint.type === "max")) {
+  if (
+    meta.constraints.some((constraint) => constraint.type === "min" || constraint.type === "max")
+  ) {
     return "number";
   }
   if (designType === String) return "string";
@@ -260,7 +271,7 @@ function inferTypeFromMetadata(
 }
 
 function getStringOptions(meta: PropertyMetadata): Record<string, unknown> {
-  const options: Record<string, unknown> = { ...(meta.options ?? {}) };
+  const options: Record<string, unknown> = { ...meta.options };
   for (const constraint of meta.constraints) {
     if (constraint.type === "minLength") options.minLength = constraint.value;
     if (constraint.type === "maxLength") options.maxLength = constraint.value;
@@ -271,7 +282,7 @@ function getStringOptions(meta: PropertyMetadata): Record<string, unknown> {
 }
 
 function getNumberOptions(meta: PropertyMetadata): Record<string, unknown> {
-  const options: Record<string, unknown> = { ...(meta.options ?? {}) };
+  const options: Record<string, unknown> = { ...meta.options };
   for (const constraint of meta.constraints) {
     if (constraint.type === "min") options.minimum = constraint.value;
     if (constraint.type === "max") options.maximum = constraint.value;
@@ -280,7 +291,7 @@ function getNumberOptions(meta: PropertyMetadata): Record<string, unknown> {
 }
 
 function getArrayOptions(meta: PropertyMetadata): Record<string, unknown> {
-  const options: Record<string, unknown> = { ...(meta.options ?? {}) };
+  const options: Record<string, unknown> = { ...meta.options };
   for (const constraint of meta.constraints) {
     if (constraint.type === "minItems") options.minItems = constraint.value;
     if (constraint.type === "maxItems") options.maxItems = constraint.value;
@@ -296,12 +307,18 @@ function normalizeValidationErrors(errors: Array<Record<string, any>>): Validati
     const [property, ...rest] = path.split(".").filter(Boolean);
     if (!property) continue;
 
-    const existing = grouped.get(property) ?? { property, value: error.value, constraints: {}, children: [] };
+    const existing = grouped.get(property) ?? {
+      property,
+      value: error.value,
+      constraints: {},
+      children: [],
+    };
     grouped.set(property, existing);
 
     if (rest.length === 0) {
-      (existing.constraints as Record<string, string>)[error.type ?? `rule_${existing.children!.length}`] =
-        error.message ?? "Validation failed";
+      (existing.constraints as Record<string, string>)[
+        error.type ?? `rule_${existing.children!.length}`
+      ] = error.message ?? "Validation failed";
       continue;
     }
 
@@ -326,8 +343,9 @@ function addChildError(parent: ValidationError, path: string[], error: Record<st
 
   if (rest.length === 0) {
     child.constraints ??= {};
-    (child.constraints as Record<string, string>)[error.type ?? `rule_${child.children?.length ?? 0}`] =
-      error.message ?? "Validation failed";
+    (child.constraints as Record<string, string>)[
+      error.type ?? `rule_${child.children?.length ?? 0}`
+    ] = error.message ?? "Validation failed";
     return;
   }
 
@@ -336,5 +354,8 @@ function addChildError(parent: ValidationError, path: string[], error: Record<st
 
 function normalizeErrorPath(path: string | undefined): string {
   if (!path) return "";
-  return path.replace(/^\//, "").replace(/\//g, ".").replace(/\[(\d+)\]/g, ".$1");
+  return path
+    .replace(/^\//, "")
+    .replace(/\//g, ".")
+    .replace(/\[(\d+)\]/g, ".$1");
 }

@@ -24,7 +24,11 @@ export class ValidationPipe implements PipeTransform {
 
   transform(value: any, metadata: ArgumentMetadata) {
     const metatype = metadata.metatype;
-    if (!metatype || PRIMITIVE_TYPES.has(metatype as Function) || !hasValidationMetadata(metatype)) {
+    if (
+      !metatype ||
+      PRIMITIVE_TYPES.has(metatype as Function) ||
+      !hasValidationMetadata(metatype)
+    ) {
       return value;
     }
 
@@ -45,9 +49,7 @@ export class ValidationPipe implements PipeTransform {
 
     const errors = validateDto(nextValue, metatype);
     if (errors.length > 0) {
-      throw this.createException(
-        this.options.stopAtFirstError ? [errors[0]] : errors,
-      );
+      throw this.createException(this.options.stopAtFirstError ? [errors[0]] : errors);
     }
 
     if (this.options.transform) {

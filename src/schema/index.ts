@@ -59,8 +59,10 @@ export function IsOptional() {
 export function IsArray(options?: { minItems?: number; maxItems?: number }) {
   return (target: any, key: string) => {
     const constraints = [];
-    if (options?.minItems !== undefined) constraints.push({ type: "minItems" as const, value: options.minItems });
-    if (options?.maxItems !== undefined) constraints.push({ type: "maxItems" as const, value: options.maxItems });
+    if (options?.minItems !== undefined)
+      constraints.push({ type: "minItems" as const, value: options.minItems });
+    if (options?.maxItems !== undefined)
+      constraints.push({ type: "maxItems" as const, value: options.maxItems });
     setPropertyMetadata(target, key, { type: "array", constraints });
   };
 }
