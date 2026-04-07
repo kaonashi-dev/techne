@@ -4,7 +4,20 @@ import { Body } from "../src/decorators/params.decorator";
 import { Controller } from "../src/decorators/controller.decorator";
 import { Module } from "../src/decorators/module.decorator";
 import { Post } from "../src/decorators/routes.decorator";
-import { Dto, IsString, IsNumber, IsBoolean, IsInteger, IsEnum, Schema } from "../src/schema";
+import { ValidationPipe } from "../src/pipes";
+import {
+  Dto,
+  IsString,
+  IsNumber,
+  IsBoolean,
+  IsInteger,
+  IsEnum,
+  IsOptional,
+  MaxLength,
+  Min,
+  Schema,
+  ValidateNested,
+} from "../src/schema";
 
 enum Role {
   Admin = "admin",
@@ -33,6 +46,27 @@ class CreateProductDto {
 
   @IsEnum(Role)
   role!: Role;
+}
+
+class AddressDto {
+  @IsString()
+  city!: string;
+
+  @IsString()
+  country!: string;
+}
+
+class CreateProfileDto {
+  @IsString()
+  @MaxLength(20)
+  name!: string;
+
+  @IsOptional()
+  @Min(18)
+  age?: number;
+
+  @ValidateNested()
+  address!: AddressDto;
 }
 
 describe("@Dto() + @Body(DtoClass) — auto schema injection", () => {
@@ -180,5 +214,109 @@ describe("@Dto() + @Body(DtoClass) — auto schema injection", () => {
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ anything: true });
+  });
+
+  test("infers typed @Body() DTO without @Dto decorator", async () => {
+    @Controller("profiles")
+    class ProfilesController {
+      @Post("/")
+      create(@Body() body: CreateProfileDto) {
+        return body;
+      }
+    }
+
+    @Module({ controllers: [ProfilesController] })
+    class AppModule {}
+
+    const app = await BnestFactory.create(AppModule, { logger: false });
+
+    const valid = await app.handle(
+      new Request("http://localhost/profiles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "alice",
+          address: { city: "Paris", country: "FR" },
+        }),
+      }),
+    );
+
+    expect(valid.status).toBe(200);
+
+    const invalid = await app.handle(
+      new Request("http://localhost/profiles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "alice",
+          address: { city: 42, country: "FR" },
+        }),
+      }),
+    );
+
+    expect(invalid.status).toBe(422);
+  });
+
+  test("ValidationPipe transforms DTO instances and strips unknown properties", async () => {
+    @Controller("pipe-profiles")
+    class PipeProfilesController {
+      @Post("/")
+      create(@Body() body: CreateProfileDto) {
+        return {
+          isDto: body instanceof CreateProfileDto,
+          hasAddressInstance: body.address instanceof AddressDto,
+          body,
+        };
+      }
+    }
+
+    @Module({ controllers: [PipeProfilesController] })
+    class AppModule {}
+
+    const app = await BnestFactory.create(AppModule, { logger: false });
+    app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }));
+
+    const res = await app.handle(
+      new Request("http://localhost/pipe-profiles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "alice",
+          age: 22,
+          extra: true,
+          address: { city: "Paris", country: "FR" },
+        }),
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      isDto: true,
+      hasAddressInstance: true,
+      body: {
+        name: "alice",
+        age: 22,
+        address: { city: "Paris", country: "FR" },
+      },
+    });
+  });
+
+  test("ValidationPipe rejects non-whitelisted properties", () => {
+    const pipe = new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      stopAtFirstError: true,
+    });
+
+    expect(() =>
+      pipe.transform(
+        {
+          name: "alice",
+          extra: true,
+          address: { city: "Paris", country: "FR" },
+        },
+        { type: "body", metatype: CreateProfileDto },
+      ),
+    ).toThrow("should not exist");
   });
 });
