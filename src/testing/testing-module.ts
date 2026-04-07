@@ -3,6 +3,8 @@ import { Container, type Provider, isCustomProvider } from "../core/container";
 import { Scanner } from "../core/scanner";
 import type { ModuleMetadata } from "../decorators/module.decorator";
 import { Logger } from "../services/logger.service";
+import { QueueRegistry } from "../queue/registry";
+import { QUEUE_DRIVER } from "../queue/tokens";
 
 export interface OverrideProvider {
   useValue(value: any): TestingModuleBuilder;
@@ -58,6 +60,9 @@ export class TestingModuleBuilder {
       }
     }
 
+    let scannedProviders: any[] = [];
+    let scannedControllers: any[] = [];
+
     if (this.metadata.imports && this.metadata.imports.length > 0) {
       // Create a temporary module wrapper with the metadata
       const TempModule = class {};
@@ -74,6 +79,8 @@ export class TestingModuleBuilder {
 
       const scanner = new Scanner({ logger: false, container });
       await scanner.scan(TempModule);
+      scannedProviders = scanner.getProviders();
+      scannedControllers = scanner.getControllers();
     } else {
       // Eagerly resolve class providers (that aren't overridden)
       for (const provider of providers) {
@@ -105,6 +112,16 @@ export class TestingModuleBuilder {
     const controllers = this.metadata.controllers || [];
     for (const controller of controllers) {
       container.get(controller);
+    }
+
+    if (container.has(QUEUE_DRIVER)) {
+      const queueRegistry = new QueueRegistry(container, container.get(QUEUE_DRIVER));
+      queueRegistry.register();
+      queueRegistry.registerFromClasses(
+        scannedProviders.length > 0 || scannedControllers.length > 0
+          ? [...scannedProviders, ...scannedControllers]
+          : [...(this.metadata.providers || []), ...controllers],
+      );
     }
 
     return new TestingModule(container);

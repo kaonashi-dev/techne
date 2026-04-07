@@ -7,6 +7,8 @@ import { BusRegistry } from "../cqrs/bus";
 import { BnestApplication } from "../core/bnest-application";
 import { MicroservicesAdapter } from "../microservices/adapter";
 import type { MicroserviceOptions } from "../microservices/types";
+import { QueueRegistry } from "../queue/registry";
+import { QUEUE_DRIVER } from "../queue/tokens";
 
 export interface BnestApplicationOptions {
   logger?: boolean | string[];
@@ -31,6 +33,13 @@ export class BnestFactory {
     buses.register();
     buses.registerFromClasses([...scanner.getProviders(), ...scanner.getControllers()]);
 
+    let queueRegistry: QueueRegistry | undefined;
+    if (container.has(QUEUE_DRIVER)) {
+      queueRegistry = new QueueRegistry(container, container.get(QUEUE_DRIVER));
+      queueRegistry.register();
+      queueRegistry.registerFromClasses([...scanner.getProviders(), ...scanner.getControllers()]);
+    }
+
     const adapter = new ElysiaAdapter({ logger: loggerEnabled, container });
     const routesResolver = new RoutesResolver(scanner);
     const routes = routesResolver.resolve(adapter);
@@ -43,6 +52,7 @@ export class BnestFactory {
       scanner,
       container,
       routesResolver.executionContext,
+      queueRegistry,
     );
   }
 
@@ -54,6 +64,12 @@ export class BnestFactory {
     const buses = new BusRegistry(container);
     buses.register();
     buses.registerFromClasses([...scanner.getProviders(), ...scanner.getControllers()]);
+
+    if (container.has(QUEUE_DRIVER)) {
+      const queueRegistry = new QueueRegistry(container, container.get(QUEUE_DRIVER));
+      queueRegistry.register();
+      queueRegistry.registerFromClasses([...scanner.getProviders(), ...scanner.getControllers()]);
+    }
 
     const adapter = new MicroservicesAdapter(container);
     return adapter.create([...scanner.getProviders(), ...scanner.getControllers()], options);
