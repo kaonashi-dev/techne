@@ -1,40 +1,45 @@
 # Bnest
 
-> **This is a personal project and experiment.** Bnest is not production-ready and is built purely for learning and exploration purposes. It aims to replicate core NestJS patterns natively on Bun using Elysia.js as the HTTP layer. Expect breaking changes, missing features, and rough edges.
->
+> Experimental Nest-style framework for Bun, using Elysia as the HTTP layer.
 
-## What is Bnest?
+Bnest is a personal project focused on bringing familiar NestJS-style patterns to Bun without a Node.js runtime. It is built for exploration, not production use, and breaking changes should be expected.
 
-Bnest is a lightweight, decorator-based framework for building server-side applications on [Bun](https://bun.sh). It mirrors the NestJS developer experience — modules, controllers, services, dependency injection, guards, middleware, CQRS, and microservices — without the Node.js overhead.
+## Why Bnest
 
-**Key differences from NestJS:**
-- Runs natively on **Bun** (not Node.js)
-- Uses **Elysia.js** as the HTTP engine (not Express/Fastify)
-- Uses **@sinclair/typebox** for schema validation (not class-validator)
-- Zero-config — no build step needed for development
-- Minimal dependency footprint (3 runtime deps)
+- Bun-first runtime
+- Decorator-based modules, controllers, and providers
+- Built-in dependency injection
+- TypeBox-powered request schemas
+- CQRS, microservices, queues, and testing utilities in one package
+- CLI for scaffolding, code generation, and Bun builds
 
 ## Installation
 
 ```bash
-bun add bnest
+bun add @kaonashi-dev/bnest
+```
+
+To use the CLI without installing it globally:
+
+```bash
+bunx @kaonashi-dev/bnest --help
 ```
 
 ## Quick Start
 
 ```ts
-import { BnestFactory, Module, Controller, Get, Injectable } from "bnest";
+import { BnestFactory, Controller, Get, Injectable, Module } from "@kaonashi-dev/bnest";
 
 @Injectable()
 class AppService {
   getHello() {
-    return { message: "Hello from Bnest!" };
+    return { message: "Hello from Bnest" };
   }
 }
 
 @Controller("app")
 class AppController {
-  constructor(private appService: AppService) {}
+  constructor(private readonly appService: AppService) {}
 
   @Get("/")
   hello() {
@@ -48,125 +53,96 @@ class AppController {
 })
 class AppModule {}
 
-const app = BnestFactory.create(AppModule);
+const app = await BnestFactory.create(AppModule);
 
 app.listen(3000, () => {
   console.log("Server running at http://localhost:3000");
 });
 ```
 
-## CLI
-
-```bash
-# Create a new project
-bunx kaonashi-dev/bnest new my-project
-cd my-project && bun install && bun run dev
-
-# Generate files
-bunx bnest g module users
-bunx bnest g controller users
-bunx bnest g service users
-bunx bnest g resource users    # module + controller + service with CRUD
-
-# Build
-bunx bnest build src/main.ts --out dist/app.bun --minify
-```
-
-`bnest new` scaffolds a ready-to-run project with `src/main.ts`, `src/app.module.ts`, `src/app.controller.ts`, `src/app.service.ts`, `.gitignore`, `tsconfig.json`, `oxlint.json`, `.oxfmtrc.json`, and common scripts for build, lint, format, and checks.
-
 ## Core Concepts
 
 ### Modules
 
-Modules organize the application into cohesive blocks.
-
 ```ts
-import { Module } from "bnest";
+import { Module } from "@kaonashi-dev/bnest";
 
 @Module({
   imports: [DatabaseModule],
-  controllers: [UserController],
-  providers: [UserService],
-  exports: [UserService],
+  controllers: [UsersController],
+  providers: [UsersService],
+  exports: [UsersService],
 })
-class UserModule {}
+class UsersModule {}
 ```
 
-### Controllers & Routes
+### Controllers and Routes
 
 ```ts
-import { Controller, Get, Post, Put, Patch, Delete, Param, Body, Query } from "bnest";
+import { Body, Controller, Get, Param, Post, Query } from "@kaonashi-dev/bnest";
 
 @Controller("users")
-class UserController {
-  constructor(private userService: UserService) {}
+class UsersController {
+  constructor(private readonly usersService: UsersService) {}
 
   @Get("/")
   findAll(@Query("page") page?: string) {
-    return this.userService.findAll(Number(page) || 1);
+    return this.usersService.findAll(Number(page) || 1);
   }
 
   @Get("/:id")
   findOne(@Param("id") id: string) {
-    return this.userService.findOne(id);
+    return this.usersService.findOne(id);
   }
 
   @Post("/", { body: CreateUserSchema })
   create(@Body() body: any) {
-    return this.userService.create(body);
+    return this.usersService.create(body);
   }
 }
 ```
 
 ### Dependency Injection
 
-Bnest supports constructor-based DI with automatic resolution, custom providers, and token-based injection.
-
 ```ts
-import { Injectable, Inject } from "bnest";
+import { Inject, Injectable, Module } from "@kaonashi-dev/bnest";
 
-// Class-based (auto-resolved)
-@Injectable()
-class UserService {
-  constructor(private db: DatabaseService) {}
-}
-
-// Token-based injection
 const API_KEY = Symbol("API_KEY");
 
 @Injectable()
 class AuthService {
-  constructor(@Inject(API_KEY) private apiKey: string) {}
+  constructor(@Inject(API_KEY) private readonly apiKey: string) {}
 }
 
-// Custom providers
 @Module({
   providers: [
     AuthService,
     { provide: API_KEY, useValue: process.env.API_KEY },
-    { provide: "CACHE", useClass: RedisCacheService },
-    { provide: "DB_URL", useFactory: (config: ConfigService) => config.get("db.url"), inject: [ConfigService] },
-    { provide: "LOGGER", useExisting: ConsoleLogger },
   ],
 })
-class AppModule {}
+class AuthModule {}
 ```
 
-### Guards
+### Guards and Middleware
 
 ```ts
-import { Injectable, UseGuards } from "bnest";
-import type { CanActivate } from "bnest";
+import { Controller, Get, Injectable, Middleware, UseGuards } from "@kaonashi-dev/bnest";
+import type { CanActivate } from "@kaonashi-dev/bnest";
 
 @Injectable()
 class AuthGuard implements CanActivate {
-  canActivate(context: any): boolean {
+  canActivate(context: any) {
     return context.headers.authorization === "Bearer valid-token";
   }
 }
 
+const logMiddleware = async (context: any) => {
+  console.log(`${context.request.method} ${context.request.url}`);
+};
+
 @Controller("admin")
 @UseGuards(AuthGuard)
+@Middleware(logMiddleware)
 class AdminController {
   @Get("/dashboard")
   dashboard() {
@@ -175,50 +151,12 @@ class AdminController {
 }
 ```
 
-### Middleware
+## Validation and DTOs
+
+Bnest exposes a `Schema` helper built on `@sinclair/typebox`.
 
 ```ts
-import { Controller, Middleware } from "bnest";
-
-const logMiddleware = async (context: any) => {
-  console.log(`${context.request.method} ${context.request.url}`);
-};
-
-@Controller("api")
-@Middleware(logMiddleware)
-class ApiController {}
-```
-
-### Lifecycle Hooks
-
-Providers and controllers can implement lifecycle hooks:
-
-```ts
-@Injectable()
-class DatabaseService {
-  async onModuleInit() {
-    // Called when the module is initialized
-    await this.connect();
-  }
-
-  async onModuleDestroy() {
-    // Called when the module is being destroyed
-    await this.disconnect();
-  }
-
-  async onApplicationBootstrap() {
-    // Called after all modules are initialized
-    await this.runMigrations();
-  }
-}
-```
-
-## Schema Validation
-
-Built on `@sinclair/typebox` — no direct imports needed:
-
-```ts
-import { Schema } from "bnest";
+import { Body, Controller, Post, Schema } from "@kaonashi-dev/bnest";
 
 const CreateUserSchema = Schema.Object({
   name: Schema.String({ minLength: 2 }),
@@ -227,71 +165,65 @@ const CreateUserSchema = Schema.Object({
   age: Schema.Optional(Schema.Integer({ minimum: 0 })),
 });
 
-@Post("/", { body: CreateUserSchema })
-create(@Body() body: any) {
-  return this.userService.create(body);
+@Controller("users")
+class UsersController {
+  @Post("/", { body: CreateUserSchema })
+  create(@Body() body: any) {
+    return body;
+  }
 }
 ```
 
-### Available Schema Builders
+Decorator-style DTO metadata is also available through exports such as `Dto`, `IsString`, `IsNumber`, `IsInteger`, `IsBoolean`, and `IsEnum`.
 
-| Builder | Description |
-|---|---|
-| `Schema.Object(props)` | Object with typed properties |
-| `Schema.String(opts?)` | String with optional constraints |
-| `Schema.Number(opts?)` | Number with optional constraints |
-| `Schema.Integer(opts?)` | Integer with optional constraints |
-| `Schema.Boolean()` | Boolean |
-| `Schema.Literal(value)` | Exact literal value |
-| `Schema.enum(values)` | Enum from TS enum or `as const` array |
-| `Schema.Union(...)` | Union of schemas |
-| `Schema.Optional(schema)` | Mark property as optional |
-| `Schema.Partial(schema)` | All properties optional |
-| `Schema.Required(schema)` | All properties required |
-| `Schema.Pick(schema, keys)` | Pick specific keys |
-| `Schema.Omit(schema, keys)` | Omit specific keys |
-| `Schema.Array(item)` | Array of items |
-| `Schema.Record(key, value)` | Key-value record |
-| `Schema.Tuple(...)` | Fixed-length tuple |
-| `Schema.Any()` / `Schema.Unknown()` | Escape hatches |
-
-## HTTP Exceptions
+## Exceptions
 
 ```ts
-import {
-  BadRequestException,
-  UnauthorizedException,
-  ForbiddenException,
-  NotFoundException,
-  ConflictException,
-  UnprocessableEntityException,
-  TooManyRequestsException,
-  InternalServerErrorException,
-  ServiceUnavailableException,
-} from "bnest";
+import { NotFoundException } from "@kaonashi-dev/bnest";
 
 throw new NotFoundException("User not found");
-// → { statusCode: 404, error: "Not Found", message: "User not found" }
+```
+
+## Testing
+
+Testing utilities are available from the main package and the `./testing` export.
+
+```ts
+import { Test } from "@kaonashi-dev/bnest/testing";
+
+const module = await Test.createTestingModule({
+  providers: [UserService, DatabaseService],
+})
+  .overrideProvider(DatabaseService)
+  .useValue({
+    find: () => [{ id: 1, name: "Mock User" }],
+  })
+  .compile();
+
+const userService = module.get<UserService>(UserService);
 ```
 
 ## CQRS
 
-Command-Query Responsibility Segregation with event sourcing:
+CQRS utilities are available from the main package and the `./cqrs` export.
 
 ```ts
 import {
-  Command, CommandHandler,
-  CqrsQuery, QueryHandler,
-  DomainEvent, EventHandler,
-  CommandBus, QueryBus, EventBus,
-} from "bnest";
+  Command,
+  CommandBus,
+  CommandHandler,
+  DomainEvent,
+  EventBus,
+  EventHandler,
+} from "@kaonashi-dev/bnest/cqrs";
 
-// Commands
 class CreateUserCommand extends Command<{ name: string }> {}
+
+class UserCreatedEvent extends DomainEvent<{ id: number; name: string }> {}
 
 @CommandHandler(CreateUserCommand)
 class CreateUserHandler {
-  constructor(private eventBus: EventBus) {}
+  constructor(private readonly eventBus: EventBus) {}
 
   async execute(command: CreateUserCommand) {
     const user = { id: 1, ...command.payload };
@@ -299,19 +231,6 @@ class CreateUserHandler {
     return user;
   }
 }
-
-// Queries
-class ListUsersQuery extends CqrsQuery<void, string[]> {}
-
-@QueryHandler(ListUsersQuery)
-class ListUsersHandler {
-  execute() {
-    return ["Alice", "Bob"];
-  }
-}
-
-// Events
-class UserCreatedEvent extends DomainEvent<{ id: number; name: string }> {}
 
 @EventHandler(UserCreatedEvent)
 class UserCreatedLogger {
@@ -321,12 +240,15 @@ class UserCreatedLogger {
 }
 ```
 
-Buses are auto-registered by `BnestFactory.create()` and available for injection via `CommandBus`, `QueryBus`, `EventBus`, and `InMemoryEventStore`.
+`BnestFactory.create()` registers the command, query, and event buses automatically.
 
 ## Microservices
 
+Microservice utilities are available from the main package and the `./microservices` export.
+
 ```ts
-import { MessagePattern, EventPattern, BnestFactory } from "bnest";
+import { BnestFactory, Injectable } from "@kaonashi-dev/bnest";
+import { EventPattern, MessagePattern } from "@kaonashi-dev/bnest/microservices";
 
 @Injectable()
 class UserMessages {
@@ -341,27 +263,25 @@ class UserMessages {
   }
 }
 
-const { server, client } = BnestFactory.createMicroservice(AppModule, {
-  transport: "local", // or "redis"
+const { server, client } = await BnestFactory.createMicroservice(AppModule, {
+  transport: "local",
 });
 
 await server.listen();
-const count = await client.send("users.count", {});
-await client.emit("users.created", { name: "Ada" });
+await client.send("users.count", {});
 ```
 
-**Available transports:** `local` (in-process), `redis` (distributed pub/sub)
+Supported transports: `local`, `redis`.
 
-## Job Queues
+## Queues
+
+Queue utilities are available from the main package and the `./queue` export.
 
 ```ts
-import { MemoryQueue, DBQueue, Worker } from "bnest";
+import { DBQueue, MemoryQueue, Worker } from "@kaonashi-dev/bnest/queue";
 
-// In-memory queue
 const queue = new MemoryQueue();
-
-// Or SQLite-backed persistent queue
-const queue = new DBQueue("jobs.sqlite");
+// const queue = new DBQueue("jobs.sqlite");
 
 await queue.enqueue({ email: "user@example.com" });
 
@@ -372,68 +292,62 @@ const worker = new Worker(queue, async (job) => {
 worker.start();
 ```
 
-## Testing
-
-Bnest provides a `TestingModule` that mirrors NestJS's testing approach with isolated containers:
-
-```ts
-import { Test } from "bnest";
-
-const module = await Test.createTestingModule({
-  providers: [UserService, DatabaseService],
-})
-  .overrideProvider(DatabaseService)
-  .useValue({
-    find: () => [{ id: 1, name: "Mock User" }],
-  })
-  .compile();
-
-const userService = module.get<UserService>(UserService);
-expect(userService.findAll()).toEqual([{ id: 1, name: "Mock User" }]);
-```
-
-Each `TestingModule` creates a fully isolated DI container — no shared state between tests.
-
-### Override Options
-
-```ts
-// Override with a mock value
-.overrideProvider(Service).useValue(mockService)
-
-// Override with a different class
-.overrideProvider(Service).useClass(MockService)
-
-// Override with a factory
-.overrideProvider(Service).useFactory({ factory: () => new MockService() })
-```
-
-## Build
+## CLI
 
 ```bash
-# Bun standalone binary
-bun run build
+# Create a new project
+bunx @kaonashi-dev/bnest new my-project
 
-# Node.js ESM module
-bun run build:node
+# Generate framework files
+bunx @kaonashi-dev/bnest g module users
+bunx @kaonashi-dev/bnest g controller users
+bunx @kaonashi-dev/bnest g service users
+bunx @kaonashi-dev/bnest g resource users
+
+# Build an entrypoint with bun build
+bunx @kaonashi-dev/bnest build src/main.ts --out dist/app.bun --minify
+bunx @kaonashi-dev/bnest build src/main.ts --target node --out dist/app.js
+```
+
+## Package Exports
+
+```ts
+import { BnestFactory } from "@kaonashi-dev/bnest";
+import { Test } from "@kaonashi-dev/bnest/testing";
+import { CommandBus } from "@kaonashi-dev/bnest/cqrs";
+import { MessagePattern } from "@kaonashi-dev/bnest/microservices";
+import { MemoryQueue } from "@kaonashi-dev/bnest/queue";
+```
+
+## Scripts
+
+```bash
+bun run test
+bun run check
+bun run build
+bun run bench
 ```
 
 ## Project Structure
 
-```
+```text
 src/
-  core/           # DI container, module scanner
-  decorators/     # @Module, @Controller, @Injectable, @Get, @Post, @Inject, etc.
-  factory/        # BnestFactory — application bootstrap
-  platform/       # Elysia HTTP adapter
-  testing/        # TestingModule for unit testing
-  cqrs/           # CommandBus, QueryBus, EventBus, EventStore
-  microservices/  # Local and Redis transports
-  queue/          # Job queue with Memory, SQLite, and Redis adapters
-  exceptions/     # HTTP exception classes
-  schema/         # Typebox schema builder wrapper
-  services/       # Logger
-  cli/            # Project scaffolding and code generation
+  cli/            CLI scaffolding and generators
+  core/           Application core and DI container
+  cqrs/           Command, query, event buses and event store
+  decorators/     Routing, DI, and metadata decorators
+  exceptions/     HTTP exception classes
+  factory/        BnestFactory bootstrap APIs
+  microservices/  Local and Redis transports
+  platform/       Elysia adapter
+  queue/          In-memory and SQLite-backed queues
+  schema/         TypeBox-backed schema helpers and DTO metadata
+  testing/        Testing module utilities
 ```
+
+## Status
+
+Bnest is still experimental. APIs may change quickly, some areas are incomplete, and documentation will continue to evolve with the framework.
 
 ## License
 
