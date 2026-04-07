@@ -1,140 +1,140 @@
-import { test, expect, describe, afterEach } from "bun:test";
-import { MemoryQueue, DBQueue, Worker } from "../src/queue/index";
+import { afterEach, describe, expect, test } from "bun:test";
+import {
+  InjectQueue,
+  Injectable,
+  Process,
+  Processor,
+  Queue,
+  QueueEvents,
+  QueueModule,
+  Test,
+  Worker,
+  type Job,
+} from "../src/index";
 
-describe("Queue System", () => {
-  describe("MemoryQueue", () => {
-    test("enqueue and dequeue jobs", () => {
-      const queue = new MemoryQueue();
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-      const job1 = queue.enqueue({ data: 1 });
-      const job2 = queue.enqueue({ data: 2 });
+describe("Queue", () => {
+  const closers: Array<() => Promise<void>> = [];
 
-      expect(queue.size()).toBe(2);
-      expect(job1.status).toBe("pending");
-      expect(job1.payload.data).toBe(1);
-
-      const dequeuedJob1 = queue.dequeue();
-      expect(dequeuedJob1?.id).toBe(job1.id);
-      expect(dequeuedJob1?.status).toBe("processing");
-      expect(queue.size()).toBe(1);
-
-      queue.complete(dequeuedJob1!.id);
-      expect(dequeuedJob1!.status).toBe("completed");
-
-      const dequeuedJob2 = queue.dequeue();
-      expect(dequeuedJob2?.id).toBe(job2.id);
-      expect(queue.size()).toBe(0);
-
-      const emptyJob = queue.dequeue();
-      expect(emptyJob).toBeNull();
-    });
-
-    test("handles failed jobs and retries", () => {
-      const queue = new MemoryQueue();
-      const job = queue.enqueue({ data: 1 }, { maxAttempts: 2 });
-
-      let dequeued = queue.dequeue();
-      expect(dequeued).not.toBeNull();
-      expect(queue.size()).toBe(0);
-
-      queue.fail(dequeued!.id, new Error("Failed once"));
-      expect(dequeued!.status).toBe("pending");
-      expect(dequeued!.attempts).toBe(1);
-      expect(queue.size()).toBe(1);
-
-      dequeued = queue.dequeue();
-      expect(dequeued?.id).toBe(job.id);
-
-      queue.fail(dequeued!.id, new Error("Failed twice"));
-      expect(dequeued!.status).toBe("failed");
-      expect(dequeued!.attempts).toBe(2);
-      expect(queue.size()).toBe(0);
-    });
+  afterEach(async () => {
+    await Promise.allSettled(closers.splice(0).map((close) => close()));
   });
 
-  describe("DBQueue (SQLite)", () => {
-    let queue: DBQueue;
+  test("adds and retrieves jobs", async () => {
+    const queue = new Queue("emails");
+    closers.push(() => queue.close());
 
-    afterEach(() => {
-      if (queue) queue.clear();
-    });
+    const job = await queue.add("send-welcome", { email: "hello@example.com" });
 
-    test("enqueue and dequeue jobs in SQLite", () => {
-      queue = new DBQueue(":memory:", "test_jobs");
+    expect(await queue.count()).toBe(1);
+    expect(job.name).toBe("send-welcome");
+    expect(job.data).toEqual({ email: "hello@example.com" });
 
-      const job1 = queue.enqueue({ data: "hello" });
-      const job2 = queue.enqueue({ data: "world" });
-
-      expect(queue.size()).toBe(2);
-
-      const dequeued1 = queue.dequeue();
-      expect(dequeued1?.id).toBe(job1.id);
-      expect(dequeued1?.payload.data).toBe("hello");
-      expect(dequeued1?.status).toBe("processing");
-      expect(queue.size()).toBe(1);
-
-      queue.complete(dequeued1!.id);
-
-      const dequeued2 = queue.dequeue();
-      expect(dequeued2?.id).toBe(job2.id);
-      expect(queue.size()).toBe(0);
-    });
+    const stored = await queue.getJob(job.id);
+    expect(stored?.id).toBe(job.id);
+    expect(stored?.data).toEqual({ email: "hello@example.com" });
   });
 
-  describe("Worker", () => {
-    test("processes jobs from the queue", async () => {
-      const queue = new MemoryQueue();
+  test("processes delayed and retried jobs", async () => {
+    const queue = new Queue("notifications");
+    const attempts: number[] = [];
 
-      let processedCount = 0;
-      const worker = new Worker({
-        queue,
-        concurrency: 2,
-        pollingInterval: 10,
-        handler: async (job) => {
-          processedCount++;
-          expect(job.payload.value).toBeGreaterThan(0);
-        },
-      });
-
-      queue.enqueue({ value: 10 });
-      queue.enqueue({ value: 20 });
-      queue.enqueue({ value: 30 });
-
-      worker.start();
-
-      // Wait a little bit for the worker to process
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      worker.stop();
-
-      expect(processedCount).toBe(3);
-      expect(queue.size()).toBe(0);
-    });
-
-    test("handles job failures gracefully", async () => {
-      const queue = new MemoryQueue();
-
-      let attemptCount = 0;
-      const worker = new Worker({
-        queue,
+    const worker = new Worker(
+      queue,
+      async (job) => {
+        attempts.push(job.attemptsMade);
+        if (attempts.length < 3) {
+          throw new Error("retry me");
+        }
+        await job.updateProgress(100);
+        return { ok: true };
+      },
+      {
         concurrency: 1,
-        pollingInterval: 10,
-        handler: async () => {
-          attemptCount++;
-          throw new Error("Simulated failure");
-        },
-      });
+        drainDelay: 5,
+        lockDuration: 200,
+      },
+    );
 
-      // job should be tried exactly 3 times (maxAttempts = 3)
-      queue.enqueue({ value: 10 }, { maxAttempts: 3 });
+    closers.push(() => worker.close());
+    closers.push(() => queue.close());
 
-      worker.start();
+    const job = await queue.add("send", { id: 1 }, { delay: 20, attempts: 3, backoff: 10 });
 
-      // Wait enough time for 3 attempts
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      worker.stop();
+    await sleep(120);
 
-      expect(attemptCount).toBe(3);
-      expect(queue.size()).toBe(0); // Job failed and is no longer pending
-    });
+    const stored = await queue.getJob(job.id);
+    expect(attempts.length).toBe(3);
+    expect(stored?.returnValue).toEqual({ ok: true });
+    expect(stored?.progress).toBe(100);
+    expect(stored?.finishedOn).toBeDefined();
+    expect(await queue.count()).toBe(0);
+  });
+
+  test("emits queue events", async () => {
+    const queue = new Queue("reports");
+    const events = new QueueEvents("reports", {}, queue.driver);
+    const seen: string[] = [];
+
+    events.on("waiting", () => seen.push("waiting"));
+    events.on("completed", () => seen.push("completed"));
+
+    const worker = new Worker(
+      queue,
+      async () => {
+        return "done";
+      },
+      { drainDelay: 5, lockDuration: 200 },
+    );
+
+    closers.push(() => events.close());
+    closers.push(() => worker.close());
+    closers.push(() => queue.close());
+
+    await queue.add("build", { id: 1 });
+    await sleep(40);
+
+    expect(seen).toContain("waiting");
+    expect(seen).toContain("completed");
+  });
+
+  test("registers processors through decorators and DI", async () => {
+    @Injectable()
+    class AuditService {
+      readonly events: string[] = [];
+
+      constructor(@InjectQueue("emails") private readonly queue: Queue) {}
+
+      async enqueue(email: string) {
+        await this.queue.add("send", { email });
+      }
+
+      markProcessed(email: string) {
+        this.events.push(email);
+      }
+    }
+
+    @Processor("emails", { drainDelay: 5, lockDuration: 200 })
+    class EmailProcessor {
+      constructor(private readonly audit: AuditService) {}
+
+      @Process("send")
+      async handle(job: Job<{ email: string }>) {
+        this.audit.markProcessed(job.data.email);
+        return { delivered: true };
+      }
+    }
+
+    const moduleRef = await Test.createTestingModule({
+      imports: [QueueModule.register(), QueueModule.registerQueue({ name: "emails" })],
+      providers: [AuditService, EmailProcessor],
+    }).compile();
+    const audit = moduleRef.get<AuditService>(AuditService);
+
+    await audit.enqueue("dev@example.com");
+    await sleep(40);
+
+    expect(audit.events).toEqual(["dev@example.com"]);
   });
 });

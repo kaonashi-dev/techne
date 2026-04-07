@@ -108,16 +108,16 @@ export class Scanner {
     }
     this.moduleExports.set(module, exportedTokens);
 
+    for (const importedModule of imports) {
+      this.scanModule(importedModule);
+    }
+
     for (const provider of providers) {
       this.providers.add(provider);
     }
 
     for (const controller of controllers) {
       this.controllers.add(controller);
-    }
-
-    for (const importedModule of imports) {
-      this.scanModule(importedModule);
     }
   }
 }
