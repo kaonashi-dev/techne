@@ -1,7 +1,14 @@
 import "../reflect-setup";
 import { PARAMS_METADATA } from "../common/constants";
+import type { ExecutionContext } from "../core/execution-context";
 
-export type ParamType = "body" | "param" | "query" | "headers" | "request";
+export type ParamType = "body" | "param" | "query" | "headers" | "request" | "custom";
+
+/** Factory signature used by `createParamDecorator`. */
+export type CustomParamFactory<TData = any, TOutput = any> = (
+  data: TData,
+  ctx: ExecutionContext,
+) => TOutput;
 
 export interface ParamMetadata {
   index: number;
@@ -11,6 +18,10 @@ export interface ParamMetadata {
   dtoClass?: Function;
   /** Reflected parameter type for `@Body() dto: CreateDto`. */
   metatype?: Function;
+  /** Factory for params created with `createParamDecorator`. */
+  factory?: CustomParamFactory;
+  /** Static data passed to the factory as its first argument. */
+  data?: unknown;
 }
 
 function getParameterMetatype(
@@ -40,7 +51,7 @@ function _addParam(
   Reflect.defineMetadata(PARAMS_METADATA, params, (target as any).constructor);
 }
 
-const createParamDecorator = (type: ParamType) => {
+const createBuiltinParamDecorator = (type: ParamType) => {
   return (name?: string): ParameterDecorator => {
     return (target: object, propertyKey: string | symbol | undefined, parameterIndex: number) => {
       if (!propertyKey) return;
@@ -79,9 +90,43 @@ export function Body(nameOrDto?: string | Function): ParameterDecorator {
   };
 }
 
-export const Param = createParamDecorator("param");
-export const Query = createParamDecorator("query");
-export const Headers = createParamDecorator("headers");
+export const Param = createBuiltinParamDecorator("param");
+export const Query = createBuiltinParamDecorator("query");
+export const Headers = createBuiltinParamDecorator("headers");
+
+/**
+ * NestJS-compatible `createParamDecorator`. Given a factory that reads from
+ * the `ExecutionContext`, returns a parameter decorator that injects the
+ * factory's return value into a handler argument at request time.
+ *
+ * ```ts
+ * export const CurrentUser = createParamDecorator(
+ *   (data: string | undefined, ctx: ExecutionContext) => {
+ *     const req = ctx.switchToHttp().getRequest();
+ *     return data ? req.user?.[data] : req.user;
+ *   },
+ * );
+ *
+ * @Get('me')
+ * profile(@CurrentUser() user: User) {}
+ * ```
+ */
+export function createParamDecorator<TData = any, TOutput = any>(
+  factory: CustomParamFactory<TData, TOutput>,
+): (data?: TData) => ParameterDecorator {
+  return (data?: TData): ParameterDecorator => {
+    return (target: object, propertyKey: string | symbol | undefined, parameterIndex: number) => {
+      if (!propertyKey) return;
+      const key = global.String(propertyKey);
+      _addParam(target, key, parameterIndex, {
+        type: "custom",
+        factory: factory as CustomParamFactory,
+        data,
+        metatype: getParameterMetatype(target, key, parameterIndex),
+      });
+    };
+  };
+}
 
 /** Injects the raw `Request` object into a handler parameter. */
 export function Req(): ParameterDecorator {

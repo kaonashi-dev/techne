@@ -9,10 +9,19 @@ import { MicroservicesAdapter } from "../microservices/adapter";
 import type { MicroserviceOptions } from "../microservices/types";
 import { QueueRegistry } from "../queue/registry";
 import { QUEUE_DRIVER } from "../queue/tokens";
+import type { CanActivate } from "../interfaces/can-activate.interface";
 
 export interface BnestApplicationOptions {
   logger?: boolean | string[];
   container?: Container;
+  /**
+   * Guards to apply globally to every route. Because guards are wired into
+   * Elysia's `beforeHandle` at registration time, providing them here is the
+   * reliable way to ensure they apply to every route. Calling
+   * `app.useGlobalGuards()` after `BnestFactory.create()` only applies to
+   * routes registered after the call.
+   */
+  globalGuards?: (CanActivate | Function)[];
 }
 
 export class BnestFactory {
@@ -42,6 +51,9 @@ export class BnestFactory {
 
     const adapter = new ElysiaAdapter({ logger: loggerEnabled, container });
     const routesResolver = new RoutesResolver(scanner);
+    if (options?.globalGuards && options.globalGuards.length > 0) {
+      routesResolver.executionContext.setGlobalGuards(options.globalGuards);
+    }
     const routes = routesResolver.resolve(adapter);
 
     logger.log("Dependencies initialized");

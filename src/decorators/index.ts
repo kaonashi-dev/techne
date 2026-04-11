@@ -9,6 +9,8 @@ export * from "./use-filters.decorator";
 export * from "./use-interceptors.decorator";
 export * from "./use-pipes.decorator";
 export * from "./inject.decorator";
+export * from "./set-metadata.decorator";
+export * from "./catch.decorator";
 export * from "../queue/decorators/inject-queue.decorator";
 export * from "../queue/decorators/processor.decorator";
 export * from "../queue/decorators/process.decorator";

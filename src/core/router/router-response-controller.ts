@@ -6,7 +6,7 @@ export class RouterResponseController {
       error instanceof HttpException
         ? error
         : new InternalServerErrorException("Internal Server Error");
-    context.set.status = exception.statusCode;
-    return exception.toJSON();
+    context.set.status = exception.getStatus();
+    return exception.getResponse();
   }
 }

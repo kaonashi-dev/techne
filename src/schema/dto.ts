@@ -36,6 +36,37 @@ type ValidationConstraint =
 /** Module-level registry: DTO class → compiled TypeBox schema. */
 const dtoRegistry = new Map<Function, TSchema>();
 
+interface DtoMetaCacheEntry {
+  properties: Record<string, PropertyMetadata>;
+  knownKeys: Set<string>;
+  hasValidation: boolean;
+}
+
+/** Cache of per-class metadata derived from `Reflect.getMetadata`. */
+const dtoMetaCache = new WeakMap<Function, DtoMetaCacheEntry>();
+
+function getDtoMetaCache(target: Function): DtoMetaCacheEntry {
+  const cached = dtoMetaCache.get(target);
+  if (cached) return cached;
+
+  const properties: Record<string, PropertyMetadata> =
+    Reflect.getMetadata(PROPERTY_METADATA_KEY, (target as ClassConstructor).prototype) ?? {};
+  const keys = Object.keys(properties);
+  const entry: DtoMetaCacheEntry = {
+    properties,
+    knownKeys: new Set(keys),
+    hasValidation: keys.length > 0,
+  };
+  dtoMetaCache.set(target, entry);
+  return entry;
+}
+
+function invalidateDtoCache(target: Function | undefined): void {
+  if (!target) return;
+  dtoRegistry.delete(target);
+  dtoMetaCache.delete(target);
+}
+
 export function Dto(): ClassDecorator {
   return (target: Function) => {
     dtoRegistry.set(target, buildSchemaFromClass(target as ClassConstructor));
@@ -49,21 +80,20 @@ export function getDtoSchema(target: Function): TSchema | undefined {
 export function getOrCreateDtoSchema(target: Function): TSchema | undefined {
   const existing = dtoRegistry.get(target);
   if (existing) return existing;
-  if (!hasValidationMetadata(target)) return undefined;
+  if (!getDtoMetaCache(target).hasValidation) return undefined;
   const schema = buildSchemaFromClass(target as ClassConstructor);
   dtoRegistry.set(target, schema);
   return schema;
 }
 
 export function hasValidationMetadata(target: Function): boolean {
-  const properties = getClassPropertyMetadata(target as ClassConstructor);
-  return Object.keys(properties).length > 0;
+  return getDtoMetaCache(target).hasValidation;
 }
 
 export function getClassPropertyMetadata(
   klass: ClassConstructor,
 ): Record<string, PropertyMetadata> {
-  return Reflect.getMetadata(PROPERTY_METADATA_KEY, klass.prototype) ?? {};
+  return getDtoMetaCache(klass).properties;
 }
 
 export function setPropertyMetadata(
@@ -86,8 +116,7 @@ export function setPropertyMetadata(
   }
 
   Reflect.defineMetadata(PROPERTY_METADATA_KEY, existing, target);
-  const ctor = target.constructor as Function | undefined;
-  if (ctor) dtoRegistry.delete(ctor);
+  invalidateDtoCache(target.constructor as Function | undefined);
 }
 
 export function buildSchemaFromClass(klass: ClassConstructor): TSchema {
@@ -105,6 +134,10 @@ export function buildSchemaFromClass(klass: ClassConstructor): TSchema {
 export function validateDto(value: unknown, metatype: Function): ValidationError[] {
   const schema = getOrCreateDtoSchema(metatype);
   if (!schema) return [];
+
+  // Fast path: most requests are valid. Avoid materializing the error iterator
+  // when the value passes the schema check.
+  if (Value.Check(schema, value)) return [];
 
   return normalizeValidationErrors([...Value.Errors(schema, value)]);
 }
@@ -173,13 +206,13 @@ export function stripUnknownProperties<T extends Record<string, unknown>>(
   value: T,
   metatype: Function,
 ): T {
-  const knownKeys = new Set(Object.keys(getClassPropertyMetadata(metatype as ClassConstructor)));
+  const knownKeys = getDtoMetaCache(metatype).knownKeys;
   return Object.fromEntries(Object.entries(value).filter(([key]) => knownKeys.has(key))) as T;
 }
 
 export function getUnknownPropertyKeys(value: unknown, metatype: Function): string[] {
   if (!value || typeof value !== "object" || Array.isArray(value)) return [];
-  const knownKeys = new Set(Object.keys(getClassPropertyMetadata(metatype as ClassConstructor)));
+  const knownKeys = getDtoMetaCache(metatype).knownKeys;
   return Object.keys(value as Record<string, unknown>).filter((key) => !knownKeys.has(key));
 }
 

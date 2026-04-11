@@ -2,6 +2,7 @@ import type { Elysia } from "elysia";
 import type { Scanner } from "./scanner";
 import type { Container } from "./container";
 import type { RouterExecutionContext } from "./router/router-execution-context";
+import type { CanActivate } from "../interfaces/can-activate.interface";
 import type { ExceptionFilter } from "../interfaces/exception-filter.interface";
 import type { BnestInterceptor } from "../interfaces/interceptor.interface";
 import type { PipeTransform } from "../interfaces/pipe-transform.interface";
@@ -33,6 +34,16 @@ export class BnestApplication {
 
   useGlobalPipes(...pipes: PipeTransform[]): this {
     this.executionContext?.setGlobalPipes(pipes);
+    return this;
+  }
+
+  useGlobalGuards(...guards: (CanActivate | Function)[]): this {
+    const appliedInTime = this.executionContext?.setGlobalGuards(guards) ?? false;
+    if (!appliedInTime) {
+      this.logger.warn(
+        "useGlobalGuards() was called after routes were registered — only routes registered after this call will receive the new guards. Pass `globalGuards` to BnestFactory.create() for retroactive application.",
+      );
+    }
     return this;
   }
 
