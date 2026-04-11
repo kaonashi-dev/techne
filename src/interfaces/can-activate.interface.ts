@@ -1,3 +1,5 @@
+import type { ExecutionContext } from "../core/execution-context";
+
 export interface CanActivate {
-  canActivate(context: any): boolean | Promise<boolean>;
+  canActivate(context: ExecutionContext): boolean | Promise<boolean>;
 }

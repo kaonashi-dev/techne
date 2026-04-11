@@ -1,5 +1,6 @@
 import "../reflect-setup";
 import { INJECT_METADATA } from "../common/constants";
+import { Reflector } from "./reflector";
 
 export interface ClassProvider {
   provide: any;
@@ -56,6 +57,11 @@ export class Container {
   private instances = new Map<any, any>();
   private resolutionStack = new Set<any>();
   private providers = new Map<any, Provider>();
+
+  constructor() {
+    // Register built-in providers that are always available for injection.
+    this.instances.set(Reflector, new Reflector());
+  }
 
   public set<T>(token: any, value: T): void {
     this.instances.set(token, value);
@@ -160,6 +166,7 @@ export class Container {
     this.instances.clear();
     this.resolutionStack.clear();
     this.providers.clear();
+    this.instances.set(Reflector, new Reflector());
   }
 }
 
