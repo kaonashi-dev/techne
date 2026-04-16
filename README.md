@@ -28,7 +28,8 @@ bunx @kaonashi-dev/bnest --help
 ## Quick Start
 
 ```ts
-import { BnestFactory, Controller, Get, Injectable, Module } from "@kaonashi-dev/bnest";
+import { Controller, Get, Injectable, Module } from "@kaonashi-dev/bnest/common";
+import { BnestFactory } from "@kaonashi-dev/bnest/core";
 
 @Injectable()
 class AppService {
@@ -60,12 +61,43 @@ app.listen(3000, () => {
 });
 ```
 
+## Coming from NestJS
+
+The recommended mental model is now:
+
+- `@kaonashi-dev/bnest/common` for decorators, exceptions, pipes, DTO/schema helpers, and request lifecycle interfaces.
+- `@kaonashi-dev/bnest/core` for bootstrap and infrastructure APIs.
+- `@kaonashi-dev/bnest/testing`, `/cqrs`, `/microservices`, and `/queue` for specialized features.
+
+### Import Map
+
+| NestJS | Bnest |
+| --- | --- |
+| `@nestjs/common` | `@kaonashi-dev/bnest/common` |
+| `@nestjs/core` | `@kaonashi-dev/bnest/core` |
+| `@nestjs/testing` | `@kaonashi-dev/bnest/testing` |
+| `@nestjs/cqrs` | `@kaonashi-dev/bnest/cqrs` |
+| `@nestjs/microservices` | `@kaonashi-dev/bnest/microservices` |
+
+### Migration
+
+| Before | After |
+| --- | --- |
+| `import { Controller, Module } from "@kaonashi-dev/bnest";` | `import { Controller, Module } from "@kaonashi-dev/bnest/common";` |
+| `import { ValidationPipe, NotFoundException } from "@kaonashi-dev/bnest";` | `import { ValidationPipe, NotFoundException } from "@kaonashi-dev/bnest/common";` |
+| `import { BnestFactory, Reflector } from "@kaonashi-dev/bnest";` | `import { BnestFactory, Reflector } from "@kaonashi-dev/bnest/core";` |
+| `import { Test } from "@kaonashi-dev/bnest";` | `import { Test } from "@kaonashi-dev/bnest/testing";` |
+| `import { CommandBus } from "@kaonashi-dev/bnest";` | `import { CommandBus } from "@kaonashi-dev/bnest/cqrs";` |
+| `import { MemoryQueue } from "@kaonashi-dev/bnest";` | `import { MemoryQueue } from "@kaonashi-dev/bnest/queue";` |
+
+`@kaonashi-dev/bnest` is now a minimal bootstrap entrypoint. Use it only when you explicitly want the smallest possible surface.
+
 ## Core Concepts
 
 ### Modules
 
 ```ts
-import { Module } from "@kaonashi-dev/bnest";
+import { Module } from "@kaonashi-dev/bnest/common";
 
 @Module({
   imports: [DatabaseModule],
@@ -79,7 +111,7 @@ class UsersModule {}
 ### Controllers and Routes
 
 ```ts
-import { Body, Controller, Get, Param, Post, Query } from "@kaonashi-dev/bnest";
+import { Body, Controller, Get, Param, Post, Query } from "@kaonashi-dev/bnest/common";
 
 @Controller("users")
 class UsersController {
@@ -105,7 +137,7 @@ class UsersController {
 ### Dependency Injection
 
 ```ts
-import { Inject, Injectable, Module } from "@kaonashi-dev/bnest";
+import { Inject, Injectable, Module } from "@kaonashi-dev/bnest/common";
 
 const API_KEY = Symbol("API_KEY");
 
@@ -126,8 +158,8 @@ class AuthModule {}
 ### Guards and Middleware
 
 ```ts
-import { Controller, Get, Injectable, Middleware, UseGuards } from "@kaonashi-dev/bnest";
-import type { CanActivate } from "@kaonashi-dev/bnest";
+import { Controller, Get, Injectable, Middleware, UseGuards } from "@kaonashi-dev/bnest/common";
+import type { CanActivate } from "@kaonashi-dev/bnest/common";
 
 @Injectable()
 class AuthGuard implements CanActivate {
@@ -156,7 +188,7 @@ class AdminController {
 Bnest exposes a `Schema` helper built on `@sinclair/typebox`.
 
 ```ts
-import { Body, Controller, Post, Schema } from "@kaonashi-dev/bnest";
+import { Body, Controller, Post, Schema } from "@kaonashi-dev/bnest/common";
 
 const CreateUserSchema = Schema.Object({
   name: Schema.String({ minLength: 2 }),
@@ -174,19 +206,19 @@ class UsersController {
 }
 ```
 
-Decorator-style DTO metadata is also available through exports such as `Dto`, `IsString`, `IsNumber`, `IsInteger`, `IsBoolean`, and `IsEnum`.
+Decorator-style DTO metadata is also available through exports such as `Dto`, `IsString`, `IsNumber`, `IsInteger`, `IsBoolean`, `IsEnum`, and `ValidationPipe`.
 
 ## Exceptions
 
 ```ts
-import { NotFoundException } from "@kaonashi-dev/bnest";
+import { NotFoundException } from "@kaonashi-dev/bnest/common";
 
 throw new NotFoundException("User not found");
 ```
 
 ## Testing
 
-Testing utilities are available from the main package and the `./testing` export.
+Testing utilities live under `./testing`.
 
 ```ts
 import { Test } from "@kaonashi-dev/bnest/testing";
@@ -205,7 +237,7 @@ const userService = module.get<UserService>(UserService);
 
 ## CQRS
 
-CQRS utilities are available from the main package and the `./cqrs` export.
+CQRS utilities live under `./cqrs`.
 
 ```ts
 import {
@@ -244,10 +276,11 @@ class UserCreatedLogger {
 
 ## Microservices
 
-Microservice utilities are available from the main package and the `./microservices` export.
+Microservice utilities live under `./microservices`.
 
 ```ts
-import { BnestFactory, Injectable } from "@kaonashi-dev/bnest";
+import { Injectable } from "@kaonashi-dev/bnest/common";
+import { BnestFactory } from "@kaonashi-dev/bnest/core";
 import { EventPattern, MessagePattern } from "@kaonashi-dev/bnest/microservices";
 
 @Injectable()
@@ -275,15 +308,25 @@ Supported transports: `local`, `redis`.
 
 ## Queues
 
-Queue utilities are available from the main package and the `./queue` export.
+Queue utilities and queue-specific decorators live under `./queue`.
 
 ```ts
-import { DBQueue, MemoryQueue, Worker } from "@kaonashi-dev/bnest/queue";
+import { DBQueue, InjectQueue, MemoryQueue, Process, Processor, Worker } from "@kaonashi-dev/bnest/queue";
 
 const queue = new MemoryQueue();
 // const queue = new DBQueue("jobs.sqlite");
 
 await queue.enqueue({ email: "user@example.com" });
+
+@Processor("emails")
+class EmailProcessor {
+  constructor(@InjectQueue("emails") private readonly emails: MemoryQueue) {}
+
+  @Process("send")
+  async send() {
+    return this.emails.size();
+  }
+}
 
 const worker = new Worker(queue, async (job) => {
   console.log("Processing:", job.payload);
@@ -309,10 +352,13 @@ bunx @kaonashi-dev/bnest build src/main.ts --out dist/app.bun --minify
 bunx @kaonashi-dev/bnest build src/main.ts --target node --out dist/app.js
 ```
 
+Generated starters now use `@kaonashi-dev/bnest/common` and `@kaonashi-dev/bnest/core` by default.
+
 ## Package Exports
 
 ```ts
-import { BnestFactory } from "@kaonashi-dev/bnest";
+import { BnestFactory } from "@kaonashi-dev/bnest/core";
+import { Controller, Module, ValidationPipe } from "@kaonashi-dev/bnest/common";
 import { Test } from "@kaonashi-dev/bnest/testing";
 import { CommandBus } from "@kaonashi-dev/bnest/cqrs";
 import { MessagePattern } from "@kaonashi-dev/bnest/microservices";
@@ -333,14 +379,15 @@ bun run bench
 ```text
 src/
   cli/            CLI scaffolding and generators
-  core/           Application core and DI container
+  common/         Nest-style public common API barrel
+  core/           Application core, DI container, and bootstrap APIs
   cqrs/           Command, query, event buses and event store
   decorators/     Routing, DI, and metadata decorators
   exceptions/     HTTP exception classes
-  factory/        BnestFactory bootstrap APIs
+  factory/        BnestFactory bootstrap implementation
   microservices/  Local and Redis transports
   platform/       Elysia adapter
-  queue/          In-memory and SQLite-backed queues
+  queue/          In-memory and Redis-backed queues
   schema/         TypeBox-backed schema helpers and DTO metadata
   testing/        Testing module utilities
 ```

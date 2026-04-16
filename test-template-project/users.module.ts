@@ -1,4 +1,4 @@
-import { Module } from "@kaonashi-dev/bnest";
+import { Module } from "@kaonashi-dev/bnest/common";
 
 @Module({
   controllers: [],

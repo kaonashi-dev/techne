@@ -14,7 +14,7 @@ import {
   InMemoryEventStore,
   QueryBus,
   QueryHandler,
-} from "../src";
+} from "../src/cqrs";
 import { Container } from "../src/core/container";
 
 class CreateUserCommand extends Command<{ name: string }> {}

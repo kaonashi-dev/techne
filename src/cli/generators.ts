@@ -34,7 +34,7 @@ async function ensureProjectDirectory(projectDir: string, projectName: string) {
 
 export async function generateModule(name: string, dir: string = ".") {
   const className = `${capitalize(name)}Module`;
-  const content = `import { Module } from 'bnest';
+  const content = `import { Module } from "@kaonashi-dev/bnest/common";
 
 @Module({
   controllers: [],
@@ -48,7 +48,7 @@ export class ${className} {}
 
 export async function generateController(name: string, dir: string = ".") {
   const className = `${capitalize(name)}Controller`;
-  const content = `import { Controller, Get } from 'bnest';
+  const content = `import { Controller, Get } from "@kaonashi-dev/bnest/common";
 
 @Controller('${name}')
 export class ${className} {
@@ -64,7 +64,7 @@ export class ${className} {
 
 export async function generateService(name: string, dir: string = ".") {
   const className = `${capitalize(name)}Service`;
-  const content = `import { Injectable } from 'bnest';
+  const content = `import { Injectable } from "@kaonashi-dev/bnest/common";
 
 @Injectable()
 export class ${className} {}
@@ -84,7 +84,7 @@ export async function generateResource(name: string) {
   // Write Service
   await fs.writeFile(
     path.join(dir, `${name}.service.ts`),
-    `import { Injectable } from 'bnest';
+    `import { Injectable } from "@kaonashi-dev/bnest/common";
 
 @Injectable()
 export class ${serviceName} {
@@ -115,7 +115,7 @@ export class ${serviceName} {
   // Write Controller
   await fs.writeFile(
     path.join(dir, `${name}.controller.ts`),
-    `import { Controller, Get, Post, Put, Delete, Body, Param } from 'bnest';
+    `import { Body, Controller, Delete, Get, Param, Post, Put } from "@kaonashi-dev/bnest/common";
 import { ${serviceName} } from './${name}.service';
 
 @Controller('${name}')
@@ -154,7 +154,7 @@ export class ${controllerName} {
   // Write Module
   await fs.writeFile(
     path.join(dir, `${name}.module.ts`),
-    `import { Module } from 'bnest';
+    `import { Module } from "@kaonashi-dev/bnest/common";
 import { ${controllerName} } from './${name}.controller';
 import { ${serviceName} } from './${name}.service';
 
@@ -283,7 +283,7 @@ bun run dev
 
   await writeTextFile(
     path.join(srcDir, "app.service.ts"),
-    `import { Injectable } from "@kaonashi-dev/bnest";
+    `import { Injectable } from "@kaonashi-dev/bnest/common";
 
 @Injectable()
 export class AppService {
@@ -298,7 +298,7 @@ export class AppService {
 
   await writeTextFile(
     path.join(srcDir, "app.controller.ts"),
-    `import { Controller, Get } from "@kaonashi-dev/bnest";
+    `import { Controller, Get } from "@kaonashi-dev/bnest/common";
 import { AppService } from "./app.service";
 
 @Controller("/")
@@ -315,7 +315,7 @@ export class AppController {
 
   await writeTextFile(
     path.join(srcDir, "app.module.ts"),
-    `import { Module } from "@kaonashi-dev/bnest";
+    `import { Module } from "@kaonashi-dev/bnest/common";
 import { AppController } from "./app.controller";
 import { AppService } from "./app.service";
 
@@ -329,7 +329,7 @@ export class AppModule {}
 
   await writeTextFile(
     path.join(srcDir, "main.ts"),
-    `import { BnestFactory } from "@kaonashi-dev/bnest";
+    `import { BnestFactory } from "@kaonashi-dev/bnest/core";
 import { AppModule } from "./app.module";
 
 const app = await BnestFactory.create(AppModule);

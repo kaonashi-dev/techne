@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { Injectable, Module, BnestFactory } from "../src";
+import { Injectable, Module } from "../src/common";
+import { BnestFactory } from "../src/core";
 import { EventPattern, LocalClient, LocalServer, MessagePattern } from "../src/microservices";
 
 @Injectable()

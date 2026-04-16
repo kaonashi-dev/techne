@@ -1,14 +1,5 @@
-import {
-  BnestFactory,
-  Module,
-  Controller,
-  Get,
-  Post,
-  Body,
-  Param,
-  Injectable,
-  Schema,
-} from "./index";
+import { Body, Controller, Get, Injectable, Module, Param, Post, Schema } from "./common";
+import { BnestFactory } from "./core";
 
 @Injectable()
 class UserService {

@@ -2,13 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { BnestFactory } from "../src/factory/bnest-factory";
 import { Module } from "../src/decorators/module.decorator";
 import { Controller } from "../src/decorators/controller.decorator";
-import { Get, Post } from "../src/decorators/routes.decorator";
-import { Body, Headers, Param, Req } from "../src/decorators/params.decorator";
+import { Get } from "../src/decorators/routes.decorator";
+import { Headers, Param, Req } from "../src/decorators/params.decorator";
 import { UseFilters } from "../src/decorators/use-filters.decorator";
 import { UseInterceptors } from "../src/decorators/use-interceptors.decorator";
 import { UsePipes } from "../src/decorators/use-pipes.decorator";
 import { Injectable } from "../src/decorators/injectable.decorator";
-import { NotFoundException } from "../src/exceptions";
 import type { ExceptionFilter } from "../src/interfaces/exception-filter.interface";
 import type { BnestInterceptor, CallHandler } from "../src/interfaces/interceptor.interface";
 import type { PipeTransform, ArgumentMetadata } from "../src/interfaces/pipe-transform.interface";
@@ -146,7 +145,7 @@ describe("@UseInterceptors() decorator", () => {
 describe("@UsePipes() decorator", () => {
   test("should transform params with pipe", async () => {
     class UpperCasePipe implements PipeTransform {
-      transform(value: any, metadata: ArgumentMetadata) {
+      transform(value: any, _metadata: ArgumentMetadata) {
         return typeof value === "string" ? value.toUpperCase() : value;
       }
     }

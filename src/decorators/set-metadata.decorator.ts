@@ -16,16 +16,16 @@ import "../reflect-setup";
  * }
  * ```
  */
-export function SetMetadata<K = string, V = any>(
+export function SetMetadata<K extends PropertyKey = string, V = any>(
   metadataKey: K,
   metadataValue: V,
 ): MethodDecorator & ClassDecorator {
   const decorator = (target: any, key?: string | symbol, descriptor?: PropertyDescriptor) => {
     if (descriptor) {
-      Reflect.defineMetadata(metadataKey, metadataValue, descriptor.value);
+      Reflect.defineMetadata(metadataKey as string, metadataValue, descriptor.value);
       return descriptor;
     }
-    Reflect.defineMetadata(metadataKey, metadataValue, target);
+    Reflect.defineMetadata(metadataKey as string, metadataValue, target);
     return target;
   };
   return decorator as MethodDecorator & ClassDecorator;

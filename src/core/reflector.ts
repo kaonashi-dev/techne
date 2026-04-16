@@ -21,19 +21,19 @@ import "../reflect-setup";
  */
 export class Reflector {
   /** Read metadata associated with `key` from `target`. */
-  public get<TResult = any, TKey extends string | symbol = string | symbol>(
+  public get<TResult = any, TKey extends PropertyKey = PropertyKey>(
     key: TKey,
     target: Function | object,
   ): TResult {
-    return Reflect.getMetadata(key, target) as TResult;
+    return Reflect.getMetadata(key as string, target) as TResult;
   }
 
   /** Read metadata from each target and return all of them as an array. */
-  public getAll<TResult extends any[] = any[], TKey extends string | symbol = string | symbol>(
+  public getAll<TResult extends any[] = any[], TKey extends PropertyKey = PropertyKey>(
     key: TKey,
     targets: (Function | object)[],
   ): TResult {
-    return (targets ?? []).map((target) => Reflect.getMetadata(key, target)) as TResult;
+    return (targets ?? []).map((target) => Reflect.getMetadata(key as string, target)) as TResult;
   }
 
   /**
@@ -44,7 +44,7 @@ export class Reflector {
    */
   public getAllAndMerge<
     TResult extends any[] | object = any[],
-    TKey extends string | symbol = string | symbol,
+    TKey extends PropertyKey = PropertyKey,
   >(key: TKey, targets: (Function | object)[]): TResult {
     const values = this.getAll(key, targets).filter((value) => value !== undefined);
     if (values.length === 0) return undefined as unknown as TResult;
@@ -71,12 +71,12 @@ export class Reflector {
    * Useful when handler-level decorators should override controller-level
    * ones (the standard NestJS override order is `[handler, class]`).
    */
-  public getAllAndOverride<TResult = any, TKey extends string | symbol = string | symbol>(
+  public getAllAndOverride<TResult = any, TKey extends PropertyKey = PropertyKey>(
     key: TKey,
     targets: (Function | object)[],
   ): TResult {
     for (const target of targets ?? []) {
-      const metadata = Reflect.getMetadata(key, target);
+      const metadata = Reflect.getMetadata(key as string, target);
       if (metadata !== undefined) return metadata as TResult;
     }
     return undefined as unknown as TResult;

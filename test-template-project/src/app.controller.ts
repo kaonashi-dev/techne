@@ -1,4 +1,4 @@
-import { Controller, Get } from "@kaonashi-dev/bnest";
+import { Controller, Get } from "@kaonashi-dev/bnest/common";
 import { AppService } from "./app.service";
 
 @Controller("/")
