@@ -3,8 +3,8 @@ import { Container, type Provider, isCustomProvider } from "../core/container";
 import { Scanner } from "../core/scanner";
 import type { ModuleMetadata } from "../decorators/module.decorator";
 import { Logger } from "../services/logger.service";
-import { QueueRegistry } from "../queue/registry";
-import { QUEUE_DRIVER } from "../queue/tokens";
+import { MqRegistry } from "../mq/registry";
+import { MQ_DRIVER } from "../mq/tokens";
 
 export interface OverrideProvider {
   useValue(value: any): TestingModuleBuilder;
@@ -114,10 +114,10 @@ export class TestingModuleBuilder {
       container.get(controller);
     }
 
-    if (container.has(QUEUE_DRIVER)) {
-      const queueRegistry = new QueueRegistry(container, container.get(QUEUE_DRIVER));
-      queueRegistry.register();
-      queueRegistry.registerFromClasses(
+    if (container.has(MQ_DRIVER)) {
+      const mqRegistry = new MqRegistry(container, container.get(MQ_DRIVER));
+      mqRegistry.register();
+      mqRegistry.registerFromClasses(
         scannedProviders.length > 0 || scannedControllers.length > 0
           ? [...scannedProviders, ...scannedControllers]
           : [...(this.metadata.providers || []), ...controllers],

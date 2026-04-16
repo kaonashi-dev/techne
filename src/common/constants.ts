@@ -25,4 +25,6 @@ export const ON_MODULE_DESTROY = "onModuleDestroy";
 export const ON_APPLICATION_BOOTSTRAP = "onApplicationBootstrap";
 export const QUEUE_PROCESSOR_METADATA = "queue_processor";
 export const QUEUE_PROCESS_METADATA = "queue_process";
+export const MQ_PROCESSOR_METADATA = "mq_processor";
+export const MQ_PROCESS_METADATA = "mq_process";
 export const CATCH_METADATA = "__catch__";

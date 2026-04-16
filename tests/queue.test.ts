@@ -1,20 +1,21 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { Injectable } from "../src/common";
 import {
-  InjectQueue,
-  Process,
-  Processor,
+  InjectMq,
+  MqModule,
+  MqProcess,
+  MqProcessor,
   Queue,
   QueueEvents,
-  QueueModule,
   Worker,
   type Job,
-} from "../src/queue";
+} from "../src/mq";
 import { Test } from "../src/testing";
+import * as LegacyQueue from "../src/queue";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-describe("Queue", () => {
+describe("mq", () => {
   const closers: Array<() => Promise<void>> = [];
 
   afterEach(async () => {
@@ -27,7 +28,7 @@ describe("Queue", () => {
 
     const job = await queue.add("send-welcome", { email: "hello@example.com" });
 
-    expect(await queue.count()).toBe(1);
+    expect(await queue.getJobCounts("waiting")).toEqual({ waiting: 1 });
     expect(job.name).toBe("send-welcome");
     expect(job.data).toEqual({ email: "hello@example.com" });
 
@@ -52,7 +53,7 @@ describe("Queue", () => {
       },
       {
         concurrency: 1,
-        drainDelay: 5,
+        blockTimeout: 10,
         lockDuration: 200,
       },
     );
@@ -69,7 +70,11 @@ describe("Queue", () => {
     expect(stored?.returnValue).toEqual({ ok: true });
     expect(stored?.progress).toBe(100);
     expect(stored?.finishedOn).toBeDefined();
-    expect(await queue.count()).toBe(0);
+    expect(await queue.getJobCounts("waiting", "delayed", "completed")).toEqual({
+      waiting: 0,
+      delayed: 0,
+      completed: 1,
+    });
   });
 
   test("emits queue events", async () => {
@@ -85,13 +90,14 @@ describe("Queue", () => {
       async () => {
         return "done";
       },
-      { drainDelay: 5, lockDuration: 200 },
+      { blockTimeout: 10, lockDuration: 200 },
     );
 
     closers.push(() => events.close());
     closers.push(() => worker.close());
     closers.push(() => queue.close());
 
+    await sleep(0);
     await queue.add("build", { id: 1 });
     await sleep(40);
 
@@ -104,7 +110,7 @@ describe("Queue", () => {
     class AuditService {
       readonly events: string[] = [];
 
-      constructor(@InjectQueue("emails") private readonly queue: Queue) {}
+      constructor(@InjectMq("emails") private readonly queue: Queue) {}
 
       async enqueue(email: string) {
         await this.queue.add("send", { email });
@@ -115,11 +121,11 @@ describe("Queue", () => {
       }
     }
 
-    @Processor("emails", { drainDelay: 5, lockDuration: 200 })
+    @MqProcessor("emails", { blockTimeout: 10, lockDuration: 200 })
     class EmailProcessor {
       constructor(private readonly audit: AuditService) {}
 
-      @Process("send")
+      @MqProcess("send")
       async handle(job: Job<{ email: string }>) {
         this.audit.markProcessed(job.data.email);
         return { delivered: true };
@@ -127,7 +133,7 @@ describe("Queue", () => {
     }
 
     const moduleRef = await Test.createTestingModule({
-      imports: [QueueModule.register(), QueueModule.registerQueue({ name: "emails" })],
+      imports: [MqModule.register(), MqModule.registerQueue({ name: "emails" })],
       providers: [AuditService, EmailProcessor],
     }).compile();
     const audit = moduleRef.get<AuditService>(AuditService);
@@ -136,5 +142,37 @@ describe("Queue", () => {
     await sleep(40);
 
     expect(audit.events).toEqual(["dev@example.com"]);
+  });
+
+  test("supports pause/resume and job counts", async () => {
+    const queue = new Queue("paused");
+    closers.push(() => queue.close());
+
+    await queue.pause();
+    await queue.add("one", { ok: 1 });
+    await queue.add("two", { ok: 2 }, { delay: 30 });
+
+    expect(await queue.getJobCounts("paused", "delayed", "waiting")).toEqual({
+      paused: 1,
+      delayed: 1,
+      waiting: 0,
+    });
+
+    await queue.resume();
+    await sleep(40);
+
+    expect(await queue.getJobCounts("waiting", "paused", "delayed")).toEqual({
+      waiting: 2,
+      paused: 0,
+      delayed: 0,
+    });
+  });
+
+  test("keeps legacy queue subpath as core-only compatibility layer", async () => {
+    expect(LegacyQueue.Queue).toBe(Queue);
+    expect(LegacyQueue.Worker).toBe(Worker);
+    expect(LegacyQueue.QueueEvents).toBe(QueueEvents);
+    expect("InjectQueue" in LegacyQueue).toBe(false);
+    expect("QueueModule" in LegacyQueue).toBe(false);
   });
 });
