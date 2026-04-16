@@ -67,7 +67,7 @@ The recommended mental model is now:
 
 - `@kaonashi-dev/bnest/common` for decorators, exceptions, pipes, DTO/schema helpers, and request lifecycle interfaces.
 - `@kaonashi-dev/bnest/core` for bootstrap and infrastructure APIs.
-- `@kaonashi-dev/bnest/testing`, `/cqrs`, `/microservices`, and `/queue` for specialized features.
+- `@kaonashi-dev/bnest/testing`, `/cqrs`, `/microservices`, and `/mq` for specialized features.
 
 ### Import Map
 
@@ -88,7 +88,7 @@ The recommended mental model is now:
 | `import { BnestFactory, Reflector } from "@kaonashi-dev/bnest";` | `import { BnestFactory, Reflector } from "@kaonashi-dev/bnest/core";` |
 | `import { Test } from "@kaonashi-dev/bnest";` | `import { Test } from "@kaonashi-dev/bnest/testing";` |
 | `import { CommandBus } from "@kaonashi-dev/bnest";` | `import { CommandBus } from "@kaonashi-dev/bnest/cqrs";` |
-| `import { MemoryQueue } from "@kaonashi-dev/bnest";` | `import { MemoryQueue } from "@kaonashi-dev/bnest/queue";` |
+| `import { Queue } from "@kaonashi-dev/bnest";` | `import { Queue } from "@kaonashi-dev/bnest/mq";` |
 
 `@kaonashi-dev/bnest` is now a minimal bootstrap entrypoint. Use it only when you explicitly want the smallest possible surface.
 
@@ -306,34 +306,46 @@ await client.send("users.count", {});
 
 Supported transports: `local`, `redis`.
 
-## Queues
+## MQ
 
-Queue utilities and queue-specific decorators live under `./queue`.
+Queue utilities now live under `./mq`. The legacy `./queue` subpath remains as a temporary
+core-only compatibility layer that reexports `Queue`, `Worker`, `Job`, and `QueueEvents`.
 
 ```ts
-import { DBQueue, InjectQueue, MemoryQueue, Process, Processor, Worker } from "@kaonashi-dev/bnest/queue";
+import {
+  InjectMq,
+  Job,
+  MqModule,
+  MqProcess,
+  MqProcessor,
+  Queue,
+  Worker,
+} from "@kaonashi-dev/bnest/mq";
 
-const queue = new MemoryQueue();
-// const queue = new DBQueue("jobs.sqlite");
+const queue = new Queue("emails");
 
-await queue.enqueue({ email: "user@example.com" });
+await queue.add("send", { email: "user@example.com" }, { attempts: 3, backoff: 1000 });
 
-@Processor("emails")
+@MqProcessor("emails")
 class EmailProcessor {
-  constructor(@InjectQueue("emails") private readonly emails: MemoryQueue) {}
+  constructor(@InjectMq("emails") private readonly emails: Queue<{ email: string }>) {}
 
-  @Process("send")
-  async send() {
-    return this.emails.size();
+  @MqProcess("send")
+  async send(job: Job<{ email: string }>) {
+    return { delivered: job.data.email };
   }
 }
 
 const worker = new Worker(queue, async (job) => {
-  console.log("Processing:", job.payload);
+  console.log("Processing:", job.name, job.data);
+  return { ok: true };
 });
 
-worker.start();
+await worker.run();
 ```
+
+Framework integration is available through `MqModule.register()` and
+`MqModule.registerQueue({ name: "emails" })`.
 
 ## CLI
 
@@ -362,7 +374,7 @@ import { Controller, Module, ValidationPipe } from "@kaonashi-dev/bnest/common";
 import { Test } from "@kaonashi-dev/bnest/testing";
 import { CommandBus } from "@kaonashi-dev/bnest/cqrs";
 import { MessagePattern } from "@kaonashi-dev/bnest/microservices";
-import { MemoryQueue } from "@kaonashi-dev/bnest/queue";
+import { Queue } from "@kaonashi-dev/bnest/mq";
 ```
 
 ## Scripts
@@ -385,9 +397,10 @@ src/
   decorators/     Routing, DI, and metadata decorators
   exceptions/     HTTP exception classes
   factory/        BnestFactory bootstrap implementation
+  mq/             BullMQ-style queue core and framework integration
   microservices/  Local and Redis transports
   platform/       Elysia adapter
-  queue/          In-memory and Redis-backed queues
+  queue/          Legacy core-only queue compatibility barrel
   schema/         TypeBox-backed schema helpers and DTO metadata
   testing/        Testing module utilities
 ```

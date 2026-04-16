@@ -26,13 +26,20 @@ describe("public API", () => {
 
   test("keeps queue decorators scoped to the queue subpath", async () => {
     const common = await import("@kaonashi-dev/bnest/common");
+    const mq = await import("@kaonashi-dev/bnest/mq");
     const queue = await import("@kaonashi-dev/bnest/queue");
 
     expect("InjectQueue" in common).toBe(false);
     expect("Processor" in common).toBe(false);
     expect("Process" in common).toBe(false);
-    expect(typeof queue.InjectQueue).toBe("function");
-    expect(typeof queue.Processor).toBe("function");
-    expect(typeof queue.Process).toBe("function");
+    expect(typeof mq.InjectMq).toBe("function");
+    expect(typeof mq.MqProcessor).toBe("function");
+    expect(typeof mq.MqProcess).toBe("function");
+    expect(typeof mq.MqModule).toBe("function");
+    expect(typeof queue.Queue).toBe("function");
+    expect(typeof queue.Worker).toBe("function");
+    expect("InjectQueue" in queue).toBe(false);
+    expect("Processor" in queue).toBe(false);
+    expect("Process" in queue).toBe(false);
   });
 });
