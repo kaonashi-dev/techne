@@ -41,6 +41,11 @@
       "bun": "./src/queue/index.ts",
       "import": "./src/queue/index.ts",
       "types": "./dist/types/queue/index.d.ts"
+    },
+    "./mq": {
+      "bun": "./src/mq/index.ts",
+      "import": "./src/mq/index.ts",
+      "types": "./dist/types/mq/index.d.ts"
     }
   },
   "bin": {

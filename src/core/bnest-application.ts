@@ -7,7 +7,7 @@ import type { ExceptionFilter } from "../interfaces/exception-filter.interface";
 import type { BnestInterceptor } from "../interfaces/interceptor.interface";
 import type { PipeTransform } from "../interfaces/pipe-transform.interface";
 import { Logger } from "../services/logger.service";
-import type { QueueRegistry } from "../queue/registry";
+import type { MqRegistry } from "../mq/registry";
 
 export class BnestApplication {
   private logger = new Logger("BnestApplication");
@@ -19,7 +19,7 @@ export class BnestApplication {
     private readonly scanner: Scanner,
     private readonly container: Container,
     private readonly executionContext?: RouterExecutionContext,
-    private readonly queueRegistry?: QueueRegistry,
+    private readonly mqRegistry?: MqRegistry,
   ) {}
 
   useGlobalFilters(...filters: ExceptionFilter[]): this {
@@ -59,7 +59,7 @@ export class BnestApplication {
     this.isShuttingDown = true;
 
     this.logger.log("Shutting down...");
-    await this.queueRegistry?.close();
+    await this.mqRegistry?.close();
     await this.scanner.callLifecycleHook("onModuleDestroy");
     try {
       this.app.stop();

@@ -1,14 +1,12 @@
-export * from "./types";
-export * from "./tokens";
-export * from "./driver";
-export * from "./queue";
-export * from "./job";
-export * from "./worker";
-export * from "./queue-events";
-export * from "./registry";
-export * from "./drivers/memory";
-export * from "./drivers/redis";
-export * from "./module/queue.module";
-export * from "./decorators/inject-queue.decorator";
-export * from "./decorators/processor.decorator";
-export * from "./decorators/process.decorator";
+export {
+  Job,
+  Queue,
+  QueueEvents,
+  Worker,
+  type BackoffOptions,
+  type JobJson,
+  type JobsOptions,
+  type JobState,
+  type QueueOptions,
+  type WorkerOptions,
+} from "../mq";
