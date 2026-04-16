@@ -12,6 +12,16 @@
       "import": "./src/index.ts",
       "types": "./dist/types/index.d.ts"
     },
+    "./common": {
+      "bun": "./src/common/index.ts",
+      "import": "./src/common/index.ts",
+      "types": "./dist/types/common/index.d.ts"
+    },
+    "./core": {
+      "bun": "./src/core/index.ts",
+      "import": "./src/core/index.ts",
+      "types": "./dist/types/core/index.d.ts"
+    },
     "./testing": {
       "bun": "./src/testing/index.ts",
       "import": "./src/testing/index.ts",

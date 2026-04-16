@@ -1,4 +1,4 @@
-import { Injectable } from "@kaonashi-dev/bnest";
+import { Injectable } from "@kaonashi-dev/bnest/common";
 
 @Injectable()
 export class AppService {

@@ -1,16 +1,16 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { Injectable } from "../src/common";
 import {
   InjectQueue,
-  Injectable,
   Process,
   Processor,
   Queue,
   QueueEvents,
   QueueModule,
-  Test,
   Worker,
   type Job,
-} from "../src/index";
+} from "../src/queue";
+import { Test } from "../src/testing";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 

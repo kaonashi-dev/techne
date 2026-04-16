@@ -48,8 +48,12 @@ describe("CLI project generator", () => {
     expect(oxfmt.ignorePatterns).toEqual(["*.md", "*.json", ".*.json"]);
     expect(appModule).toContain("AppController");
     expect(appModule).toContain("AppService");
+    expect(appModule).toContain("@kaonashi-dev/bnest/common");
     expect(appController).toContain('@Controller("/")');
+    expect(appController).toContain("@kaonashi-dev/bnest/common");
     expect(appService).toContain("Hello from Bnest!");
+    expect(appService).toContain("@kaonashi-dev/bnest/common");
+    expect(mainFile).toContain("@kaonashi-dev/bnest/core");
     expect(mainFile).toContain("const port = Number(Bun.env.PORT ?? 3000);");
     expect(gitignore).toContain("node_modules");
     expect(gitignore).toContain("dist");

@@ -1,4 +1,4 @@
-import { BnestFactory } from "@kaonashi-dev/bnest";
+import { BnestFactory } from "@kaonashi-dev/bnest/core";
 import { AppModule } from "./app.module";
 
 const app = await BnestFactory.create(AppModule);
