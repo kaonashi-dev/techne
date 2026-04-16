@@ -22,6 +22,26 @@
       "import": "./src/core/index.ts",
       "types": "./dist/types/core/index.d.ts"
     },
+    "./config": {
+      "bun": "./src/config/index.ts",
+      "import": "./src/config/index.ts",
+      "types": "./dist/types/config/index.d.ts"
+    },
+    "./jwt": {
+      "bun": "./src/jwt/index.ts",
+      "import": "./src/jwt/index.ts",
+      "types": "./dist/types/jwt/index.d.ts"
+    },
+    "./swagger": {
+      "bun": "./src/swagger/index.ts",
+      "import": "./src/swagger/index.ts",
+      "types": "./dist/types/swagger/index.d.ts"
+    },
+    "./health": {
+      "bun": "./src/health/index.ts",
+      "import": "./src/health/index.ts",
+      "types": "./dist/types/health/index.d.ts"
+    },
     "./testing": {
       "bun": "./src/testing/index.ts",
       "import": "./src/testing/index.ts",

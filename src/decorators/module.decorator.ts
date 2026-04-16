@@ -5,6 +5,7 @@ export interface ModuleMetadata {
   controllers?: any[];
   providers?: any[];
   exports?: any[];
+  global?: boolean;
 }
 
 export function Module(metadata: ModuleMetadata): ClassDecorator {

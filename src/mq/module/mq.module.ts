@@ -5,6 +5,7 @@ import { getMqToken, MQ_DRIVER, MQ_MODULE_OPTIONS } from "../tokens";
 import type { MqModuleOptions, RegisterQueueOptions } from "../types";
 
 function createDynamicModule(metadata: {
+  global?: boolean;
   imports?: any[];
   providers?: any[];
   exports?: any[];
@@ -17,6 +18,7 @@ function createDynamicModule(metadata: {
 export class MqModule {
   static register(options: MqModuleOptions = {}): any {
     return createDynamicModule({
+      global: true,
       providers: [
         { provide: MQ_MODULE_OPTIONS, useValue: options },
         {
