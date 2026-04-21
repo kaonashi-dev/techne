@@ -3,10 +3,12 @@ export const MODULE_METADATA = {
   PROVIDERS: "providers",
   CONTROLLERS: "controllers",
   EXPORTS: "exports",
+  GLOBAL: "global",
 };
 
 export const INJECTABLE_METADATA = "injectable";
 export const CONTROLLER_METADATA = "controller_prefix";
+export const SCOPE_OPTIONS_METADATA = "scope_options";
 export const ROUTES_METADATA = "routes";
 export const PARAMS_METADATA = "params";
 export const MIDDLEWARE_METADATA = "middleware";
@@ -28,3 +30,12 @@ export const QUEUE_PROCESS_METADATA = "queue_process";
 export const MQ_PROCESSOR_METADATA = "mq_processor";
 export const MQ_PROCESS_METADATA = "mq_process";
 export const CATCH_METADATA = "__catch__";
+export const VERSION_METADATA = "__version__";
+export const PUBLIC_METADATA = "__public__";
+export const ROLES_METADATA = "__roles__";
+export const APP_GUARD = Symbol("APP_GUARD");
+export const APP_PIPE = Symbol("APP_PIPE");
+export const APP_FILTER = Symbol("APP_FILTER");
+export const APP_INTERCEPTOR = Symbol("APP_INTERCEPTOR");
+export const REQUEST = Symbol("REQUEST");
+export const INQUIRER = Symbol("INQUIRER");

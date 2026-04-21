@@ -7,6 +7,7 @@ import {
   PARAMS_METADATA,
   PIPES_METADATA,
   ROUTES_METADATA,
+  VERSION_METADATA,
 } from "../../common/constants";
 import type { ParamMetadata } from "../../decorators/params.decorator";
 import type { RouteMetadata } from "../../decorators/routes.decorator";
@@ -15,14 +16,15 @@ import type { Scanner } from "../scanner";
 
 export interface DiscoveredRouteDefinition extends RouteMetadata {
   controller: any;
-  controllerInstance: any;
   fullPath: string;
+  module?: any;
   middlewares: any[];
   guards: any[];
   filters: any[];
   interceptors: any[];
   pipes: any[];
   paramsMetadata: ParamMetadata[];
+  versions: string[];
 }
 
 export class RouterExplorer {
@@ -30,11 +32,12 @@ export class RouterExplorer {
 
   public explore(): DiscoveredRouteDefinition[] {
     const routes: DiscoveredRouteDefinition[] = [];
-    const container = this.scanner.getContainer();
 
     for (const controller of this.scanner.getControllers()) {
-      const controllerInstance = container.get(controller);
+      const module = this.scanner.getControllerModule(controller);
       const prefix = (Reflect.getMetadata(CONTROLLER_METADATA, controller) as string) || "";
+      const controllerVersions =
+        (Reflect.getMetadata(VERSION_METADATA, controller) as string[]) || [];
       const routeMetadata: RouteMetadata[] = Reflect.getMetadata(ROUTES_METADATA, controller) || [];
       const controllerMiddlewares: any[] =
         Reflect.getMetadata(MIDDLEWARE_METADATA, controller) || [];
@@ -49,6 +52,9 @@ export class RouterExplorer {
 
       for (const route of routeMetadata) {
         const routeHandler = controller.prototype[route.handlerName];
+        const routeVersions =
+          (Reflect.getMetadata(VERSION_METADATA, routeHandler) as string[] | undefined) ??
+          controllerVersions;
         const paramTypes =
           (Reflect.getMetadata("design:paramtypes", controller.prototype, route.handlerName) as
             | Function[]
@@ -74,14 +80,15 @@ export class RouterExplorer {
           ...route,
           schema,
           controller,
-          controllerInstance,
           fullPath: this.normalizePath(prefix, route.path),
+          module,
           middlewares: [...controllerMiddlewares, ...routeMiddlewares],
           guards: [...controllerGuards, ...routeGuards],
           filters: [...controllerFilters, ...routeFilters],
           interceptors: [...controllerInterceptors, ...routeInterceptors],
           pipes: [...controllerPipes, ...routePipes],
           paramsMetadata,
+          versions: routeVersions,
         });
       }
     }

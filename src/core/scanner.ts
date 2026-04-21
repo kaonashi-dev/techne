@@ -1,6 +1,13 @@
 import "../reflect-setup";
 import { MODULE_METADATA } from "../common/constants";
-import { Container, globalContainer, isCustomProvider } from "./container";
+import {
+  Container,
+  getClassScope,
+  getProviderScope,
+  globalContainer,
+  isCustomProvider,
+} from "./container";
+import { Scope } from "./scope";
 import { Logger } from "../services/logger.service";
 
 export class Scanner {
@@ -8,6 +15,7 @@ export class Scanner {
   private providers = new Set<any>();
   private processedModules = new Set<any>();
   private moduleExports = new Map<any, Set<any>>();
+  private controllerModules = new Map<any, any>();
   private logger: Logger;
   private container: Container;
 
@@ -18,20 +26,27 @@ export class Scanner {
 
   public async scan(module: any): Promise<void> {
     this.scanModule(module);
+    this.container.finalizeModules(module);
 
     for (const provider of this.providers) {
       if (isCustomProvider(provider)) {
         const token = provider.provide;
+        const scope = getProviderScope(provider);
         if (this.options?.logger !== false) {
           this.logger.debug(`Initializing provider ${String(token?.name || token)}`);
         }
-        this.container.addProvider(provider);
-        this.container.get(token);
+        this.container.addProvider(provider, this.container.getModuleFor(token));
+        if (scope === Scope.DEFAULT && this.container.isStatic(token)) {
+          this.container.get(token, { module: this.container.getModuleFor(token) });
+        }
       } else {
+        const scope = getClassScope(provider);
         if (this.options?.logger !== false) {
           this.logger.debug(`Initializing provider ${provider.name || "UnknownProvider"}`);
         }
-        this.container.get(provider);
+        if (scope === Scope.DEFAULT && this.container.isStatic(provider)) {
+          this.container.get(provider, { module: this.container.getModuleFor(provider) });
+        }
       }
     }
 
@@ -54,13 +69,28 @@ export class Scanner {
     return this.moduleExports;
   }
 
+  public getControllerModule(controller: any): any {
+    return this.controllerModules.get(controller);
+  }
+
   public async callLifecycleHook(
     hook: "onModuleInit" | "onModuleDestroy" | "onApplicationBootstrap",
   ) {
     for (const provider of this.providers) {
       const token = isCustomProvider(provider) ? provider.provide : provider;
       try {
-        const instance = this.container.get(token) as any;
+        if (isCustomProvider(provider) && getProviderScope(provider) !== Scope.DEFAULT) {
+          continue;
+        }
+        if (!isCustomProvider(provider) && getClassScope(provider) !== Scope.DEFAULT) {
+          continue;
+        }
+        if (!this.container.isStatic(token)) {
+          continue;
+        }
+        const instance = this.container.get(token, {
+          module: this.container.getModuleFor(token),
+        }) as any;
         if (instance && typeof instance[hook] === "function") {
           await instance[hook]();
         }
@@ -76,7 +106,12 @@ export class Scanner {
 
     for (const controller of this.controllers) {
       try {
-        const instance = this.container.get(controller) as any;
+        if (getClassScope(controller) !== Scope.DEFAULT || !this.container.isStatic(controller)) {
+          continue;
+        }
+        const instance = this.container.get(controller, {
+          module: this.controllerModules.get(controller),
+        }) as any;
         if (instance && typeof instance[hook] === "function") {
           await instance[hook]();
         }
@@ -101,6 +136,15 @@ export class Scanner {
     const providers = (Reflect.getMetadata(MODULE_METADATA.PROVIDERS, module) as any[]) || [];
     const controllers = (Reflect.getMetadata(MODULE_METADATA.CONTROLLERS, module) as any[]) || [];
     const exports = (Reflect.getMetadata(MODULE_METADATA.EXPORTS, module) as any[]) || [];
+    const global = (Reflect.getMetadata(MODULE_METADATA.GLOBAL, module) as boolean) || false;
+
+    this.container.registerModule(module, {
+      controllers,
+      exports,
+      global,
+      imports,
+      providers,
+    });
 
     const exportedTokens = new Set<any>();
     for (const exp of exports) {
@@ -118,6 +162,8 @@ export class Scanner {
 
     for (const controller of controllers) {
       this.controllers.add(controller);
+      this.controllerModules.set(controller, module);
+      this.container.registerController(controller, module);
     }
   }
 }

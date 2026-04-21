@@ -2,7 +2,7 @@ import "../reflect-setup";
 import { PARAMS_METADATA } from "../common/constants";
 import type { ExecutionContext } from "../core/execution-context";
 
-export type ParamType = "body" | "param" | "query" | "headers" | "request" | "custom";
+export type ParamType = "body" | "param" | "query" | "headers" | "request" | "file" | "custom";
 
 /** Factory signature used by `createParamDecorator`. */
 export type CustomParamFactory<TData = any, TOutput = any> = (
@@ -93,6 +93,7 @@ export function Body(nameOrDto?: string | Function): ParameterDecorator {
 export const Param = createBuiltinParamDecorator("param");
 export const Query = createBuiltinParamDecorator("query");
 export const Headers = createBuiltinParamDecorator("headers");
+export const UploadedFile = createBuiltinParamDecorator("file");
 
 /**
  * NestJS-compatible `createParamDecorator`. Given a factory that reads from
