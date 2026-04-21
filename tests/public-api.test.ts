@@ -4,14 +4,26 @@ describe("public API", () => {
   test("exposes Nest-style common and core subpaths", async () => {
     const common = await import("@kaonashi-dev/bnest/common");
     const core = await import("@kaonashi-dev/bnest/core");
+    const config = await import("@kaonashi-dev/bnest/config");
+    const jwt = await import("@kaonashi-dev/bnest/jwt");
+    const swagger = await import("@kaonashi-dev/bnest/swagger");
 
     expect(typeof common.Controller).toBe("function");
     expect(typeof common.Module).toBe("function");
     expect(typeof common.ValidationPipe).toBe("function");
     expect(typeof common.HttpException).toBe("function");
+    expect(typeof common.Scope).toBe("object");
+    expect(typeof common.Public).toBe("function");
     expect(typeof core.BnestFactory).toBe("function");
     expect(typeof core.Reflector).toBe("function");
     expect(typeof core.Container).toBe("function");
+    expect(typeof core.ContextIdFactory).toBe("function");
+    expect(typeof core.ModuleRef).toBe("function");
+    expect(typeof config.ConfigModule).toBe("function");
+    expect(typeof config.ConfigService).toBe("function");
+    expect(typeof jwt.JwtModule).toBe("function");
+    expect(typeof jwt.JwtService).toBe("function");
+    expect(typeof swagger.SwaggerModule).toBe("function");
   });
 
   test("keeps the root export minimal", async () => {

@@ -1,6 +1,5 @@
-import type { Elysia } from "elysia";
 import type { Scanner } from "./scanner";
-import type { Container } from "./container";
+import type { Container, ResolutionContext } from "./container";
 import type { RouterExecutionContext } from "./router/router-execution-context";
 import type { CanActivate } from "../interfaces/can-activate.interface";
 import type { ExceptionFilter } from "../interfaces/exception-filter.interface";
@@ -8,16 +7,28 @@ import type { BnestInterceptor } from "../interfaces/interceptor.interface";
 import type { PipeTransform } from "../interfaces/pipe-transform.interface";
 import { Logger } from "../services/logger.service";
 import type { MqRegistry } from "../mq/registry";
+import type {
+  CorsOptions,
+  GlobalPrefixOptions,
+  RouteRegistrationOptions,
+  VersioningOptions,
+} from "./http-options";
+import type { ElysiaAdapter } from "../platform/elysia-adapter";
+import type { RoutesResolver } from "./router/routes-resolver";
+import type { CompiledRouteDefinition } from "./router/router-execution-context";
 
 export class BnestApplication {
   private logger = new Logger("BnestApplication");
   private shutdownHandlers: (() => void)[] = [];
   private isShuttingDown = false;
+  private routeOptions: RouteRegistrationOptions = {};
+  private compiledRoutes: CompiledRouteDefinition[] = [];
 
   constructor(
-    private readonly app: Elysia,
+    private readonly adapter: ElysiaAdapter,
     private readonly scanner: Scanner,
     private readonly container: Container,
+    private readonly routesResolver: RoutesResolver,
     private readonly executionContext?: RouterExecutionContext,
     private readonly mqRegistry?: MqRegistry,
   ) {}
@@ -47,9 +58,27 @@ export class BnestApplication {
     return this;
   }
 
+  setGlobalPrefix(prefix: string, options: GlobalPrefixOptions = {}): this {
+    this.routeOptions.globalPrefix = { prefix, exclude: options.exclude };
+    this.refreshRoutes();
+    return this;
+  }
+
+  enableVersioning(options: VersioningOptions): this {
+    this.routeOptions.versioning = options;
+    this.refreshRoutes();
+    return this;
+  }
+
+  enableCors(options: CorsOptions = {}): this {
+    this.adapter.enableCors(options);
+    this.refreshRoutes();
+    return this;
+  }
+
   async listen(port: number, callback?: () => void) {
     this.registerShutdownHandlers();
-    this.app.listen(port, callback);
+    this.adapter.getInstance().listen(port, callback);
     await this.scanner.callLifecycleHook("onApplicationBootstrap");
     return this;
   }
@@ -62,7 +91,9 @@ export class BnestApplication {
     await this.mqRegistry?.close();
     await this.scanner.callLifecycleHook("onModuleDestroy");
     try {
-      this.app.stop();
+      if (this.adapter.getInstance().server) {
+        this.adapter.getInstance().stop();
+      }
     } catch {
       // App may not be listening
     }
@@ -71,25 +102,49 @@ export class BnestApplication {
   }
 
   get<T>(token: any): T {
-    return this.container.get<T>(token);
+    return this.container.get<T>(token, {
+      module: this.container.getRootModule(),
+    });
+  }
+
+  resolve<T>(token: any, context?: ResolutionContext): T {
+    return this.container.resolve<T>(token, {
+      module: this.container.getRootModule(),
+      ...context,
+    });
   }
 
   getUrl(): string | undefined {
-    const server = this.app.server;
+    const server = this.adapter.getInstance().server;
     if (!server) return undefined;
     return `http://${server.hostname}:${server.port}`;
   }
 
   handle(request: Request): Promise<Response> {
-    return this.app.handle(request);
+    return this.adapter.getInstance().handle(request);
   }
 
-  getHttpAdapter(): Elysia {
-    return this.app;
+  getHttpAdapter() {
+    return this.adapter.getInstance();
   }
 
   getContainer(): Container {
     return this.container;
+  }
+
+  getRoutes(): CompiledRouteDefinition[] {
+    return [...this.compiledRoutes];
+  }
+
+  initializeRoutes(options: RouteRegistrationOptions = {}) {
+    this.routeOptions = options;
+    this.refreshRoutes();
+    return this;
+  }
+
+  private refreshRoutes() {
+    this.adapter.reset();
+    this.compiledRoutes = this.routesResolver.resolve(this.adapter, this.routeOptions);
   }
 
   private registerShutdownHandlers() {

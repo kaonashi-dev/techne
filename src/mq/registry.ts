@@ -26,10 +26,13 @@ export class MqRegistry {
         | MqProcessorMetadata
         | undefined;
       if (!processor) continue;
+      if (!this.container.isStatic(provider)) continue;
 
       const processMetadata = (Reflect.getMetadata(MQ_PROCESS_METADATA, provider) ||
         {}) as ProcessMetadata;
-      const instance = this.container.get<any>(provider);
+      const instance = this.container.get<any>(provider, {
+        module: this.container.getModuleFor(provider),
+      });
       const queue = this.container.get<Queue>(getMqToken(processor.queueName));
 
       const worker = new Worker(

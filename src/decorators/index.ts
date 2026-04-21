@@ -11,3 +11,7 @@ export * from "./use-pipes.decorator";
 export * from "./inject.decorator";
 export * from "./set-metadata.decorator";
 export * from "./catch.decorator";
+export * from "./version.decorator";
+export * from "./public.decorator";
+export * from "./roles.decorator";
+export * from "./file-interceptor.decorator";

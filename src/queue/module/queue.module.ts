@@ -5,6 +5,7 @@ import { QUEUE_DRIVER, QUEUE_MODULE_OPTIONS, getQueueToken } from "../tokens";
 import type { QueueModuleOptions, RegisterQueueOptions } from "../types";
 
 function createDynamicModule(metadata: {
+  global?: boolean;
   imports?: any[];
   providers?: any[];
   exports?: any[];
@@ -17,6 +18,7 @@ function createDynamicModule(metadata: {
 export class QueueModule {
   static register(options: QueueModuleOptions = {}): any {
     return createDynamicModule({
+      global: true,
       providers: [
         { provide: QUEUE_MODULE_OPTIONS, useValue: options },
         {

@@ -1,5 +1,5 @@
 export interface ArgumentMetadata {
-  type: "body" | "param" | "query" | "headers";
+  type: "body" | "param" | "query" | "headers" | "file";
   name?: string;
   metatype?: Function;
 }

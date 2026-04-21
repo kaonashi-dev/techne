@@ -4,6 +4,7 @@ import type { ParamMetadata } from "../../decorators/params.decorator";
 import type { ExceptionFilter } from "../../interfaces/exception-filter.interface";
 import type { BnestInterceptor, CallHandler } from "../../interfaces/interceptor.interface";
 import type { PipeTransform, ArgumentMetadata } from "../../interfaces/pipe-transform.interface";
+import { ContextIdFactory } from "../context-id-factory";
 import { ExecutionContextHost } from "../execution-context";
 import { HandlerMetadataStorage } from "./handler-metadata-storage";
 import { RouterResponseController } from "./router-response-controller";
@@ -29,12 +30,12 @@ interface CachedHandlerMetadata {
 }
 
 interface RouteRuntimeCache {
-  routeFilters: ExceptionFilter[];
-  routeInterceptors: BnestInterceptor[];
-  routePipes: PipeTransform[];
-  mergedFilters: ExceptionFilter[];
-  mergedInterceptors: BnestInterceptor[];
-  mergedPipes: PipeTransform[];
+  routeFilters: any[];
+  routeInterceptors: any[];
+  routePipes: any[];
+  mergedFilters: any[];
+  mergedInterceptors: any[];
+  mergedPipes: any[];
 }
 
 const EMPTY_ARRAY: readonly never[] = Object.freeze([]);
@@ -79,6 +80,19 @@ function createParamExtractor(param: ParamMetadata): ParamExtractor {
   switch (param.type) {
     case "body":
       return name ? (ctx) => ctx.body?.[name] : (ctx) => ctx.body;
+    case "file":
+      return (ctx) => {
+        const body = ctx.body;
+        if (name) {
+          if (body instanceof FormData) return body.get(name);
+          return body?.[name];
+        }
+        if (body instanceof FormData) {
+          const first = body.entries().next();
+          return first.done ? undefined : first.value[1];
+        }
+        return body;
+      };
     case "param":
       return name ? (ctx) => ctx.params?.[name] : (ctx) => ctx.params;
     case "query":
@@ -190,37 +204,54 @@ export class RouterExecutionContext {
     return this.globalGuards;
   }
 
-  public create(route: DiscoveredRouteDefinition, container: { get<T>(token: any): T }) {
+  public create(
+    route: DiscoveredRouteDefinition,
+    container: {
+      get<T>(token: any, context?: { module?: any }): T;
+      resolve<T>(
+        token: any,
+        context?: { request?: any; contextId?: symbol; inquirer?: any; module?: any },
+      ): T;
+      isStatic(token: any): boolean;
+      clearContext(contextId: symbol): void;
+    },
+  ) {
     this.routesRegistered = true;
     const metadata = this.getMetadata(route);
     const controllerClass = route.controller;
-    const handlerRef = route.controllerInstance[route.handlerName] as Function;
+    const handlerRef = route.controller.prototype[route.handlerName] as Function;
     const mergedGuards =
       this.globalGuards.length === 0 ? route.guards : [...this.globalGuards, ...route.guards];
-    const guardHooks = this.createGuardHooks(mergedGuards, container, controllerClass, handlerRef);
+    const guardHooks = this.createGuardHooks(
+      mergedGuards,
+      container,
+      controllerClass,
+      handlerRef,
+      route.module,
+    );
     const beforeHandle =
       guardHooks.length === 0 && route.middlewares.length === 0
         ? undefined
         : [...guardHooks, ...route.middlewares];
 
-    const routeFilters = this.resolveInstances<ExceptionFilter>(route.filters, container);
-    const routeInterceptors = this.resolveInstances<BnestInterceptor>(
-      route.interceptors,
-      container,
-    );
-    const routePipes = this.resolveInstances<PipeTransform>(route.pipes, container);
-
     const cache: RouteRuntimeCache = {
-      routeFilters,
-      routeInterceptors,
-      routePipes,
-      mergedFilters: mergeArrays(this.globalFilters, routeFilters),
-      mergedInterceptors: mergeArrays(this.globalInterceptors, routeInterceptors),
-      mergedPipes: mergeArrays(this.globalPipes, routePipes),
+      routeFilters: route.filters,
+      routeInterceptors: route.interceptors,
+      routePipes: route.pipes,
+      mergedFilters: mergeArrays(this.globalFilters, route.filters),
+      mergedInterceptors: mergeArrays(this.globalInterceptors, route.interceptors),
+      mergedPipes: mergeArrays(this.globalPipes, route.pipes),
     };
     this.routeCaches.push(cache);
 
-    const handler = this.compileHandler(route, metadata, cache, controllerClass, handlerRef);
+    const handler = this.compileHandler(
+      route,
+      metadata,
+      cache,
+      controllerClass,
+      handlerRef,
+      container,
+    );
 
     return {
       method: route.method,
@@ -237,9 +268,17 @@ export class RouterExecutionContext {
     cache: RouteRuntimeCache,
     controllerClass: any,
     handlerRef: Function,
+    container: {
+      get<T>(token: any, context?: { module?: any }): T;
+      resolve<T>(
+        token: any,
+        context?: { request?: any; contextId?: symbol; inquirer?: any; module?: any },
+      ): T;
+      isStatic(token: any): boolean;
+      clearContext(contextId: symbol): void;
+    },
   ): (context: RequestHandlerContext) => unknown {
     const responseController = this.responseController;
-    const controllerInstance = route.controllerInstance;
     const handlerName = route.handlerName;
     const paramsMetadata = route.paramsMetadata;
     const bindArgs = metadata.bindArgs;
@@ -248,9 +287,29 @@ export class RouterExecutionContext {
     const applyInterceptors = this.applyInterceptors;
 
     const slow = (context: RequestHandlerContext) => {
-      const mergedFilters = cache.mergedFilters;
-      const mergedInterceptors = cache.mergedInterceptors;
-      const mergedPipes = cache.mergedPipes;
+      const requestKey = this.getRequestContextKey(context);
+      const contextId = ContextIdFactory.getByRequest(requestKey);
+      const resolutionContext = { module: route.module, request: context, contextId };
+      const controllerInstance = this.resolveInstance<any>(
+        controllerClass,
+        container,
+        resolutionContext,
+      );
+      const mergedFilters = this.resolveInstances<ExceptionFilter>(
+        cache.mergedFilters,
+        container,
+        resolutionContext,
+      );
+      const mergedInterceptors = this.resolveInstances<BnestInterceptor>(
+        cache.mergedInterceptors,
+        container,
+        resolutionContext,
+      );
+      const mergedPipes = this.resolveInstances<PipeTransform>(
+        cache.mergedPipes,
+        container,
+        resolutionContext,
+      );
 
       // Allocate an ExecutionContextHost lazily — only if we actually have
       // an interceptor or filter that might read from it, a guard wired
@@ -296,6 +355,9 @@ export class RouterExecutionContext {
         return isPromiseLike(result) ? result.catch(handleException) : result;
       } catch (error) {
         return handleException(error);
+      } finally {
+        container.clearContext(contextId);
+        ContextIdFactory.clear(requestKey);
       }
     };
 
@@ -312,8 +374,13 @@ export class RouterExecutionContext {
       this.globalInterceptors.length === 0 &&
       this.globalFilters.length === 0
     ) {
-      const fast = compileFastHandler(controllerInstance, handlerName, paramsMetadata);
-      if (fast) {
+      const fastController = container.isStatic(controllerClass)
+        ? container.get<any>(controllerClass, { module: route.module })
+        : undefined;
+      const fast = fastController
+        ? compileFastHandler(fastController, handlerName, paramsMetadata)
+        : null;
+      if (fast && fastController) {
         return (context: RequestHandlerContext) => {
           // Re-check on every call so a global installed at runtime takes
           // effect. The check is just three length lookups.
@@ -339,17 +406,44 @@ export class RouterExecutionContext {
     return slow;
   }
 
-  private resolveInstances<T>(classes: any[], container: { get<T>(token: any): T }): T[] {
+  private resolveInstances<T>(
+    classes: any[],
+    container: {
+      get<T>(token: any, context?: { module?: any }): T;
+      resolve<T>(
+        token: any,
+        context?: { request?: any; contextId?: symbol; inquirer?: any; module?: any },
+      ): T;
+    },
+    context?: { request?: any; contextId?: symbol; inquirer?: any; module?: any },
+  ): T[] {
     return classes.map((cls) => {
       // If it's already an instance (not a class), use it directly
       if (typeof cls !== "function") return cls as T;
       try {
-        return container.get<T>(cls);
+        return context ? container.resolve<T>(cls, context) : container.get<T>(cls);
       } catch {
         // If not in container, instantiate directly
         return new cls() as T;
       }
     });
+  }
+
+  private resolveInstance<T>(
+    token: any,
+    container: {
+      get<T>(token: any, context?: { module?: any }): T;
+      resolve<T>(
+        token: any,
+        context?: { request?: any; contextId?: symbol; inquirer?: any; module?: any },
+      ): T;
+      isStatic(token: any): boolean;
+    },
+    context: { request?: any; contextId?: symbol; inquirer?: any; module?: any },
+  ): T {
+    return container.isStatic(token)
+      ? container.get<T>(token, context.module ? { module: context.module } : undefined)
+      : container.resolve<T>(token, context);
   }
 
   private applyPipes(args: any[], paramsMetadata: ParamMetadata[], pipes: PipeTransform[]): void {
@@ -441,15 +535,31 @@ export class RouterExecutionContext {
 
   private createGuardHooks(
     guards: any[],
-    container: { get<T>(token: any): T },
+    container: {
+      get<T>(token: any, context?: { module?: any }): T;
+      resolve<T>(
+        token: any,
+        context?: { request?: any; contextId?: symbol; inquirer?: any; module?: any },
+      ): T;
+      isStatic(token: any): boolean;
+      clearContext(contextId: symbol): void;
+    },
     controllerClass: any,
     handlerRef: Function,
+    module?: any,
   ) {
     return guards.map((guardClass: any) => {
-      const guardInstance =
-        typeof guardClass === "function" ? container.get<any>(guardClass) : guardClass;
-
       return (context: RequestHandlerContext) => {
+        const requestKey = this.getRequestContextKey(context);
+        const contextId = ContextIdFactory.getByRequest(requestKey);
+        const guardInstance =
+          typeof guardClass === "function"
+            ? this.resolveInstance<any>(guardClass, container, {
+                module,
+                request: context,
+                contextId,
+              })
+            : guardClass;
         const executionContext = new ExecutionContextHost(context, controllerClass, handlerRef);
         try {
           const result = guardInstance.canActivate(executionContext);
@@ -458,19 +568,33 @@ export class RouterExecutionContext {
             return result
               .then((canActivate) => {
                 if (!canActivate) {
+                  container.clearContext(contextId);
+                  ContextIdFactory.clear(requestKey);
                   return this.responseController.mapException(context, new ForbiddenException());
                 }
               })
-              .catch((error: unknown) => this.responseController.mapException(context, error));
+              .catch((error: unknown) => {
+                container.clearContext(contextId);
+                ContextIdFactory.clear(requestKey);
+                return this.responseController.mapException(context, error);
+              });
           }
 
           if (!result) {
+            container.clearContext(contextId);
+            ContextIdFactory.clear(requestKey);
             return this.responseController.mapException(context, new ForbiddenException());
           }
         } catch (error) {
+          container.clearContext(contextId);
+          ContextIdFactory.clear(requestKey);
           return this.responseController.mapException(context, error);
         }
       };
     });
+  }
+
+  private getRequestContextKey(context: RequestHandlerContext): object {
+    return (context?.request as object | undefined) ?? context;
   }
 }

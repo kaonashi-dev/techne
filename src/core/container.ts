@@ -1,10 +1,13 @@
 import "../reflect-setup";
-import { INJECT_METADATA } from "../common/constants";
+import { INJECT_METADATA, INQUIRER, REQUEST, SCOPE_OPTIONS_METADATA } from "../common/constants";
 import { Reflector } from "./reflector";
+import { ModuleRef } from "./module-ref";
+import { Scope, type ScopeOptions } from "./scope";
 
 export interface ClassProvider {
   provide: any;
   useClass: any;
+  scope?: Scope;
 }
 
 export interface ValueProvider {
@@ -16,14 +19,47 @@ export interface FactoryProvider {
   provide: any;
   useFactory: (...args: any[]) => any;
   inject?: any[];
+  scope?: Scope;
 }
 
 export interface ExistingProvider {
   provide: any;
   useExisting: any;
+  scope?: Scope;
 }
 
 export type Provider = ClassProvider | ValueProvider | FactoryProvider | ExistingProvider;
+
+export interface ResolutionContext {
+  contextId?: symbol;
+  inquirer?: any;
+  module?: any;
+  request?: any;
+}
+
+export interface ModuleRegistration {
+  controllers?: any[];
+  exports?: any[];
+  global?: boolean;
+  imports?: any[];
+  providers?: any[];
+}
+
+export function getScopeOptions(target: any): ScopeOptions {
+  if (typeof target !== "function") return {};
+  return (Reflect.getMetadata(SCOPE_OPTIONS_METADATA, target) as ScopeOptions | undefined) ?? {};
+}
+
+export function getClassScope(target: any): Scope {
+  return getScopeOptions(target).scope ?? Scope.DEFAULT;
+}
+
+export function getProviderScope(provider: Provider): Scope {
+  if ("scope" in provider && provider.scope) return provider.scope;
+  if (isClassProvider(provider)) return getClassScope(provider.useClass);
+  if (isExistingProvider(provider)) return getClassScope(provider.useExisting);
+  return Scope.DEFAULT;
+}
 
 function isClassProvider(provider: any): provider is ClassProvider {
   return provider && typeof provider === "object" && "useClass" in provider;
@@ -50,17 +86,26 @@ export function isCustomProvider(provider: any): boolean {
   );
 }
 
+const BUILT_IN_TOKENS = new Set<any>([Reflector, ModuleRef]);
 const paramTypesCache = new Map<Function, any[]>();
 const injectTokensCache = new Map<Function, Record<number, any>>();
 
 export class Container {
   private instances = new Map<any, any>();
+  private requestInstances = new Map<symbol, Map<any, any>>();
   private resolutionStack = new Set<any>();
   private providers = new Map<any, Provider>();
+  private moduleImports = new Map<any, any[]>();
+  private moduleOwnTokens = new Map<any, Set<any>>();
+  private moduleRawExports = new Map<any, any[]>();
+  private moduleVisibleTokens = new Map<any, Set<any>>();
+  private moduleOwners = new Map<any, any>();
+  private globalModules = new Set<any>();
+  private rootModule?: any;
 
   constructor() {
-    // Register built-in providers that are always available for injection.
     this.instances.set(Reflector, new Reflector());
+    this.instances.set(ModuleRef, new ModuleRef(this));
   }
 
   public set<T>(token: any, value: T): void {
@@ -71,102 +116,444 @@ export class Container {
     return this.instances.has(token) || this.providers.has(token);
   }
 
-  public addProvider(provider: Provider): void {
-    this.providers.set(provider.provide, provider);
+  public getProviderDefinition(token: any): Provider | undefined {
+    return this.providers.get(token);
   }
 
-  public get<T>(target: any): T {
-    // If it's already instantiated, return the singleton
-    if (this.instances.has(target)) {
-      return this.instances.get(target);
+  public addProvider(provider: Provider, module?: any): void {
+    this.providers.set(provider.provide, provider);
+    if (module) {
+      this.addOwnedToken(module, provider.provide);
+      this.moduleOwners.set(provider.provide, module);
+    }
+  }
+
+  public registerController(controller: any, module: any): void {
+    this.addOwnedToken(module, controller);
+    this.moduleOwners.set(controller, module);
+  }
+
+  public registerModule(module: any, metadata: ModuleRegistration): void {
+    this.moduleImports.set(module, metadata.imports ?? []);
+    this.moduleRawExports.set(module, metadata.exports ?? []);
+    this.moduleOwnTokens.set(module, this.moduleOwnTokens.get(module) ?? new Set());
+
+    for (const provider of metadata.providers ?? []) {
+      const token = isCustomProvider(provider) ? provider.provide : provider;
+      this.addOwnedToken(module, token);
+      this.moduleOwners.set(token, module);
     }
 
-    // Check if there's a custom provider registered for this token
+    for (const controller of metadata.controllers ?? []) {
+      this.addOwnedToken(module, controller);
+      this.moduleOwners.set(controller, module);
+    }
+
+    if (metadata.global) {
+      this.globalModules.add(module);
+    }
+  }
+
+  public finalizeModules(rootModule: any): void {
+    this.rootModule = rootModule;
+    this.moduleVisibleTokens.clear();
+
+    for (const module of this.moduleImports.keys()) {
+      this.computeVisibleTokens(module, new Set());
+    }
+  }
+
+  public getRootModule(): any {
+    return this.rootModule;
+  }
+
+  public getModuleFor(token: any): any {
+    return this.moduleOwners.get(token);
+  }
+
+  public get<T>(target: any, context?: ResolutionContext): T {
+    return this.resolve<T>(target, context);
+  }
+
+  public createContextId(): symbol {
+    return Symbol("bnest:context");
+  }
+
+  public clearContext(contextId: symbol): void {
+    this.requestInstances.delete(contextId);
+  }
+
+  public isStatic(token: any): boolean {
+    if (this.providers.has(token)) {
+      const provider = this.providers.get(token)!;
+      return (
+        getProviderScope(provider) === Scope.DEFAULT && !this.providerHasContextualDeps(provider)
+      );
+    }
+    return getClassScope(token) === Scope.DEFAULT && !this.classHasContextualDeps(token);
+  }
+
+  public resolve<T>(target: any, context: ResolutionContext = {}): T {
+    const moduleContext = this.resolveModuleContext(target, context);
+    if (moduleContext !== undefined) {
+      context.module = moduleContext;
+    }
+
+    if (target === REQUEST) {
+      return context.request as T;
+    }
+
+    if (target === INQUIRER) {
+      return context.inquirer as T;
+    }
+
+    if (target === ModuleRef) {
+      return new ModuleRef(this, context.module) as T;
+    }
+
     if (this.providers.has(target)) {
-      return this.resolveProvider<T>(target);
+      this.assertAccessible(target, context.module);
+      return this.resolveProvider<T>(target, context);
     }
 
-    // For class-based resolution, validate it's a constructable function
     if (typeof target !== "function") {
       throw new Error(
         `Cannot resolve token: ${String(target)}. No provider registered and it's not a class.`,
       );
     }
 
-    // Check for circular dependencies
+    this.assertAccessible(target, context.module);
+
+    if (this.instances.has(target)) {
+      return this.instances.get(target);
+    }
+
+    const scope = getClassScope(target);
+    if (scope === Scope.REQUEST) {
+      const contextId = context.contextId ?? (context.request ? this.createContextId() : undefined);
+      if (!contextId) {
+        throw new Error(
+          `Cannot resolve request-scoped provider ${target?.name || target} without a request context.`,
+        );
+      }
+      context.contextId = contextId;
+      const scopedInstances = this.getRequestInstances(contextId);
+      if (scopedInstances.has(target)) {
+        return scopedInstances.get(target);
+      }
+      const instance = this.instantiateClass<T>(target, context);
+      scopedInstances.set(target, instance);
+      return instance;
+    }
+
+    if (scope === Scope.TRANSIENT) {
+      return this.instantiateClass<T>(target, context);
+    }
+
+    if (!this.isStatic(target)) {
+      const contextId = context.contextId ?? (context.request ? this.createContextId() : undefined);
+      if (!contextId) {
+        throw new Error(
+          `Cannot resolve contextual provider ${target?.name || target} without a request context.`,
+        );
+      }
+      context.contextId = contextId;
+      const scopedInstances = this.getRequestInstances(contextId);
+      if (scopedInstances.has(target)) {
+        return scopedInstances.get(target);
+      }
+      const instance = this.instantiateClass<T>(target, context);
+      scopedInstances.set(target, instance);
+      return instance;
+    }
+
     if (this.resolutionStack.has(target)) {
       throw new Error(`Circular dependency detected: ${target?.name || target}`);
     }
 
-    this.resolutionStack.add(target);
+    const instance = this.instantiateClass<T>(target, context);
+    this.instances.set(target, instance);
+    return instance;
+  }
 
+  private instantiateClass<T>(target: any, context: ResolutionContext): T {
+    this.resolutionStack.add(target);
     try {
-      // Get the dependencies from the constructor (cached to avoid repeated reflection)
       let tokens = paramTypesCache.get(target);
       if (!tokens) {
         tokens = Reflect.getMetadata("design:paramtypes", target) ?? [];
         paramTypesCache.set(target, tokens!);
       }
 
-      // Resolve injected tokens from @Inject decorator (cached)
       let injectTokens = injectTokensCache.get(target);
       if (!injectTokens) {
         injectTokens = Reflect.getMetadata(INJECT_METADATA, target) ?? {};
         injectTokensCache.set(target, injectTokens!);
       }
 
-      // Resolve all dependencies recursively
+      const resolvedModule = context.module ?? this.moduleOwners.get(target) ?? this.rootModule;
       const injections = tokens!.map((token: any, index: number) => {
-        // If @Inject was used at this index, use that token instead
         const resolvedToken = injectTokens![index] !== undefined ? injectTokens![index] : token;
-        return this.get(resolvedToken);
+        return this.resolve(resolvedToken, {
+          ...context,
+          inquirer: target,
+          module: resolvedModule,
+        });
       });
 
-      // Instantiate and store
-      const instance = new target(...injections);
-      this.instances.set(target, instance);
-
-      return instance;
+      return new target(...injections);
     } finally {
       this.resolutionStack.delete(target);
     }
   }
 
-  private resolveProvider<T>(token: any): T {
+  private resolveProvider<T>(token: any, context: ResolutionContext): T {
     const provider = this.providers.get(token)!;
+    const scope = getProviderScope(provider);
 
+    if (scope === Scope.REQUEST) {
+      const contextId = context.contextId ?? (context.request ? this.createContextId() : undefined);
+      if (!contextId) {
+        throw new Error(
+          `Cannot resolve request-scoped provider ${String(token)} without a request context.`,
+        );
+      }
+      context.contextId = contextId;
+      const scopedInstances = this.getRequestInstances(contextId);
+      if (scopedInstances.has(token)) {
+        return scopedInstances.get(token);
+      }
+      const instance = this.createProviderInstance<T>(provider, context);
+      scopedInstances.set(token, instance);
+      return instance;
+    }
+
+    if (scope === Scope.TRANSIENT) {
+      return this.createProviderInstance<T>(provider, context);
+    }
+
+    if (!this.isStatic(token)) {
+      const contextId = context.contextId ?? (context.request ? this.createContextId() : undefined);
+      if (!contextId) {
+        throw new Error(
+          `Cannot resolve contextual provider ${String(token)} without a request context.`,
+        );
+      }
+      context.contextId = contextId;
+      const scopedInstances = this.getRequestInstances(contextId);
+      if (scopedInstances.has(token)) {
+        return scopedInstances.get(token);
+      }
+      const instance = this.createProviderInstance<T>(provider, context);
+      scopedInstances.set(token, instance);
+      return instance;
+    }
+
+    if (this.instances.has(token)) {
+      return this.instances.get(token);
+    }
+
+    const instance = this.createProviderInstance<T>(provider, context);
+    this.instances.set(token, instance);
+    return instance;
+  }
+
+  private createProviderInstance<T>(provider: Provider, context: ResolutionContext): T {
     if (isValueProvider(provider)) {
-      this.instances.set(token, provider.useValue);
       return provider.useValue;
     }
 
     if (isClassProvider(provider)) {
-      const instance = this.get(provider.useClass);
-      this.instances.set(token, instance);
-      return instance as T;
+      return this.resolve(provider.useClass, context) as T;
     }
 
     if (isFactoryProvider(provider)) {
-      const deps = (provider.inject || []).map((dep: any) => this.get(dep));
-      const instance = provider.useFactory(...deps);
-      this.instances.set(token, instance);
-      return instance as T;
+      const deps = (provider.inject || []).map((dep: any) =>
+        this.resolve(dep, {
+          ...context,
+          inquirer: provider.provide,
+        }),
+      );
+      return provider.useFactory(...deps) as T;
     }
 
     if (isExistingProvider(provider)) {
-      const instance = this.get(provider.useExisting);
-      this.instances.set(token, instance);
-      return instance as T;
+      return this.resolve(provider.useExisting, context) as T;
     }
 
-    throw new Error(`Invalid provider configuration for token: ${String(token)}`);
+    throw new Error("Invalid provider configuration");
+  }
+
+  private getRequestInstances(contextId: symbol): Map<any, any> {
+    let scopedInstances = this.requestInstances.get(contextId);
+    if (!scopedInstances) {
+      scopedInstances = new Map<any, any>();
+      this.requestInstances.set(contextId, scopedInstances);
+    }
+    return scopedInstances;
+  }
+
+  private resolveModuleContext(target: any, context: ResolutionContext): any {
+    if (context.module !== undefined) {
+      return context.module;
+    }
+
+    if (context.inquirer && this.moduleOwners.has(context.inquirer)) {
+      return this.moduleOwners.get(context.inquirer);
+    }
+
+    if (this.moduleOwners.has(target)) {
+      return this.moduleOwners.get(target);
+    }
+
+    return this.rootModule;
+  }
+
+  private assertAccessible(token: any, module?: any): void {
+    if (module === undefined || BUILT_IN_TOKENS.has(token)) {
+      return;
+    }
+
+    const owner = this.moduleOwners.get(token);
+    if (owner === undefined || owner === module) {
+      return;
+    }
+
+    const visibleTokens = this.moduleVisibleTokens.get(module);
+    if (visibleTokens?.has(token)) {
+      return;
+    }
+
+    throw new Error(
+      `Provider ${this.describeToken(token)} is not visible inside module ${this.describeToken(module)}.`,
+    );
+  }
+
+  private computeVisibleTokens(module: any, seen: Set<any>): Set<any> {
+    const cached = this.moduleVisibleTokens.get(module);
+    if (cached) {
+      return cached;
+    }
+
+    if (seen.has(module)) {
+      return new Set();
+    }
+    seen.add(module);
+
+    const visible = new Set<any>(this.moduleOwnTokens.get(module) ?? []);
+    for (const importedModule of this.moduleImports.get(module) ?? []) {
+      for (const token of this.getExportedTokens(importedModule, seen)) {
+        visible.add(token);
+      }
+    }
+
+    for (const globalModule of this.globalModules) {
+      if (globalModule === module) continue;
+      for (const token of this.getExportedTokens(globalModule, seen)) {
+        visible.add(token);
+      }
+    }
+
+    this.moduleVisibleTokens.set(module, visible);
+    seen.delete(module);
+    return visible;
+  }
+
+  private getExportedTokens(module: any, seen: Set<any>): Set<any> {
+    const exported = new Set<any>();
+    for (const item of this.moduleRawExports.get(module) ?? []) {
+      if (this.moduleImports.has(item)) {
+        for (const token of this.getExportedTokens(item, seen)) {
+          exported.add(token);
+        }
+        continue;
+      }
+
+      exported.add(isCustomProvider(item) ? item.provide : item);
+    }
+    return exported;
+  }
+
+  private addOwnedToken(module: any, token: any): void {
+    const tokens = this.moduleOwnTokens.get(module) ?? new Set<any>();
+    tokens.add(token);
+    this.moduleOwnTokens.set(module, tokens);
+  }
+
+  private describeToken(token: any): string {
+    return String(token?.name || token);
+  }
+
+  private classHasContextualDeps(target: any, seen = new Set<any>()): boolean {
+    if (typeof target !== "function" || seen.has(target)) return false;
+    seen.add(target);
+
+    let tokens = paramTypesCache.get(target);
+    if (!tokens) {
+      tokens = Reflect.getMetadata("design:paramtypes", target) ?? [];
+      paramTypesCache.set(target, tokens!);
+    }
+
+    let injectTokens = injectTokensCache.get(target);
+    if (!injectTokens) {
+      injectTokens = Reflect.getMetadata(INJECT_METADATA, target) ?? {};
+      injectTokensCache.set(target, injectTokens!);
+    }
+
+    return tokens!.some((token: any, index: number) => {
+      const resolvedToken = injectTokens![index] !== undefined ? injectTokens![index] : token;
+      if (resolvedToken === REQUEST || resolvedToken === INQUIRER) return true;
+      if (this.providers.has(resolvedToken)) {
+        const provider = this.providers.get(resolvedToken)!;
+        return (
+          getProviderScope(provider) === Scope.REQUEST ||
+          this.providerHasContextualDeps(provider, seen)
+        );
+      }
+      return (
+        getClassScope(resolvedToken) === Scope.REQUEST ||
+        this.classHasContextualDeps(resolvedToken, seen)
+      );
+    });
+  }
+
+  private providerHasContextualDeps(provider: Provider, seen = new Set<any>()): boolean {
+    if (isClassProvider(provider)) {
+      return this.classHasContextualDeps(provider.useClass, seen);
+    }
+    if (isExistingProvider(provider)) {
+      return this.classHasContextualDeps(provider.useExisting, seen);
+    }
+    if (isFactoryProvider(provider)) {
+      return (provider.inject || []).some((dep) => {
+        if (dep === REQUEST || dep === INQUIRER) return true;
+        if (this.providers.has(dep)) {
+          const dependencyProvider = this.providers.get(dep)!;
+          return (
+            getProviderScope(dependencyProvider) === Scope.REQUEST ||
+            this.providerHasContextualDeps(dependencyProvider, seen)
+          );
+        }
+        return getClassScope(dep) === Scope.REQUEST || this.classHasContextualDeps(dep, seen);
+      });
+    }
+    return false;
   }
 
   public reset(): void {
     this.instances.clear();
+    this.requestInstances.clear();
     this.resolutionStack.clear();
     this.providers.clear();
+    this.moduleImports.clear();
+    this.moduleOwnTokens.clear();
+    this.moduleRawExports.clear();
+    this.moduleVisibleTokens.clear();
+    this.moduleOwners.clear();
+    this.globalModules.clear();
+    this.rootModule = undefined;
     this.instances.set(Reflector, new Reflector());
+    this.instances.set(ModuleRef, new ModuleRef(this));
   }
 }
 

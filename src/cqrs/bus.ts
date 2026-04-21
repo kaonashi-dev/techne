@@ -34,8 +34,11 @@ export class BusRegistry {
     for (const provider of classes) {
       // Skip custom providers (objects like {provide, useClass}) — they don't have handler metadata
       if (isCustomProvider(provider)) continue;
+      if (!this.container.isStatic(provider)) continue;
 
-      const instance = this.container.get<any>(provider);
+      const instance = this.container.get<any>(provider, {
+        module: this.container.getModuleFor(provider),
+      });
 
       const command = Reflect.getMetadata(COMMAND_HANDLER_METADATA, provider) as
         | Function

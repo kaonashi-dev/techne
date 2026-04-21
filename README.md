@@ -67,7 +67,7 @@ The recommended mental model is now:
 
 - `@kaonashi-dev/bnest/common` for decorators, exceptions, pipes, DTO/schema helpers, and request lifecycle interfaces.
 - `@kaonashi-dev/bnest/core` for bootstrap and infrastructure APIs.
-- `@kaonashi-dev/bnest/testing`, `/cqrs`, `/microservices`, and `/mq` for specialized features.
+- `@kaonashi-dev/bnest/config`, `/jwt`, `/swagger`, `/health`, `/testing`, `/cqrs`, `/microservices`, and `/mq` for specialized features.
 
 ### Import Map
 
@@ -207,6 +207,103 @@ class UsersController {
 ```
 
 Decorator-style DTO metadata is also available through exports such as `Dto`, `IsString`, `IsNumber`, `IsInteger`, `IsBoolean`, `IsEnum`, and `ValidationPipe`.
+
+## Configuration
+
+```ts
+import { ConfigModule, ConfigService, registerAs } from "@kaonashi-dev/bnest/config";
+
+const databaseConfig = registerAs("database", () => ({
+  url: process.env.DATABASE_URL ?? "memory://local",
+}));
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      expandVariables: true,
+    }),
+    ConfigModule.forFeature(databaseConfig),
+  ],
+})
+class AppModule {}
+
+// later
+const config = app.get<ConfigService>(ConfigService);
+config.getOrThrow("DATABASE_URL");
+```
+
+`ConfigModule.forRoot()`, `forRootAsync()`, `forFeature()`, `ConfigService`, and `registerAs()` are available from `@kaonashi-dev/bnest/config`.
+
+## Runtime Features
+
+```ts
+const app = await BnestFactory.create(AppModule);
+
+app.setGlobalPrefix("api");
+app.enableVersioning({ type: "uri" });
+app.enableCors({ origin: true, credentials: true });
+```
+
+`BnestFactory.createApplicationContext()` is also available for standalone module graphs without HTTP.
+
+Modules now respect `imports`/`exports` boundaries during resolution. Private
+providers stay private, `global: true` modules expose only their exported
+tokens, and request-scoped providers share a stable context across guards,
+interceptors, and handlers within the same request through `ContextIdFactory`
+from `@kaonashi-dev/bnest/core`.
+
+## Auth and JWT
+
+```ts
+import { APP_GUARD, Public, Roles, RolesGuard } from "@kaonashi-dev/bnest/common";
+import { JwtAuthGuard, JwtModule, JwtService } from "@kaonashi-dev/bnest/jwt";
+
+@Module({
+  imports: [JwtModule.register({ secret: "top-secret" })],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useFactory: (jwt: JwtService, reflector: Reflector) => [
+        new JwtAuthGuard(reflector, jwt),
+        new RolesGuard(reflector),
+      ],
+      inject: [JwtService, Reflector],
+    },
+  ],
+})
+class AuthModule {}
+```
+
+Use `@Public()` to skip auth and `@Roles(...)` for role metadata consumed by `RolesGuard`.
+
+## Swagger and Health
+
+```ts
+import { SwaggerModule, DocumentBuilder } from "@kaonashi-dev/bnest/swagger";
+import { HealthCheck, HealthCheckService } from "@kaonashi-dev/bnest/health";
+
+const document = SwaggerModule.createDocument(
+  app,
+  new DocumentBuilder().setTitle("My API").setVersion("1.0.0").build(),
+);
+
+SwaggerModule.setup("/api-docs", app, document);
+```
+
+`HealthCheckService` provides basic `pingCheck()` and `memoryCheck()` helpers.
+
+## File Uploads
+
+```ts
+import { FileInterceptor, UploadedFile, UseInterceptors } from "@kaonashi-dev/bnest/common";
+
+@Post("/upload")
+@UseInterceptors(FileInterceptor("file"))
+upload(@UploadedFile("file") file: any) {
+  return { name: file?.name };
+}
+```
 
 ## Exceptions
 
@@ -371,6 +468,10 @@ Generated starters now use `@kaonashi-dev/bnest/common` and `@kaonashi-dev/bnest
 ```ts
 import { BnestFactory } from "@kaonashi-dev/bnest/core";
 import { Controller, Module, ValidationPipe } from "@kaonashi-dev/bnest/common";
+import { ConfigModule } from "@kaonashi-dev/bnest/config";
+import { JwtModule } from "@kaonashi-dev/bnest/jwt";
+import { SwaggerModule } from "@kaonashi-dev/bnest/swagger";
+import { HealthCheckService } from "@kaonashi-dev/bnest/health";
 import { Test } from "@kaonashi-dev/bnest/testing";
 import { CommandBus } from "@kaonashi-dev/bnest/cqrs";
 import { MessagePattern } from "@kaonashi-dev/bnest/microservices";
@@ -392,16 +493,20 @@ bun run bench
 src/
   cli/            CLI scaffolding and generators
   common/         Nest-style public common API barrel
+  config/         ConfigModule, ConfigService, and registerAs helpers
   core/           Application core, DI container, and bootstrap APIs
   cqrs/           Command, query, event buses and event store
   decorators/     Routing, DI, and metadata decorators
   exceptions/     HTTP exception classes
   factory/        BnestFactory bootstrap implementation
+  health/         Basic health check service and decorator
+  jwt/            JWT module, service, and auth guard
   mq/             BullMQ-style queue core and framework integration
   microservices/  Local and Redis transports
   platform/       Elysia adapter
   queue/          Legacy core-only queue compatibility barrel
   schema/         TypeBox-backed schema helpers and DTO metadata
+  swagger/        Lightweight OpenAPI document generation and setup
   testing/        Testing module utilities
 ```
 
