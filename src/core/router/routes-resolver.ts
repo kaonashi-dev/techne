@@ -16,10 +16,14 @@ export class RoutesResolver {
 
   public resolve(adapter: ElysiaAdapter, options: RouteRegistrationOptions = {}) {
     const container = this.scanner.getContainer();
-    const routes = this.explorer
-      .explore()
-      .flatMap((route) => this.expandRoute(route, options))
-      .map((route) => this.executionContext.create(route, container));
+    const routes = [];
+    this.executionContext.resetRoutes();
+
+    for (const route of this.explorer.explore()) {
+      for (const expandedRoute of this.expandRoute(route, options)) {
+        routes.push(this.executionContext.create(expandedRoute, container));
+      }
+    }
 
     adapter.registerRoutes(routes);
     return routes;

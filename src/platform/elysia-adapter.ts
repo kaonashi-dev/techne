@@ -28,7 +28,6 @@ export class ElysiaAdapter {
 
   public enableCors(options: CorsOptions = {}) {
     this.corsOptions = options;
-    this.reset();
   }
 
   private createApp() {
