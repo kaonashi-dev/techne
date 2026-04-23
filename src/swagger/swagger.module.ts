@@ -71,7 +71,14 @@ export class SwaggerModule {
     document: Record<string, any> | (() => Record<string, any>),
   ) {
     const adapter = app.getHttpAdapter() as any;
-    const documentFactory = typeof document === "function" ? document : () => document;
-    adapter.get(path, () => documentFactory());
+    const documentFactory = typeof document === "function" ? document : undefined;
+    let cachedDocument = typeof document === "function" ? undefined : document;
+    adapter.get(path, () => {
+      if (cachedDocument) {
+        return cachedDocument;
+      }
+      cachedDocument = documentFactory!();
+      return cachedDocument;
+    });
   }
 }

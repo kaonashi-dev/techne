@@ -23,6 +23,7 @@ export class BnestApplication {
   private isShuttingDown = false;
   private routeOptions: RouteRegistrationOptions = {};
   private compiledRoutes: CompiledRouteDefinition[] = [];
+  private routesInitialized = false;
 
   constructor(
     private readonly adapter: ElysiaAdapter,
@@ -60,19 +61,19 @@ export class BnestApplication {
 
   setGlobalPrefix(prefix: string, options: GlobalPrefixOptions = {}): this {
     this.routeOptions.globalPrefix = { prefix, exclude: options.exclude };
-    this.refreshRoutes();
+    this.refreshRoutesIfInitialized();
     return this;
   }
 
   enableVersioning(options: VersioningOptions): this {
     this.routeOptions.versioning = options;
-    this.refreshRoutes();
+    this.refreshRoutesIfInitialized();
     return this;
   }
 
   enableCors(options: CorsOptions = {}): this {
     this.adapter.enableCors(options);
-    this.refreshRoutes();
+    this.refreshRoutesIfInitialized();
     return this;
   }
 
@@ -138,8 +139,15 @@ export class BnestApplication {
 
   initializeRoutes(options: RouteRegistrationOptions = {}) {
     this.routeOptions = options;
+    this.routesInitialized = true;
     this.refreshRoutes();
     return this;
+  }
+
+  private refreshRoutesIfInitialized() {
+    if (this.routesInitialized) {
+      this.refreshRoutes();
+    }
   }
 
   private refreshRoutes() {

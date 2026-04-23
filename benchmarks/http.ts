@@ -6,7 +6,8 @@
  */
 
 import { Elysia } from "elysia";
-import { BnestFactory, Module, Controller, Get, Injectable, Param } from "../src";
+import { Controller, Get, Injectable, Module, Param } from "../src/common";
+import { BnestFactory } from "../src/core";
 
 // --- Raw Elysia ---
 const elysiaApp = new Elysia()

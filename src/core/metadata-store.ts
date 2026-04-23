@@ -53,7 +53,7 @@ export function getMetadata<T = any>(
   target: object,
   propertyKey?: MetadataKey,
 ): T | undefined {
-  return _getMap(target).get(key)?.get(propertyKey) as T | undefined;
+  return _store.get(target)?.get(key)?.get(propertyKey) as T | undefined;
 }
 
 /**

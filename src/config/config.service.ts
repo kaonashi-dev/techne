@@ -2,8 +2,21 @@ import { Inject } from "../decorators/inject.decorator";
 import { Injectable } from "../decorators/injectable.decorator";
 import { CONFIG_STORE } from "./tokens";
 
+const pathSegmentsCache = new Map<string, string[]>();
+
+function getPathSegments(path: string): string[] {
+  const cached = pathSegmentsCache.get(path);
+  if (cached) {
+    return cached;
+  }
+
+  const segments = path.split(".");
+  pathSegmentsCache.set(path, segments);
+  return segments;
+}
+
 function getValue(obj: Record<string, any>, path: string): unknown {
-  return path.split(".").reduce<unknown>((value, key) => {
+  return getPathSegments(path).reduce<unknown>((value, key) => {
     if (value && typeof value === "object" && key in (value as Record<string, unknown>)) {
       return (value as Record<string, unknown>)[key];
     }

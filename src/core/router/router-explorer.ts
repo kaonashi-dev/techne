@@ -28,12 +28,20 @@ export interface DiscoveredRouteDefinition extends RouteMetadata {
 }
 
 export class RouterExplorer {
+  private readonly discoveredRoutesCache = new WeakMap<any, DiscoveredRouteDefinition[]>();
+
   constructor(private readonly scanner: Scanner) {}
 
   public explore(): DiscoveredRouteDefinition[] {
     const routes: DiscoveredRouteDefinition[] = [];
 
     for (const controller of this.scanner.getControllers()) {
+      const cachedRoutes = this.discoveredRoutesCache.get(controller);
+      if (cachedRoutes) {
+        routes.push(...cachedRoutes);
+        continue;
+      }
+
       const module = this.scanner.getControllerModule(controller);
       const prefix = (Reflect.getMetadata(CONTROLLER_METADATA, controller) as string) || "";
       const controllerVersions =
@@ -49,6 +57,7 @@ export class RouterExplorer {
       const controllerPipes: any[] = Reflect.getMetadata(PIPES_METADATA, controller) || [];
       const paramsByHandler: Record<string, ParamMetadata[]> =
         Reflect.getMetadata(PARAMS_METADATA, controller) || {};
+      const controllerRoutes: DiscoveredRouteDefinition[] = [];
 
       for (const route of routeMetadata) {
         const routeHandler = controller.prototype[route.handlerName];
@@ -67,16 +76,20 @@ export class RouterExplorer {
         const routeInterceptors: any[] =
           Reflect.getMetadata(INTERCEPTORS_METADATA, routeHandler) || [];
         const routePipes: any[] = Reflect.getMetadata(PIPES_METADATA, routeHandler) || [];
-        const paramsMetadata = (paramsByHandler[route.handlerName] || []).map((param) => ({
-          ...param,
-          metatype: param.dtoClass ?? param.metatype ?? paramTypes[param.index],
-        }));
+        const methodParams = paramsByHandler[route.handlerName] || [];
+        const paramsMetadata =
+          methodParams.length === 0
+            ? []
+            : methodParams.map((param) => ({
+                ...param,
+                metatype: param.dtoClass ?? param.metatype ?? paramTypes[param.index],
+              }));
 
         // Auto-inject DTO schema when @Body(MyDto) is used and no explicit
         // body schema was provided on the route decorator.
         const schema = this.resolveSchema(route, paramsMetadata);
 
-        routes.push({
+        controllerRoutes.push({
           ...route,
           schema,
           controller,
@@ -91,6 +104,9 @@ export class RouterExplorer {
           versions: routeVersions,
         });
       }
+
+      this.discoveredRoutesCache.set(controller, controllerRoutes);
+      routes.push(...controllerRoutes);
     }
 
     return routes;
