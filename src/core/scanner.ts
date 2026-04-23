@@ -30,12 +30,17 @@ export class Scanner {
 
     for (const provider of this.providers) {
       if (isCustomProvider(provider)) {
+        this.container.addProvider(provider, this.container.getModuleFor(provider.provide));
+      }
+    }
+
+    for (const provider of this.providers) {
+      if (isCustomProvider(provider)) {
         const token = provider.provide;
         const scope = getProviderScope(provider);
         if (this.options?.logger !== false) {
           this.logger.debug(`Initializing provider ${String(token?.name || token)}`);
         }
-        this.container.addProvider(provider, this.container.getModuleFor(token));
         if (scope === Scope.DEFAULT && this.container.isStatic(token)) {
           this.container.get(token, { module: this.container.getModuleFor(token) });
         }

@@ -50,20 +50,33 @@ function parseExpiresIn(value: number | string | undefined): number | undefined 
 
 @Injectable()
 export class JwtService {
-  constructor(@Inject(JWT_MODULE_OPTIONS) private readonly options: JwtModuleOptions) {}
+  private readonly signDefaults: JwtSignOptions;
+  private readonly verifyDefaults: JwtVerifyOptions;
+  private readonly defaultExpiresIn?: number;
+  private readonly secret: Buffer;
+
+  constructor(@Inject(JWT_MODULE_OPTIONS) private readonly options: JwtModuleOptions) {
+    this.signDefaults = options.signOptions ?? {};
+    this.verifyDefaults = options.verifyOptions ?? {};
+    this.defaultExpiresIn = parseExpiresIn(this.signDefaults.expiresIn);
+    this.secret = Buffer.from(options.secret);
+  }
 
   async signAsync(payload: Record<string, any>, options: JwtSignOptions = {}): Promise<string> {
     const header = { alg: "HS256", typ: "JWT" };
     const now = Math.floor(Date.now() / 1000);
-    const mergedOptions = { ...this.options.signOptions, ...options };
-    const expiresIn = parseExpiresIn(mergedOptions.expiresIn);
+    const expiresIn =
+      options.expiresIn === undefined ? this.defaultExpiresIn : parseExpiresIn(options.expiresIn);
+    const issuer = options.issuer ?? this.signDefaults.issuer;
+    const audience = options.audience ?? this.signDefaults.audience;
+    const subject = options.subject ?? this.signDefaults.subject;
     const claims = {
       ...payload,
       iat: now,
       ...(expiresIn ? { exp: now + expiresIn } : {}),
-      ...(mergedOptions.issuer ? { iss: mergedOptions.issuer } : {}),
-      ...(mergedOptions.audience ? { aud: mergedOptions.audience } : {}),
-      ...(mergedOptions.subject ? { sub: mergedOptions.subject } : {}),
+      ...(issuer ? { iss: issuer } : {}),
+      ...(audience ? { aud: audience } : {}),
+      ...(subject ? { sub: subject } : {}),
     };
 
     const encodedHeader = encodeBase64Url(JSON.stringify(header));
@@ -93,15 +106,16 @@ export class JwtService {
 
     const payload = decodeBase64Url<Record<string, any>>(encodedPayload);
     const now = Math.floor(Date.now() / 1000);
-    const mergedOptions = { ...this.options.verifyOptions, ...options };
+    const issuer = options.issuer ?? this.verifyDefaults.issuer;
+    const audience = options.audience ?? this.verifyDefaults.audience;
 
     if (payload.exp && now >= payload.exp) {
       throw new Error("JWT expired");
     }
-    if (mergedOptions.issuer && payload.iss !== mergedOptions.issuer) {
+    if (issuer && payload.iss !== issuer) {
       throw new Error("JWT issuer mismatch");
     }
-    if (mergedOptions.audience && payload.aud !== mergedOptions.audience) {
+    if (audience && payload.aud !== audience) {
       throw new Error("JWT audience mismatch");
     }
 
@@ -109,6 +123,6 @@ export class JwtService {
   }
 
   private sign(value: string): string {
-    return createHmac("sha256", this.options.secret).update(value).digest("base64url");
+    return createHmac("sha256", this.secret).update(value).digest("base64url");
   }
 }

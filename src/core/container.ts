@@ -94,6 +94,7 @@ export class Container {
   private instances = new Map<any, any>();
   private requestInstances = new Map<symbol, Map<any, any>>();
   private resolutionStack = new Set<any>();
+  private staticCache = new Map<any, boolean>();
   private providers = new Map<any, Provider>();
   private moduleImports = new Map<any, any[]>();
   private moduleOwnTokens = new Map<any, Set<any>>();
@@ -122,6 +123,7 @@ export class Container {
 
   public addProvider(provider: Provider, module?: any): void {
     this.providers.set(provider.provide, provider);
+    this.staticCache.delete(provider.provide);
     if (module) {
       this.addOwnedToken(module, provider.provide);
       this.moduleOwners.set(provider.provide, module);
@@ -129,11 +131,13 @@ export class Container {
   }
 
   public registerController(controller: any, module: any): void {
+    this.staticCache.delete(controller);
     this.addOwnedToken(module, controller);
     this.moduleOwners.set(controller, module);
   }
 
   public registerModule(module: any, metadata: ModuleRegistration): void {
+    this.staticCache.clear();
     this.moduleImports.set(module, metadata.imports ?? []);
     this.moduleRawExports.set(module, metadata.exports ?? []);
     this.moduleOwnTokens.set(module, this.moduleOwnTokens.get(module) ?? new Set());
@@ -157,6 +161,7 @@ export class Container {
   public finalizeModules(rootModule: any): void {
     this.rootModule = rootModule;
     this.moduleVisibleTokens.clear();
+    this.staticCache.clear();
 
     for (const module of this.moduleImports.keys()) {
       this.computeVisibleTokens(module, new Set());
@@ -184,13 +189,23 @@ export class Container {
   }
 
   public isStatic(token: any): boolean {
+    const cached = this.staticCache.get(token);
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    let resolved: boolean;
     if (this.providers.has(token)) {
       const provider = this.providers.get(token)!;
-      return (
+      resolved =
         getProviderScope(provider) === Scope.DEFAULT && !this.providerHasContextualDeps(provider)
-      );
+      ;
+    } else {
+      resolved = getClassScope(token) === Scope.DEFAULT && !this.classHasContextualDeps(token);
     }
-    return getClassScope(token) === Scope.DEFAULT && !this.classHasContextualDeps(token);
+
+    this.staticCache.set(token, resolved);
+    return resolved;
   }
 
   public resolve<T>(target: any, context: ResolutionContext = {}): T {
@@ -544,6 +559,7 @@ export class Container {
     this.instances.clear();
     this.requestInstances.clear();
     this.resolutionStack.clear();
+    this.staticCache.clear();
     this.providers.clear();
     this.moduleImports.clear();
     this.moduleOwnTokens.clear();

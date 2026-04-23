@@ -30,12 +30,25 @@ interface CachedHandlerMetadata {
 }
 
 interface RouteRuntimeCache {
+  container: {
+    get<T>(token: any, context?: { module?: any }): T;
+    resolve<T>(
+      token: any,
+      context?: { request?: any; contextId?: symbol; inquirer?: any; module?: any },
+    ): T;
+    isStatic(token: any): boolean;
+    clearContext(contextId: symbol): void;
+  };
+  module?: any;
   routeFilters: any[];
   routeInterceptors: any[];
   routePipes: any[];
-  mergedFilters: any[];
-  mergedInterceptors: any[];
-  mergedPipes: any[];
+  staticFilters: ExceptionFilter[];
+  contextualFilters: any[];
+  staticInterceptors: BnestInterceptor[];
+  contextualInterceptors: any[];
+  staticPipes: PipeTransform[];
+  contextualPipes: any[];
 }
 
 const EMPTY_ARRAY: readonly never[] = Object.freeze([]);
@@ -158,6 +171,7 @@ function compileFastHandler(
 export class RouterExecutionContext {
   private readonly handlerMetadataStorage = new HandlerMetadataStorage<CachedHandlerMetadata>();
   private readonly routeCaches: RouteRuntimeCache[] = [];
+  private readonly executionContextHosts = new WeakMap<object, ExecutionContextHost>();
   private globalFilters: ExceptionFilter[] = [];
   private globalInterceptors: BnestInterceptor[] = [];
   private globalPipes: PipeTransform[] = [];
@@ -169,21 +183,21 @@ export class RouterExecutionContext {
   public setGlobalFilters(filters: ExceptionFilter[]) {
     this.globalFilters = filters;
     for (const cache of this.routeCaches) {
-      cache.mergedFilters = mergeArrays(filters, cache.routeFilters);
+      this.refreshRouteCache(cache);
     }
   }
 
   public setGlobalInterceptors(interceptors: BnestInterceptor[]) {
     this.globalInterceptors = interceptors;
     for (const cache of this.routeCaches) {
-      cache.mergedInterceptors = mergeArrays(interceptors, cache.routeInterceptors);
+      this.refreshRouteCache(cache);
     }
   }
 
   public setGlobalPipes(pipes: PipeTransform[]) {
     this.globalPipes = pipes;
     for (const cache of this.routeCaches) {
-      cache.mergedPipes = mergeArrays(pipes, cache.routePipes);
+      this.refreshRouteCache(cache);
     }
   }
 
@@ -202,6 +216,10 @@ export class RouterExecutionContext {
 
   public getGlobalGuards(): any[] {
     return this.globalGuards;
+  }
+
+  public resetRoutes(): void {
+    this.routeCaches.length = 0;
   }
 
   public create(
@@ -235,13 +253,19 @@ export class RouterExecutionContext {
         : [...guardHooks, ...route.middlewares];
 
     const cache: RouteRuntimeCache = {
+      container,
+      module: route.module,
       routeFilters: route.filters,
       routeInterceptors: route.interceptors,
       routePipes: route.pipes,
-      mergedFilters: mergeArrays(this.globalFilters, route.filters),
-      mergedInterceptors: mergeArrays(this.globalInterceptors, route.interceptors),
-      mergedPipes: mergeArrays(this.globalPipes, route.pipes),
+      staticFilters: [],
+      contextualFilters: [],
+      staticInterceptors: [],
+      contextualInterceptors: [],
+      staticPipes: [],
+      contextualPipes: [],
     };
+    this.refreshRouteCache(cache);
     this.routeCaches.push(cache);
 
     const handler = this.compileHandler(
@@ -295,32 +319,31 @@ export class RouterExecutionContext {
         container,
         resolutionContext,
       );
-      const mergedFilters = this.resolveInstances<ExceptionFilter>(
-        cache.mergedFilters,
+      const mergedFilters = this.resolveRouteInstances<ExceptionFilter>(
+        cache.staticFilters,
+        cache.contextualFilters,
         container,
         resolutionContext,
       );
-      const mergedInterceptors = this.resolveInstances<BnestInterceptor>(
-        cache.mergedInterceptors,
+      const mergedInterceptors = this.resolveRouteInstances<BnestInterceptor>(
+        cache.staticInterceptors,
+        cache.contextualInterceptors,
         container,
         resolutionContext,
       );
-      const mergedPipes = this.resolveInstances<PipeTransform>(
-        cache.mergedPipes,
+      const mergedPipes = this.resolveRouteInstances<PipeTransform>(
+        cache.staticPipes,
+        cache.contextualPipes,
         container,
         resolutionContext,
       );
 
-      // Allocate an ExecutionContextHost lazily — only if we actually have
-      // an interceptor or filter that might read from it, a guard wired
-      // into beforeHandle needs one elsewhere, or a custom param decorator
-      // requires it for bindArgs.
       let executionContext: ExecutionContextHost | undefined = hasCustomParam
-        ? new ExecutionContextHost(context, controllerClass, handlerRef)
+        ? this.getOrCreateExecutionContext(context, controllerClass, handlerRef)
         : undefined;
       const getExecutionContext = () => {
         if (!executionContext) {
-          executionContext = new ExecutionContextHost(context, controllerClass, handlerRef);
+          executionContext = this.getOrCreateExecutionContext(context, controllerClass, handlerRef);
         }
         return executionContext;
       };
@@ -358,6 +381,7 @@ export class RouterExecutionContext {
       } finally {
         container.clearContext(contextId);
         ContextIdFactory.clear(requestKey);
+        this.executionContextHosts.delete(requestKey);
       }
     };
 
@@ -367,9 +391,12 @@ export class RouterExecutionContext {
     // spread, and length checks. The slow path is used as soon as a global is
     // installed via useGlobalPipes/Filters/Interceptors after registration.
     if (
-      cache.mergedPipes.length === 0 &&
-      cache.mergedInterceptors.length === 0 &&
-      cache.mergedFilters.length === 0 &&
+      cache.contextualPipes.length === 0 &&
+      cache.contextualInterceptors.length === 0 &&
+      cache.contextualFilters.length === 0 &&
+      cache.staticPipes.length === 0 &&
+      cache.staticInterceptors.length === 0 &&
+      cache.staticFilters.length === 0 &&
       this.globalPipes.length === 0 &&
       this.globalInterceptors.length === 0 &&
       this.globalFilters.length === 0
@@ -385,9 +412,12 @@ export class RouterExecutionContext {
           // Re-check on every call so a global installed at runtime takes
           // effect. The check is just three length lookups.
           if (
-            cache.mergedPipes.length > 0 ||
-            cache.mergedInterceptors.length > 0 ||
-            cache.mergedFilters.length > 0
+            cache.contextualPipes.length > 0 ||
+            cache.contextualInterceptors.length > 0 ||
+            cache.contextualFilters.length > 0 ||
+            cache.staticPipes.length > 0 ||
+            cache.staticInterceptors.length > 0 ||
+            cache.staticFilters.length > 0
           ) {
             return slow(context);
           }
@@ -404,6 +434,84 @@ export class RouterExecutionContext {
     }
 
     return slow;
+  }
+
+  private refreshRouteCache(cache: RouteRuntimeCache): void {
+    const filters = this.partitionRouteInstances<ExceptionFilter>(
+      mergeArrays(this.globalFilters, cache.routeFilters),
+      cache.container,
+      cache.module,
+    );
+    cache.staticFilters = filters.staticInstances;
+    cache.contextualFilters = filters.contextualTokens;
+
+    const interceptors = this.partitionRouteInstances<BnestInterceptor>(
+      mergeArrays(this.globalInterceptors, cache.routeInterceptors),
+      cache.container,
+      cache.module,
+    );
+    cache.staticInterceptors = interceptors.staticInstances;
+    cache.contextualInterceptors = interceptors.contextualTokens;
+
+    const pipes = this.partitionRouteInstances<PipeTransform>(
+      mergeArrays(this.globalPipes, cache.routePipes),
+      cache.container,
+      cache.module,
+    );
+    cache.staticPipes = pipes.staticInstances;
+    cache.contextualPipes = pipes.contextualTokens;
+  }
+
+  private partitionRouteInstances<T>(
+    items: any[],
+    container: {
+      get<T>(token: any, context?: { module?: any }): T;
+      isStatic(token: any): boolean;
+    },
+    module?: any,
+  ): { staticInstances: T[]; contextualTokens: any[] } {
+    const staticInstances: T[] = [];
+    const contextualTokens: any[] = [];
+
+    for (const item of items) {
+      if (typeof item !== "function") {
+        staticInstances.push(item as T);
+        continue;
+      }
+
+      if (container.isStatic(item)) {
+        staticInstances.push(
+          container.get<T>(item, module !== undefined ? { module } : undefined),
+        );
+        continue;
+      }
+
+      contextualTokens.push(item);
+    }
+
+    return { staticInstances, contextualTokens };
+  }
+
+  private resolveRouteInstances<T>(
+    staticInstances: T[],
+    contextualTokens: any[],
+    container: {
+      get<T>(token: any, context?: { module?: any }): T;
+      resolve<T>(
+        token: any,
+        context?: { request?: any; contextId?: symbol; inquirer?: any; module?: any },
+      ): T;
+    },
+    context?: { request?: any; contextId?: symbol; inquirer?: any; module?: any },
+  ): T[] {
+    if (contextualTokens.length === 0) {
+      return staticInstances;
+    }
+
+    const contextualInstances = this.resolveInstances<T>(contextualTokens, container, context);
+    return staticInstances.length === 0
+      ? contextualInstances
+      : [...staticInstances, ...contextualInstances];
   }
 
   private resolveInstances<T>(
@@ -560,7 +668,11 @@ export class RouterExecutionContext {
                 contextId,
               })
             : guardClass;
-        const executionContext = new ExecutionContextHost(context, controllerClass, handlerRef);
+        const executionContext = this.getOrCreateExecutionContext(
+          context,
+          controllerClass,
+          handlerRef,
+        );
         try {
           const result = guardInstance.canActivate(executionContext);
 
@@ -570,12 +682,14 @@ export class RouterExecutionContext {
                 if (!canActivate) {
                   container.clearContext(contextId);
                   ContextIdFactory.clear(requestKey);
+                  this.executionContextHosts.delete(requestKey);
                   return this.responseController.mapException(context, new ForbiddenException());
                 }
               })
               .catch((error: unknown) => {
                 container.clearContext(contextId);
                 ContextIdFactory.clear(requestKey);
+                this.executionContextHosts.delete(requestKey);
                 return this.responseController.mapException(context, error);
               });
           }
@@ -583,15 +697,33 @@ export class RouterExecutionContext {
           if (!result) {
             container.clearContext(contextId);
             ContextIdFactory.clear(requestKey);
+            this.executionContextHosts.delete(requestKey);
             return this.responseController.mapException(context, new ForbiddenException());
           }
         } catch (error) {
           container.clearContext(contextId);
           ContextIdFactory.clear(requestKey);
+          this.executionContextHosts.delete(requestKey);
           return this.responseController.mapException(context, error);
         }
       };
     });
+  }
+
+  private getOrCreateExecutionContext(
+    context: RequestHandlerContext,
+    controllerClass: any,
+    handlerRef: Function,
+  ): ExecutionContextHost {
+    const requestKey = this.getRequestContextKey(context);
+    const existing = this.executionContextHosts.get(requestKey);
+    if (existing) {
+      return existing;
+    }
+
+    const created = new ExecutionContextHost(context, controllerClass, handlerRef);
+    this.executionContextHosts.set(requestKey, created);
+    return created;
   }
 
   private getRequestContextKey(context: RequestHandlerContext): object {
