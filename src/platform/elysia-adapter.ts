@@ -9,12 +9,19 @@ interface ElysiaAdapterOptions {
   container?: Container;
 }
 
+interface CompiledCorsOptions {
+  origin?: string | string[] | boolean;
+  allowedOrigins?: Set<string>;
+  fallbackOrigin?: string;
+  staticHeaders: Record<string, string>;
+}
+
 export class ElysiaAdapter {
   private app: Elysia;
   private logger: Logger;
   private container: Container;
   private requestStartTimes = new WeakMap<Request, number>();
-  private corsOptions?: CorsOptions;
+  private compiledCorsOptions?: CompiledCorsOptions;
 
   constructor(private options?: ElysiaAdapterOptions) {
     this.container = options?.container || globalContainer;
@@ -27,7 +34,7 @@ export class ElysiaAdapter {
   }
 
   public enableCors(options: CorsOptions = {}) {
-    this.corsOptions = options;
+    this.compiledCorsOptions = this.compileCorsOptions(options);
   }
 
   private createApp() {
@@ -69,7 +76,7 @@ export class ElysiaAdapter {
   }
 
   private setupCors(app: Elysia) {
-    if (!this.corsOptions) {
+    if (!this.compiledCorsOptions) {
       return;
     }
 
@@ -128,32 +135,51 @@ export class ElysiaAdapter {
   }
 
   private createCorsHeaders(request: Request): HeadersInit {
+    const cors = this.compiledCorsOptions;
+    if (!cors) return {};
+
     const origin = request.headers.get("origin");
-    const allowedOrigin = Array.isArray(this.corsOptions?.origin)
-      ? origin && this.corsOptions.origin.includes(origin)
+    const allowedOrigin = Array.isArray(cors.origin)
+      ? origin && cors.allowedOrigins?.has(origin)
         ? origin
-        : this.corsOptions.origin[0]
-      : this.corsOptions?.origin === true || this.corsOptions?.origin === undefined
+        : cors.fallbackOrigin
+      : cors.origin === true || cors.origin === undefined
         ? (origin ?? "*")
-        : typeof this.corsOptions?.origin === "string"
-          ? this.corsOptions.origin
+        : typeof cors.origin === "string"
+          ? cors.origin
           : "*";
 
     return {
       "access-control-allow-origin": allowedOrigin ?? "*",
+      ...cors.staticHeaders,
+    };
+  }
+
+  private compileCorsOptions(options: CorsOptions): CompiledCorsOptions {
+    const staticHeaders: Record<string, string> = {
       "access-control-allow-methods": (
-        this.corsOptions?.methods ?? ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+        options.methods ?? ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
       ).join(","),
       "access-control-allow-headers": (
-        this.corsOptions?.allowedHeaders ?? ["Content-Type", "Authorization", "X-Version"]
+        options.allowedHeaders ?? ["Content-Type", "Authorization", "X-Version"]
       ).join(","),
-      ...(this.corsOptions?.exposedHeaders
-        ? { "access-control-expose-headers": this.corsOptions.exposedHeaders.join(",") }
-        : {}),
-      ...(this.corsOptions?.credentials ? { "access-control-allow-credentials": "true" } : {}),
-      ...(this.corsOptions?.maxAge !== undefined
-        ? { "access-control-max-age": `${this.corsOptions.maxAge}` }
-        : {}),
+    };
+
+    if (options.exposedHeaders) {
+      staticHeaders["access-control-expose-headers"] = options.exposedHeaders.join(",");
+    }
+    if (options.credentials) {
+      staticHeaders["access-control-allow-credentials"] = "true";
+    }
+    if (options.maxAge !== undefined) {
+      staticHeaders["access-control-max-age"] = `${options.maxAge}`;
+    }
+
+    return {
+      origin: options.origin,
+      allowedOrigins: Array.isArray(options.origin) ? new Set(options.origin) : undefined,
+      fallbackOrigin: Array.isArray(options.origin) ? options.origin[0] : undefined,
+      staticHeaders,
     };
   }
 

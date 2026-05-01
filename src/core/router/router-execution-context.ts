@@ -49,6 +49,7 @@ interface RouteRuntimeCache {
   contextualInterceptors: any[];
   staticPipes: PipeTransform[];
   contextualPipes: any[];
+  hasRuntimeEnhancers: boolean;
 }
 
 const EMPTY_ARRAY: readonly never[] = Object.freeze([]);
@@ -87,6 +88,7 @@ function filterShouldCatch(filter: ExceptionFilter, error: unknown): boolean {
 }
 
 type ParamExtractor = (ctx: any, execCtx: ExecutionContextHost | undefined) => unknown;
+type FastParamExtractor = (ctx: any) => unknown;
 
 function createParamExtractor(param: ParamMetadata): ParamExtractor {
   const name = param.name;
@@ -125,6 +127,39 @@ function createParamExtractor(param: ParamMetadata): ParamExtractor {
   }
 }
 
+function createFastParamExtractor(param: ParamMetadata): FastParamExtractor | null {
+  const name = param.name;
+  switch (param.type) {
+    case "body":
+      return name ? (ctx) => ctx.body?.[name] : (ctx) => ctx.body;
+    case "file":
+      return (ctx) => {
+        const body = ctx.body;
+        if (name) {
+          if (body instanceof FormData) return body.get(name);
+          return body?.[name];
+        }
+        if (body instanceof FormData) {
+          const first = body.entries().next();
+          return first.done ? undefined : first.value[1];
+        }
+        return body;
+      };
+    case "param":
+      return name ? (ctx) => ctx.params?.[name] : (ctx) => ctx.params;
+    case "query":
+      return name ? (ctx) => ctx.query?.[name] : (ctx) => ctx.query;
+    case "headers":
+      return name ? (ctx) => ctx.headers?.[name] : (ctx) => ctx.headers;
+    case "request":
+      return (ctx) => ctx.request;
+    case "custom":
+      return null;
+    default:
+      return () => undefined;
+  }
+}
+
 /**
  * Compile a directly-callable handler for routes with arity ≤ 3, sorted by
  * positional index. Returns `null` for shapes we don't specialize so the
@@ -149,21 +184,26 @@ function compileFastHandler(
     if (paramsMetadata[i].type === "custom") return null;
   }
 
+  const method = instance[methodName] as (...args: any[]) => unknown;
+  const call = method.bind(instance);
+
   if (paramsMetadata.length === 1) {
-    const e0 = createParamExtractor(paramsMetadata[0]);
-    return (ctx) => instance[methodName](e0(ctx, undefined));
+    const e0 = createFastParamExtractor(paramsMetadata[0]);
+    if (!e0) return null;
+    return (ctx) => call(e0(ctx));
   }
   if (paramsMetadata.length === 2) {
-    const e0 = createParamExtractor(paramsMetadata[0]);
-    const e1 = createParamExtractor(paramsMetadata[1]);
-    return (ctx) => instance[methodName](e0(ctx, undefined), e1(ctx, undefined));
+    const e0 = createFastParamExtractor(paramsMetadata[0]);
+    const e1 = createFastParamExtractor(paramsMetadata[1]);
+    if (!e0 || !e1) return null;
+    return (ctx) => call(e0(ctx), e1(ctx));
   }
   if (paramsMetadata.length === 3) {
-    const e0 = createParamExtractor(paramsMetadata[0]);
-    const e1 = createParamExtractor(paramsMetadata[1]);
-    const e2 = createParamExtractor(paramsMetadata[2]);
-    return (ctx) =>
-      instance[methodName](e0(ctx, undefined), e1(ctx, undefined), e2(ctx, undefined));
+    const e0 = createFastParamExtractor(paramsMetadata[0]);
+    const e1 = createFastParamExtractor(paramsMetadata[1]);
+    const e2 = createFastParamExtractor(paramsMetadata[2]);
+    if (!e0 || !e1 || !e2) return null;
+    return (ctx) => call(e0(ctx), e1(ctx), e2(ctx));
   }
   return null;
 }
@@ -264,6 +304,7 @@ export class RouterExecutionContext {
       contextualInterceptors: [],
       staticPipes: [],
       contextualPipes: [],
+      hasRuntimeEnhancers: false,
     };
     this.refreshRouteCache(cache);
     this.routeCaches.push(cache);
@@ -390,17 +431,7 @@ export class RouterExecutionContext {
     // endpoints. Specialize on arity to avoid the per-request args array,
     // spread, and length checks. The slow path is used as soon as a global is
     // installed via useGlobalPipes/Filters/Interceptors after registration.
-    if (
-      cache.contextualPipes.length === 0 &&
-      cache.contextualInterceptors.length === 0 &&
-      cache.contextualFilters.length === 0 &&
-      cache.staticPipes.length === 0 &&
-      cache.staticInterceptors.length === 0 &&
-      cache.staticFilters.length === 0 &&
-      this.globalPipes.length === 0 &&
-      this.globalInterceptors.length === 0 &&
-      this.globalFilters.length === 0
-    ) {
+    if (!cache.hasRuntimeEnhancers) {
       const fastController = container.isStatic(controllerClass)
         ? container.get<any>(controllerClass, { module: route.module })
         : undefined;
@@ -410,15 +441,8 @@ export class RouterExecutionContext {
       if (fast && fastController) {
         return (context: RequestHandlerContext) => {
           // Re-check on every call so a global installed at runtime takes
-          // effect. The check is just three length lookups.
-          if (
-            cache.contextualPipes.length > 0 ||
-            cache.contextualInterceptors.length > 0 ||
-            cache.contextualFilters.length > 0 ||
-            cache.staticPipes.length > 0 ||
-            cache.staticInterceptors.length > 0 ||
-            cache.staticFilters.length > 0
-          ) {
+          // effect. The check is a cached route-state flag.
+          if (cache.hasRuntimeEnhancers) {
             return slow(context);
           }
           try {
@@ -460,6 +484,13 @@ export class RouterExecutionContext {
     );
     cache.staticPipes = pipes.staticInstances;
     cache.contextualPipes = pipes.contextualTokens;
+    cache.hasRuntimeEnhancers =
+      cache.staticFilters.length > 0 ||
+      cache.contextualFilters.length > 0 ||
+      cache.staticInterceptors.length > 0 ||
+      cache.contextualInterceptors.length > 0 ||
+      cache.staticPipes.length > 0 ||
+      cache.contextualPipes.length > 0;
   }
 
   private partitionRouteInstances<T>(

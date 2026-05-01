@@ -1,10 +1,9 @@
 import { BadRequestException } from "../exceptions";
 import type { ArgumentMetadata, PipeTransform } from "../interfaces/pipe-transform.interface";
 import {
-  getUnknownPropertyKeys,
   hasValidationMetadata,
   plainToInstance,
-  stripUnknownProperties,
+  stripUnknownPropertiesWithReport,
   validateDto,
 } from "../schema/dto";
 
@@ -35,7 +34,8 @@ export class ValidationPipe implements PipeTransform {
     let nextValue = value;
 
     if (this.options.whitelist && isPlainObject(nextValue)) {
-      const unknownKeys = getUnknownPropertyKeys(nextValue, metatype);
+      const stripped = stripUnknownPropertiesWithReport(nextValue, metatype);
+      const unknownKeys = stripped.unknownKeys;
       if (unknownKeys.length > 0 && this.options.forbidNonWhitelisted) {
         throw this.createException(
           unknownKeys.map((property) => ({
@@ -44,7 +44,7 @@ export class ValidationPipe implements PipeTransform {
           })),
         );
       }
-      nextValue = stripUnknownProperties(nextValue, metatype);
+      nextValue = stripped.value;
     }
 
     const errors = validateDto(nextValue, metatype);
