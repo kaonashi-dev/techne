@@ -1,6 +1,6 @@
 import "../reflect-setup";
 import { Type, type TSchema } from "@sinclair/typebox";
-import { Value } from "@sinclair/typebox/value";
+import { TypeCompiler, type TypeCheck } from "@sinclair/typebox/compiler";
 import { enumType } from "./enum";
 
 const PROPERTY_METADATA_KEY = "schema:properties";
@@ -33,12 +33,15 @@ type ValidationConstraint =
   | { type: "minItems"; value: number }
   | { type: "maxItems"; value: number };
 
-/** Module-level registry: DTO class → compiled TypeBox schema. */
+/** Module-level registry: DTO class → TypeBox schema and compiled validator. */
 const dtoRegistry = new Map<Function, TSchema>();
+const dtoValidatorRegistry = new Map<Function, TypeCheck<TSchema>>();
 
 interface DtoMetaCacheEntry {
   properties: Record<string, PropertyMetadata>;
   knownKeys: Set<string>;
+  keys: string[];
+  nestedTypes: Map<string, ClassConstructor | undefined>;
   hasValidation: boolean;
 }
 
@@ -52,9 +55,23 @@ function getDtoMetaCache(target: Function): DtoMetaCacheEntry {
   const properties: Record<string, PropertyMetadata> =
     Reflect.getMetadata(PROPERTY_METADATA_KEY, (target as ClassConstructor).prototype) ?? {};
   const keys = Object.keys(properties);
+  const nestedTypes = new Map<string, ClassConstructor | undefined>();
+  for (const key of keys) {
+    if (properties[key].nested) {
+      nestedTypes.set(
+        key,
+        Reflect.getMetadata("design:type", (target as ClassConstructor).prototype, key) as
+          | ClassConstructor
+          | undefined,
+      );
+    }
+  }
+
   const entry: DtoMetaCacheEntry = {
     properties,
     knownKeys: new Set(keys),
+    keys,
+    nestedTypes,
     hasValidation: keys.length > 0,
   };
   dtoMetaCache.set(target, entry);
@@ -64,12 +81,15 @@ function getDtoMetaCache(target: Function): DtoMetaCacheEntry {
 function invalidateDtoCache(target: Function | undefined): void {
   if (!target) return;
   dtoRegistry.delete(target);
+  dtoValidatorRegistry.delete(target);
   dtoMetaCache.delete(target);
 }
 
 export function Dto(): ClassDecorator {
   return (target: Function) => {
-    dtoRegistry.set(target, buildSchemaFromClass(target as ClassConstructor));
+    const schema = buildSchemaFromClass(target as ClassConstructor);
+    dtoRegistry.set(target, schema);
+    dtoValidatorRegistry.set(target, TypeCompiler.Compile(schema));
   };
 }
 
@@ -84,6 +104,18 @@ export function getOrCreateDtoSchema(target: Function): TSchema | undefined {
   const schema = buildSchemaFromClass(target as ClassConstructor);
   dtoRegistry.set(target, schema);
   return schema;
+}
+
+function getOrCreateDtoValidator(target: Function): TypeCheck<TSchema> | undefined {
+  const existing = dtoValidatorRegistry.get(target);
+  if (existing) return existing;
+
+  const schema = getOrCreateDtoSchema(target);
+  if (!schema) return undefined;
+
+  const validator = TypeCompiler.Compile(schema);
+  dtoValidatorRegistry.set(target, validator);
+  return validator;
 }
 
 export function hasValidationMetadata(target: Function): boolean {
@@ -120,26 +152,26 @@ export function setPropertyMetadata(
 }
 
 export function buildSchemaFromClass(klass: ClassConstructor): TSchema {
-  const properties = getClassPropertyMetadata(klass);
-  const keys = Object.keys(properties);
+  const meta = getDtoMetaCache(klass);
+  const keys = meta.keys;
   if (keys.length === 0) return Type.Object({});
 
   const objSchema: Record<string, TSchema> = {};
   for (const key of keys) {
-    objSchema[key] = inferSchema(klass, key, properties[key]);
+    objSchema[key] = inferSchema(klass, key, meta.properties[key]);
   }
   return Type.Object(objSchema);
 }
 
 export function validateDto(value: unknown, metatype: Function): ValidationError[] {
-  const schema = getOrCreateDtoSchema(metatype);
-  if (!schema) return [];
+  const validator = getOrCreateDtoValidator(metatype);
+  if (!validator) return [];
 
   // Fast path: most requests are valid. Avoid materializing the error iterator
   // when the value passes the schema check.
-  if (Value.Check(schema, value)) return [];
+  if (validator.Check(value)) return [];
 
-  return normalizeValidationErrors([...Value.Errors(schema, value)]);
+  return normalizeValidationErrors([...validator.Errors(value)]);
 }
 
 export async function validate(value: object): Promise<ValidationError[]> {
@@ -171,18 +203,23 @@ export function plainToInstance<T>(metatype: ClassConstructor<T>, value: unknown
   }
 
   const instance = new metatype();
-  const metadata = getClassPropertyMetadata(metatype);
+  const metadata = getDtoMetaCache(metatype);
+  if (metadata.nestedTypes.size === 0) {
+    return Object.assign(instance as object, value as object) as T;
+  }
 
-  for (const [key, property] of Object.entries(value as Record<string, unknown>)) {
-    const propertyMeta = metadata[key];
+  const properties = metadata.properties;
+  const record = value as Record<string, unknown>;
+
+  for (const key of Object.keys(record)) {
+    const property = record[key];
+    const propertyMeta = properties[key];
     if (!propertyMeta?.nested) {
       (instance as Record<string, unknown>)[key] = property;
       continue;
     }
 
-    const nestedType = Reflect.getMetadata("design:type", metatype.prototype, key) as
-      | ClassConstructor
-      | undefined;
+    const nestedType = metadata.nestedTypes.get(key);
 
     if (!nestedType || nestedType === Array) {
       (instance as Record<string, unknown>)[key] = property;
@@ -206,14 +243,51 @@ export function stripUnknownProperties<T extends Record<string, unknown>>(
   value: T,
   metatype: Function,
 ): T {
+  return stripUnknownPropertiesWithReport(value, metatype).value;
+}
+
+export interface StripUnknownPropertiesResult<T extends Record<string, unknown>> {
+  value: T;
+  unknownKeys: string[];
+}
+
+export function stripUnknownPropertiesWithReport<T extends Record<string, unknown>>(
+  value: T,
+  metatype: Function,
+): StripUnknownPropertiesResult<T> {
   const knownKeys = getDtoMetaCache(metatype).knownKeys;
-  return Object.fromEntries(Object.entries(value).filter(([key]) => knownKeys.has(key))) as T;
+  const keys = Object.keys(value);
+  const unknownKeys: string[] = [];
+  let stripped: Record<string, unknown> | undefined;
+
+  for (let i = 0; i < keys.length; i++) {
+    const key = keys[i];
+    if (knownKeys.has(key)) {
+      if (stripped) stripped[key] = value[key];
+      continue;
+    }
+
+    unknownKeys.push(key);
+    if (!stripped) {
+      stripped = {};
+      for (let j = 0; j < i; j++) {
+        const previousKey = keys[j];
+        if (knownKeys.has(previousKey)) stripped[previousKey] = value[previousKey];
+      }
+    }
+  }
+
+  return { value: (stripped ?? value) as T, unknownKeys };
 }
 
 export function getUnknownPropertyKeys(value: unknown, metatype: Function): string[] {
   if (!value || typeof value !== "object" || Array.isArray(value)) return [];
   const knownKeys = getDtoMetaCache(metatype).knownKeys;
-  return Object.keys(value as Record<string, unknown>).filter((key) => !knownKeys.has(key));
+  const unknownKeys: string[] = [];
+  for (const key of Object.keys(value as Record<string, unknown>)) {
+    if (!knownKeys.has(key)) unknownKeys.push(key);
+  }
+  return unknownKeys;
 }
 
 function mergePropertyMetadata(
@@ -239,9 +313,7 @@ function inferBaseSchema(klass: ClassConstructor, key: string, meta: PropertyMet
   }
 
   if (meta.nested) {
-    const nestedType = Reflect.getMetadata("design:type", klass.prototype, key) as
-      | ClassConstructor
-      | undefined;
+    const nestedType = getDtoMetaCache(klass).nestedTypes.get(key);
     const nestedSchema =
       nestedType && nestedType !== Array
         ? (getOrCreateDtoSchema(nestedType) ?? Type.Any())
