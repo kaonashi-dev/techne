@@ -4,6 +4,7 @@ export * from "./container";
 export * from "./context-id-factory";
 export * from "./http-options";
 export * from "./module-ref";
+export * from "./plugins/define-plugin";
 export * from "./reflector";
 export * from "./scope";
 export * from "../factory/bnest-factory";

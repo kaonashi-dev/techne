@@ -96,7 +96,11 @@ export class BnestFactory {
       routesResolver,
       routesResolver.executionContext,
       mqRegistry,
-      { shutdown: options?.shutdown, health: options?.health },
+      {
+        shutdown: options?.shutdown,
+        health: options?.health,
+        userOptions: (options ?? {}) as Record<string, unknown>,
+      },
     );
 
     const globalGuards = [

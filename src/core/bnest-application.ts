@@ -16,6 +16,7 @@ import type {
 import type { ElysiaAdapter } from "../platform/elysia-adapter";
 import type { RoutesResolver } from "./router/routes-resolver";
 import type { CompiledRouteDefinition } from "./router/router-execution-context";
+import type { PluginContext, PluginDefinition } from "./plugins/define-plugin";
 
 export type ShutdownSignal = "SIGTERM" | "SIGINT" | "SIGHUP";
 
@@ -43,6 +44,16 @@ export interface ReadinessReport {
 interface BnestApplicationInternalOptions {
   shutdown?: Partial<ShutdownOptions>;
   health?: Partial<HealthOptions>;
+  /**
+   * Raw user-supplied options (cors, prefix, etc.). Made available to plugins
+   * via `PluginContext.options` as a frozen, read-only view.
+   */
+  userOptions?: Record<string, unknown>;
+}
+
+interface RegisteredPlugin {
+  def: PluginDefinition<any>;
+  options: any;
 }
 
 const DEFAULT_SHUTDOWN: ShutdownOptions = {
@@ -67,6 +78,10 @@ export class BnestApplication {
   private routesInitialized = false;
   private readonly shutdownOptions: ShutdownOptions;
   private readonly healthOptions: HealthOptions;
+  private readonly userOptions: Readonly<Record<string, unknown>>;
+  private readonly registered = new Map<string, RegisteredPlugin>();
+  private readyHandlers: Array<() => void | Promise<void>> = [];
+  private shutdownPluginHandlers: Array<() => void | Promise<void>> = [];
 
   constructor(
     private readonly adapter: ElysiaAdapter,
@@ -86,6 +101,7 @@ export class BnestApplication {
       ...(options?.health ?? {}),
       checks: options?.health?.checks ?? DEFAULT_HEALTH.checks,
     };
+    this.userOptions = Object.freeze({ ...(options?.userOptions ?? {}) });
   }
 
   useGlobalFilters(...filters: ExceptionFilter[]): this {
@@ -136,6 +152,9 @@ export class BnestApplication {
     // Fire bootstrap BEFORE accepting traffic so the app isn't reachable
     // until every onApplicationBootstrap hook has resolved.
     await this.scanner.callLifecycleHook("onApplicationBootstrap");
+    // Plugin onReady handlers run sequentially after module bootstrap so
+    // plugins can depend on the bootstrap state and on each other.
+    await this.fireReadyHandlers();
     this.isReady = true;
     this.adapter.getInstance().listen(port, callback);
     return this;
@@ -159,6 +178,10 @@ export class BnestApplication {
       );
     }
 
+    // Plugin onShutdown handlers run in reverse registration order BEFORE the
+    // mq registry closes and BEFORE onModuleDestroy so dependents tear down
+    // before their dependencies.
+    await this.fireShutdownHandlers();
     await this.mqRegistry?.close();
     await this.scanner.callLifecycleHook("onModuleDestroy");
     try {
@@ -255,6 +278,122 @@ export class BnestApplication {
   /** Used by tests / lifecycle to drive close() without raising signals. */
   isShutDown(): boolean {
     return this.isShuttingDown;
+  }
+
+  /**
+   * Register a first-class Bnest plugin. Plugins are the preferred extension
+   * mechanism — they compose with the module system, can read DI, hook into
+   * lifecycle, and reach the raw Elysia instance.
+   *
+   * Throws when a named dependency hasn't been registered yet, when a
+   * different plugin with the same `name` is already registered, and lets
+   * an idempotent re-registration of the same `setup` function no-op.
+   */
+  async register<TOptions>(
+    plugin: PluginDefinition<TOptions>,
+    options?: TOptions,
+  ): Promise<this> {
+    if (!plugin || typeof plugin.name !== "string" || plugin.name.length === 0) {
+      throw new Error("Plugin must have a non-empty `name`.");
+    }
+    if (typeof plugin.setup !== "function") {
+      throw new Error(`Plugin "${plugin.name}" must define a setup() function.`);
+    }
+
+    const existing = this.registered.get(plugin.name);
+    if (existing) {
+      if (existing.def.setup === plugin.setup) {
+        this.logger.warn(`Plugin "${plugin.name}" already registered — skipping.`);
+        return this;
+      }
+      throw new Error(
+        `Plugin "${plugin.name}" is already registered with a different setup function.`,
+      );
+    }
+
+    for (const dep of plugin.dependencies ?? []) {
+      if (!this.registered.has(dep)) {
+        throw new Error(
+          `Plugin "${plugin.name}" depends on "${dep}", which has not been registered yet.`,
+        );
+      }
+    }
+
+    const ctx: PluginContext = {
+      app: this,
+      options: this.userOptions,
+      provide: <T>(token: any, value: T) => {
+        // For classes, container.set is sufficient (resolve falls through to
+        // instances for function-typed tokens). For symbols/strings we must
+        // register as a value provider so resolve() finds it.
+        if (typeof token === "function") {
+          this.container.set(token, value);
+        } else {
+          this.container.addProvider(
+            { provide: token, useValue: value } as any,
+            this.container.getRootModule(),
+          );
+        }
+      },
+      resolve: <T>(token: any) => this.get<T>(token),
+      onReady: (handler) => {
+        this.readyHandlers.push(handler);
+      },
+      onShutdown: (handler) => {
+        this.shutdownPluginHandlers.push(handler);
+      },
+      http: () => this.adapter.getInstance(),
+      logger: new Logger(`plugin:${plugin.name}`),
+    };
+
+    this.registered.set(plugin.name, { def: plugin, options });
+    await plugin.setup(ctx, options as TOptions);
+    return this;
+  }
+
+  /**
+   * Shorthand for registering a native Elysia plugin against the underlying
+   * Elysia instance. Returns `this` for chaining. Prefer `register()` for
+   * Bnest-native plugins; this is a passthrough for ecosystem plugins.
+   *
+   * Note: Elysia composes plugins onto the current app, so any routes the
+   * plugin adds become available immediately. The plugin sees Bnest-mapped
+   * routes as already registered — this matches Elysia's documented
+   * "register plugins before routes that depend on them" guidance.
+   */
+  use(elysiaPlugin: any): this {
+    this.adapter.getInstance().use(elysiaPlugin);
+    return this;
+  }
+
+  /**
+   * Names of every plugin that has been registered, in registration order.
+   * Useful for diagnostics and dependency checks.
+   */
+  getRegisteredPlugins(): string[] {
+    return [...this.registered.keys()];
+  }
+
+  private async fireReadyHandlers(): Promise<void> {
+    for (const handler of this.readyHandlers) {
+      await handler();
+    }
+  }
+
+  private async fireShutdownHandlers(): Promise<void> {
+    // LIFO so dependents shut down before their dependencies.
+    for (let i = this.shutdownPluginHandlers.length - 1; i >= 0; i--) {
+      const handler = this.shutdownPluginHandlers[i];
+      try {
+        await handler!();
+      } catch (error: any) {
+        this.logger.error(
+          `Plugin shutdown handler failed: ${error?.message || error}`,
+          error?.stack,
+          "Plugin",
+        );
+      }
+    }
   }
 
   private registerHealthEndpoints() {
