@@ -3,7 +3,7 @@ import { Controller } from "../src/decorators/controller.decorator";
 import { Version } from "../src/decorators/version.decorator";
 import { Get } from "../src/decorators/routes.decorator";
 import { Module } from "../src/decorators/module.decorator";
-import { BnestFactory } from "../src/factory/bnest-factory";
+import { BnestFactory } from "../src/factory/techne-factory";
 
 describe("HTTP application features", () => {
   test("setGlobalPrefix remaps routes", async () => {

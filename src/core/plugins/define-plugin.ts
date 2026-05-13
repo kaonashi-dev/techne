@@ -1,4 +1,4 @@
-import type { BnestApplication } from "../bnest-application";
+import type { BnestApplication } from "../techne-application";
 import type { Logger } from "../../services/logger.service";
 
 /**

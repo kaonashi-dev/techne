@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { Inject } from "../src/decorators/inject.decorator";
 import { Injectable } from "../src/decorators/injectable.decorator";
 import { Module } from "../src/decorators/module.decorator";
-import { BnestFactory } from "../src/factory/bnest-factory";
+import { BnestFactory } from "../src/factory/techne-factory";
 import {
   APP_CONFIG,
   ConfigModule,

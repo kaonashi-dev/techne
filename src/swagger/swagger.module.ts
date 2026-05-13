@@ -1,4 +1,4 @@
-import type { BnestApplication } from "../core/bnest-application";
+import type { BnestApplication } from "../core/techne-application";
 import { DocumentBuilder, type SwaggerDocumentOptions } from "./document-builder";
 import { emitOpenApiDocument, type OpenApiDocument } from "./openapi-emitter";
 

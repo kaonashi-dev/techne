@@ -4,7 +4,7 @@ import { Get } from "../src/decorators/routes.decorator";
 import { Module } from "../src/decorators/module.decorator";
 import { UseGuards } from "../src/decorators/use-guards.decorator";
 import { Injectable } from "../src/decorators/injectable.decorator";
-import { BnestFactory } from "../src/factory/bnest-factory";
+import { BnestFactory } from "../src/factory/techne-factory";
 
 describe("Cost-tagged routes", () => {
   test("route with no enhancers and no request-scoped deps responds 200", async () => {

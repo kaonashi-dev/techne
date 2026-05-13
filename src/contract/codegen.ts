@@ -1,4 +1,4 @@
-import type { BnestApplication } from "../core/bnest-application";
+import type { BnestApplication } from "../core/techne-application";
 
 // ─── TypeBox introspection ───────────────────────────────────────────────────
 // Mirrors the pattern in `src/swagger/openapi-emitter.ts` — we read the

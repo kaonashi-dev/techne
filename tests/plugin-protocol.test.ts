@@ -1,6 +1,6 @@
 import { test, expect, describe } from "bun:test";
 import { Elysia } from "elysia";
-import { BnestFactory } from "../src/factory/bnest-factory";
+import { BnestFactory } from "../src/factory/techne-factory";
 import { definePlugin } from "../src/core/plugins/define-plugin";
 import type { PluginDefinition } from "../src/core/plugins/define-plugin";
 import { requestIdPlugin } from "../src/core/plugins/built-in/request-id.plugin";

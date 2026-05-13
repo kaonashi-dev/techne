@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { Injectable } from "../src/decorators/injectable.decorator";
 import { Module } from "../src/decorators/module.decorator";
-import { BnestFactory } from "../src/factory/bnest-factory";
+import { BnestFactory } from "../src/factory/techne-factory";
 import {
   BusRegistry,
   Command,

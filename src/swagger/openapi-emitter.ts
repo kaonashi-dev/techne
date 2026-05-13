@@ -1,4 +1,4 @@
-import type { BnestApplication } from "../core/bnest-application";
+import type { BnestApplication } from "../core/techne-application";
 import type { DocumentBuilder } from "./document-builder";
 
 // ─── Public types ────────────────────────────────────────────────────────────

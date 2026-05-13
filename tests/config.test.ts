@@ -5,7 +5,7 @@ import * as path from "node:path";
 import { Inject } from "../src/decorators/inject.decorator";
 import { Injectable } from "../src/decorators/injectable.decorator";
 import { Module } from "../src/decorators/module.decorator";
-import { BnestFactory } from "../src/factory/bnest-factory";
+import { BnestFactory } from "../src/factory/techne-factory";
 import { ConfigModule, ConfigService, registerAs } from "../src/config";
 
 describe("ConfigModule", () => {

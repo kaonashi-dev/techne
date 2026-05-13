@@ -7,13 +7,13 @@ import { RoutesResolver } from "../core/router/routes-resolver";
 import { ElysiaAdapter } from "../platform/elysia-adapter";
 import { Logger } from "../services/logger.service";
 import { BusRegistry } from "../cqrs/bus";
-import { BnestApplication } from "../core/bnest-application";
+import { BnestApplication } from "../core/techne-application";
 import { MicroservicesAdapter } from "../microservices/adapter";
 import type { MicroserviceOptions } from "../microservices/types";
 import { MqRegistry } from "../mq/registry";
 import { MQ_DRIVER } from "../mq/tokens";
 import type { CanActivate } from "../interfaces/can-activate.interface";
-import type { BnestConfig } from "../core/define-bnest-config";
+import type { BnestConfig } from "../core/define-techne-config";
 
 const CONFIG_FILE_CANDIDATES = ["bnest.config.ts", "bnest.config.js", "bnest.config.mjs"] as const;
 const cwdCache = new Map<string, BnestConfig | null>();

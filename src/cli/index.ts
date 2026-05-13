@@ -263,7 +263,7 @@ async function runGenerateClient() {
     }
 
     // Lazy-import to keep CLI startup fast for unrelated commands.
-    const { BnestFactory } = await import("../factory/bnest-factory");
+    const { BnestFactory } = await import("../factory/techne-factory");
     const { generateRoutesType } = await import("../contract/codegen");
 
     const app = await BnestFactory.create(config.module, { ...config, logger: false });

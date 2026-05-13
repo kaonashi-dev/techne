@@ -1,21 +1,21 @@
 export * from "./application-context";
-export * from "./bnest-application";
+export * from "./techne-application";
 export * from "./container";
 export * from "./context-id-factory";
-export * from "./define-bnest-config";
+export * from "./define-techne-config";
 export * from "./http-options";
 export * from "./module-ref";
 export * from "./plugins/define-plugin";
 export * from "./reflector";
 export * from "./scope";
-export * from "../factory/bnest-factory";
+export * from "../factory/techne-factory";
 
 import {
   BnestFactory,
   loadBnestConfigFile,
   type BnestApplicationOptions,
-} from "../factory/bnest-factory";
-import type { BnestApplication } from "./bnest-application";
+} from "../factory/techne-factory";
+import type { BnestApplication } from "./techne-application";
 import { Logger } from "../services/logger.service";
 
 /**

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { BnestFactory } from "../src/factory/bnest-factory";
+import { BnestFactory } from "../src/factory/techne-factory";
 import { Body } from "../src/decorators/params.decorator";
 import { Controller } from "../src/decorators/controller.decorator";
 import { Module } from "../src/decorators/module.decorator";

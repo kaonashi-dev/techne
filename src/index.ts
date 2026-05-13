@@ -1,6 +1,6 @@
-export * from "./core/bnest-application";
+export * from "./core/techne-application";
 export type {
   BnestApplicationOptions,
   TechneApplicationOptions,
-} from "./factory/bnest-factory";
-export { BnestFactory, TechneFactory } from "./factory/bnest-factory";
+} from "./factory/techne-factory";
+export { BnestFactory, TechneFactory } from "./factory/techne-factory";

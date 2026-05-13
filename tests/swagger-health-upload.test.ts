@@ -3,7 +3,7 @@ import { Controller } from "../src/decorators/controller.decorator";
 import { Get, Post } from "../src/decorators/routes.decorator";
 import { Body, FileInterceptor, HealthCheck, UploadedFile, UseInterceptors } from "../src/common";
 import { Module } from "../src/decorators/module.decorator";
-import { BnestFactory } from "../src/factory/bnest-factory";
+import { BnestFactory } from "../src/factory/techne-factory";
 import { HealthCheckService } from "../src/health";
 import { DocumentBuilder, SwaggerModule } from "../src/swagger";
 

@@ -6,7 +6,7 @@ import { Controller } from "../src/decorators/controller.decorator";
 import { Get } from "../src/decorators/routes.decorator";
 import { Module } from "../src/decorators/module.decorator";
 import { Injectable } from "../src/decorators/injectable.decorator";
-import { BnestFactory, __resetBnestConfigCache } from "../src/factory/bnest-factory";
+import { BnestFactory, __resetBnestConfigCache } from "../src/factory/techne-factory";
 import { defineBnestConfig, bnest, bootstrap } from "../src/core";
 import type { CanActivate } from "../src/interfaces/can-activate.interface";
 import { Logger } from "../src/services/logger.service";

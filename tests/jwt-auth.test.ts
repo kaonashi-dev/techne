@@ -3,7 +3,7 @@ import { APP_GUARD, Public, Req, Roles, RolesGuard } from "../src/common";
 import { Controller } from "../src/decorators/controller.decorator";
 import { Get } from "../src/decorators/routes.decorator";
 import { Module } from "../src/decorators/module.decorator";
-import { BnestFactory } from "../src/factory/bnest-factory";
+import { BnestFactory } from "../src/factory/techne-factory";
 import { JwtAuthGuard, JwtModule, JwtService } from "../src/jwt";
 import { Reflector } from "../src/core/reflector";
 

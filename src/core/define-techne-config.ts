@@ -1,4 +1,4 @@
-import type { BnestApplicationOptions } from "../factory/bnest-factory";
+import type { BnestApplicationOptions } from "../factory/techne-factory";
 
 /**
  * Declarative Bnest configuration. Extends {@link BnestApplicationOptions}
