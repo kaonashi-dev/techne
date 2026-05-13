@@ -5,7 +5,7 @@
  *  - cold: a freshly bootstrapped container, no prior calls for the token.
  *  - warm: after a warmup pass, so any memoization / static caching is hot.
  *
- * The Bnest container statically caches `isStatic(token)` and instances of
+ * The Techne container statically caches `isStatic(token)` and instances of
  * static providers, so the warm number should be dominated by Map lookup
  * cost. A large gap between cold and warm indicates a missed cache.
  */

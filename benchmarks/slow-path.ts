@@ -69,7 +69,7 @@ export async function runSlowPathBench(): Promise<ScenarioResult[]> {
 
   const out: ScenarioResult[] = [];
   for (const req of requests) {
-    out.push(await runScenario("Bnest (slow)", (r) => bnestApp.handle(r), req, opts));
+    out.push(await runScenario("Techne (slow)", (r) => bnestApp.handle(r), req, opts));
   }
   return out;
 }

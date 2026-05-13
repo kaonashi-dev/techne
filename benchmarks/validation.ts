@@ -61,7 +61,7 @@ export async function runValidationBench(): Promise<ScenarioResult[]> {
 
   const out: ScenarioResult[] = [];
   for (const req of requests) {
-    out.push(await runScenario("Bnest (validation)", (r) => bnestApp.handle(r), req, opts));
+    out.push(await runScenario("Techne (validation)", (r) => bnestApp.handle(r), req, opts));
   }
   return out;
 }

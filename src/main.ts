@@ -53,5 +53,5 @@ class AppModule {}
 const app = await TechneFactory.create(AppModule);
 
 app.listen(3000, () => {
-  console.log(`🦊 Bnest is running at ${app.getUrl()}`);
+  console.log(`🦊 Techne is running at ${app.getUrl()}`);
 });

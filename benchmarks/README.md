@@ -1,4 +1,4 @@
-# Bnest benchmark matrix
+# Techne benchmark matrix
 
 A small, deterministic-as-possible suite for tracking framework performance across the code paths that actually matter.
 
@@ -6,7 +6,7 @@ A small, deterministic-as-possible suite for tracking framework performance acro
 
 | File                  | Measures                                                                     |
 | --------------------- | ---------------------------------------------------------------------------- |
-| `http.ts`             | Drop-in replacement for the original head-to-head: raw Elysia vs Bnest.      |
+| `http.ts`             | Drop-in replacement for the original head-to-head: raw Elysia vs Techne.      |
 | `fast-path.ts`        | Arity-specialized compiled handler (no enhancers, arity ≤ 3).                |
 | `slow-path.ts`        | Cost-tagged enhancer path: static `@Injectable() CanActivate` guard.         |
 | `validation.ts`       | POST with TypeBox `body` schema, valid + invalid bodies.                     |
@@ -44,7 +44,7 @@ bun run benchmarks/http.ts --quick --json
 
 ## Interpretation
 
-- **Raw Elysia is the absolute ceiling.** Anything Bnest does costs something; a small constant overhead (a few µs of avg latency, ~10–40 % rps gap) is expected and healthy.
+- **Raw Elysia is the absolute ceiling.** Anything Techne does costs something; a small constant overhead (a few µs of avg latency, ~10–40 % rps gap) is expected and healthy.
 - The **slow-path** vs **fast-path** delta is the pure cost of the enhancer dispatcher. A static guard should hoist out at registration time, so the gap should be small.
 - **Validation invalid > valid** means error construction is fast; **validation invalid ≪ valid** signals eager rich-error allocation worth investigating.
 - **Response schema** with a stringifier should match or beat the plain JSON path. If it loses, the stringifier didn't fire — likely a schema-identity cache miss.

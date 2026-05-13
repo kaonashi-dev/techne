@@ -2,7 +2,7 @@
  * Cold-start benchmark.
  *
  * Measures the wall-clock time from `bun` process start to the point where
- * a Bnest application is bootstrapped and capable of serving a request. We
+ * a Techne application is bootstrapped and capable of serving a request. We
  * vary the module count (N = 1, 10, 50) so the scaling behavior of the
  * scanner and container is visible.
  *
