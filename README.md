@@ -1,10 +1,10 @@
-# Bnest
+# Techne
 
 > Experimental Nest-style framework for Bun, using Elysia as the HTTP layer.
 
-Bnest is a personal project focused on bringing familiar NestJS-style patterns to Bun without a Node.js runtime. It is built for exploration, not production use, and breaking changes should be expected.
+Techne is a personal project focused on bringing familiar NestJS-style patterns to Bun without a Node.js runtime. It is built for exploration, not production use, and breaking changes should be expected.
 
-## Why Bnest
+## Why Techne
 
 - Bun-first runtime
 - Decorator-based modules, controllers, and providers
@@ -16,26 +16,26 @@ Bnest is a personal project focused on bringing familiar NestJS-style patterns t
 ## Installation
 
 ```bash
-bun add @kaonashi-dev/bnest
+bun add @kaonashi-dev/techne
 ```
 
 To use the CLI without installing it globally:
 
 ```bash
-bunx @kaonashi-dev/bnest --help
+bunx @kaonashi-dev/techne --help
 ```
 
 ## Quick Start
 
-The recommended setup is declarative: a `bnest.config.ts` at the project root
+The recommended setup is declarative: a `techne.config.ts` at the project root
 holds every framework option, and `main.ts` becomes a one-liner.
 
 ```ts
-// bnest.config.ts
-import { defineBnestConfig } from "@kaonashi-dev/bnest/core";
+// techne.config.ts
+import { defineTechneConfig } from "@kaonashi-dev/techne/core";
 import { AppModule } from "./src/app.module";
 
-export default defineBnestConfig({
+export default defineTechneConfig({
   module: AppModule,
   port: 3000,
   cors: { origin: true },
@@ -44,19 +44,19 @@ export default defineBnestConfig({
 
 ```ts
 // src/main.ts
-import { bootstrap } from "@kaonashi-dev/bnest/core";
+import { bootstrap } from "@kaonashi-dev/techne/core";
 
 await bootstrap();
 ```
 
 ```ts
 // src/app.module.ts
-import { Controller, Get, Injectable, Module } from "@kaonashi-dev/bnest/common";
+import { Controller, Get, Injectable, Module } from "@kaonashi-dev/techne/common";
 
 @Injectable()
 class AppService {
   getHello() {
-    return { message: "Hello from Bnest" };
+    return { message: "Hello from Techne" };
   }
 }
 
@@ -77,21 +77,21 @@ class AppController {
 export class AppModule {}
 ```
 
-`bootstrap()` reads `bnest.config.ts` from `process.cwd()`, calls
-`BnestFactory.create()`, and starts listening. Port resolution is
+`bootstrap()` reads `techne.config.ts` from `process.cwd()`, calls
+`TechneFactory.create()`, and starts listening. Port resolution is
 `options.port` → config `port` → `Bun.env.PORT` → `3000`. `host` defaults to
-`"0.0.0.0"`. The shorthand `bnest()` returns the application without starting
+`"0.0.0.0"`. The shorthand `techne()` returns the application without starting
 the server.
 
 ### Lower-level API
 
-`BnestFactory.create()` is still available and is the right call when you need
+`TechneFactory.create()` is still available and is the right call when you need
 full control over the lifecycle (e.g. tests, in-process invocations):
 
 ```ts
-import { BnestFactory } from "@kaonashi-dev/bnest/core";
+import { TechneFactory } from "@kaonashi-dev/techne/core";
 
-const app = await BnestFactory.create(AppModule);
+const app = await TechneFactory.create(AppModule);
 app.listen(3000, () => {
   console.log("Server running at http://localhost:3000");
 });
@@ -101,39 +101,39 @@ app.listen(3000, () => {
 
 The recommended mental model is now:
 
-- `@kaonashi-dev/bnest/common` for decorators, exceptions, pipes, DTO/schema helpers, and request lifecycle interfaces.
-- `@kaonashi-dev/bnest/core` for bootstrap and infrastructure APIs.
-- `@kaonashi-dev/bnest/config`, `/jwt`, `/swagger`, `/health`, `/testing`, `/cqrs`, `/microservices`, and `/mq` for specialized features.
+- `@kaonashi-dev/techne/common` for decorators, exceptions, pipes, DTO/schema helpers, and request lifecycle interfaces.
+- `@kaonashi-dev/techne/core` for bootstrap and infrastructure APIs.
+- `@kaonashi-dev/techne/config`, `/jwt`, `/swagger`, `/health`, `/testing`, `/cqrs`, `/microservices`, and `/mq` for specialized features.
 
 ### Import Map
 
-| NestJS | Bnest |
+| NestJS | Techne |
 | --- | --- |
-| `@nestjs/common` | `@kaonashi-dev/bnest/common` |
-| `@nestjs/core` | `@kaonashi-dev/bnest/core` |
-| `@nestjs/testing` | `@kaonashi-dev/bnest/testing` |
-| `@nestjs/cqrs` | `@kaonashi-dev/bnest/cqrs` |
-| `@nestjs/microservices` | `@kaonashi-dev/bnest/microservices` |
+| `@nestjs/common` | `@kaonashi-dev/techne/common` |
+| `@nestjs/core` | `@kaonashi-dev/techne/core` |
+| `@nestjs/testing` | `@kaonashi-dev/techne/testing` |
+| `@nestjs/cqrs` | `@kaonashi-dev/techne/cqrs` |
+| `@nestjs/microservices` | `@kaonashi-dev/techne/microservices` |
 
 ### Migration
 
 | Before | After |
 | --- | --- |
-| `import { Controller, Module } from "@kaonashi-dev/bnest";` | `import { Controller, Module } from "@kaonashi-dev/bnest/common";` |
-| `import { ValidationPipe, NotFoundException } from "@kaonashi-dev/bnest";` | `import { ValidationPipe, NotFoundException } from "@kaonashi-dev/bnest/common";` |
-| `import { BnestFactory, Reflector } from "@kaonashi-dev/bnest";` | `import { BnestFactory, Reflector } from "@kaonashi-dev/bnest/core";` |
-| `import { Test } from "@kaonashi-dev/bnest";` | `import { Test } from "@kaonashi-dev/bnest/testing";` |
-| `import { CommandBus } from "@kaonashi-dev/bnest";` | `import { CommandBus } from "@kaonashi-dev/bnest/cqrs";` |
-| `import { Queue } from "@kaonashi-dev/bnest";` | `import { Queue } from "@kaonashi-dev/bnest/mq";` |
+| `import { Controller, Module } from "@kaonashi-dev/techne";` | `import { Controller, Module } from "@kaonashi-dev/techne/common";` |
+| `import { ValidationPipe, NotFoundException } from "@kaonashi-dev/techne";` | `import { ValidationPipe, NotFoundException } from "@kaonashi-dev/techne/common";` |
+| `import { TechneFactory, Reflector } from "@kaonashi-dev/techne";` | `import { TechneFactory, Reflector } from "@kaonashi-dev/techne/core";` |
+| `import { Test } from "@kaonashi-dev/techne";` | `import { Test } from "@kaonashi-dev/techne/testing";` |
+| `import { CommandBus } from "@kaonashi-dev/techne";` | `import { CommandBus } from "@kaonashi-dev/techne/cqrs";` |
+| `import { Queue } from "@kaonashi-dev/techne";` | `import { Queue } from "@kaonashi-dev/techne/mq";` |
 
-`@kaonashi-dev/bnest` is now a minimal bootstrap entrypoint. Use it only when you explicitly want the smallest possible surface.
+`@kaonashi-dev/techne` is now a minimal bootstrap entrypoint. Use it only when you explicitly want the smallest possible surface.
 
 ## Core Concepts
 
 ### Modules
 
 ```ts
-import { Module } from "@kaonashi-dev/bnest/common";
+import { Module } from "@kaonashi-dev/techne/common";
 
 @Module({
   imports: [DatabaseModule],
@@ -147,7 +147,7 @@ class UsersModule {}
 ### Controllers and Routes
 
 ```ts
-import { Body, Controller, Get, Param, Post, Query } from "@kaonashi-dev/bnest/common";
+import { Body, Controller, Get, Param, Post, Query } from "@kaonashi-dev/techne/common";
 
 @Controller("users")
 class UsersController {
@@ -173,7 +173,7 @@ class UsersController {
 ### Dependency Injection
 
 ```ts
-import { Inject, Injectable, Module } from "@kaonashi-dev/bnest/common";
+import { Inject, Injectable, Module } from "@kaonashi-dev/techne/common";
 
 const API_KEY = Symbol("API_KEY");
 
@@ -194,8 +194,8 @@ class AuthModule {}
 ### Guards and Middleware
 
 ```ts
-import { Controller, Get, Injectable, Middleware, UseGuards } from "@kaonashi-dev/bnest/common";
-import type { CanActivate } from "@kaonashi-dev/bnest/common";
+import { Controller, Get, Injectable, Middleware, UseGuards } from "@kaonashi-dev/techne/common";
+import type { CanActivate } from "@kaonashi-dev/techne/common";
 
 @Injectable()
 class AuthGuard implements CanActivate {
@@ -221,10 +221,10 @@ class AdminController {
 
 ## Validation and DTOs
 
-Bnest exposes a `Schema` helper built on `@sinclair/typebox`.
+Techne exposes a `Schema` helper built on `@sinclair/typebox`.
 
 ```ts
-import { Body, Controller, Post, Schema } from "@kaonashi-dev/bnest/common";
+import { Body, Controller, Post, Schema } from "@kaonashi-dev/techne/common";
 
 const CreateUserSchema = Schema.Object({
   name: Schema.String({ minLength: 2 }),
@@ -252,8 +252,8 @@ with `ConfigModule.forApp(config)` so handlers can pull the same object out of
 DI via `@InjectConfig()`.
 
 ```ts
-import { ConfigModule, defineConfig, InjectConfig, t } from "@kaonashi-dev/bnest/config";
-import { Controller, Get, Module } from "@kaonashi-dev/bnest/common";
+import { ConfigModule, defineConfig, InjectConfig, t } from "@kaonashi-dev/techne/config";
+import { Controller, Get, Module } from "@kaonashi-dev/techne/common";
 
 const appConfig = defineConfig({
   schema: t.Object({
@@ -287,11 +287,11 @@ server starts. `t` is a re-export of TypeBox's `Type` for ergonomic schema
 authoring, and `APP_CONFIG` is the DI token `@InjectConfig()` resolves.
 
 The legacy `ConfigModule.forRoot()`, `forRootAsync()`, `forFeature()`, `ConfigService`,
-and `registerAs()` are still exported from `@kaonashi-dev/bnest/config` for
+and `registerAs()` are still exported from `@kaonashi-dev/techne/config` for
 incremental migration.
 
 ```ts
-import { ConfigModule, ConfigService, registerAs } from "@kaonashi-dev/bnest/config";
+import { ConfigModule, ConfigService, registerAs } from "@kaonashi-dev/techne/config";
 
 const databaseConfig = registerAs("database", () => ({
   url: process.env.DATABASE_URL ?? "memory://local",
@@ -312,14 +312,14 @@ config.getOrThrow("DATABASE_URL");
 
 ## Runtime Features
 
-Prefer declaring runtime options in `bnest.config.ts`. The setters below are
+Prefer declaring runtime options in `techne.config.ts`. The setters below are
 still supported but emit a one-time deprecation warning per process and will
 be removed in v1.0:
 
 ```ts
-const app = await BnestFactory.create(AppModule);
+const app = await TechneFactory.create(AppModule);
 
-// Deprecated — declare these in bnest.config.ts instead.
+// Deprecated — declare these in techne.config.ts instead.
 app.setGlobalPrefix("api");
 app.enableVersioning({ type: "uri" });
 app.enableCors({ origin: true, credentials: true });
@@ -329,10 +329,10 @@ app.useGlobalGuards(new AuthGuard());
 The declarative equivalent:
 
 ```ts
-// bnest.config.ts
-import { defineBnestConfig } from "@kaonashi-dev/bnest/core";
+// techne.config.ts
+import { defineTechneConfig } from "@kaonashi-dev/techne/core";
 
-export default defineBnestConfig({
+export default defineTechneConfig({
   module: AppModule,
   globalPrefix: "api",
   versioning: { type: "uri" },
@@ -340,13 +340,13 @@ export default defineBnestConfig({
 });
 ```
 
-`BnestFactory.createApplicationContext()` is also available for standalone module graphs without HTTP.
+`TechneFactory.createApplicationContext()` is also available for standalone module graphs without HTTP.
 
 Modules now respect `imports`/`exports` boundaries during resolution. Private
 providers stay private, `global: true` modules expose only their exported
 tokens, and request-scoped providers share a stable context across guards,
 interceptors, and handlers within the same request through `ContextIdFactory`
-from `@kaonashi-dev/bnest/core`.
+from `@kaonashi-dev/techne/core`.
 
 ## Plugins
 
@@ -356,7 +356,7 @@ dependency-ordered unit with a single `setup()` function that receives a
 DI tokens, hook into lifecycle, or reach the raw Elysia instance.
 
 ```ts
-import { definePlugin } from "@kaonashi-dev/bnest/core";
+import { definePlugin } from "@kaonashi-dev/techne/core";
 
 interface MetricsOptions {
   prefix?: string;
@@ -367,7 +367,7 @@ const MetricsPlugin = definePlugin<MetricsOptions>({
   version: "0.1.0",
   dependencies: [],
   setup(ctx, options) {
-    const prefix = options?.prefix ?? "bnest_";
+    const prefix = options?.prefix ?? "techne_";
     ctx.logger.log(`registering metrics with prefix "${prefix}"`);
 
     ctx.provide("METRICS_PREFIX", prefix);
@@ -384,7 +384,7 @@ const MetricsPlugin = definePlugin<MetricsOptions>({
   },
 });
 
-const app = await BnestFactory.create(AppModule);
+const app = await TechneFactory.create(AppModule);
 await app.register(MetricsPlugin, { prefix: "myapp_" });
 ```
 
@@ -414,8 +414,8 @@ registration order — useful for diagnostics.
 ## Auth and JWT
 
 ```ts
-import { APP_GUARD, Public, Roles, RolesGuard } from "@kaonashi-dev/bnest/common";
-import { JwtAuthGuard, JwtModule, JwtService } from "@kaonashi-dev/bnest/jwt";
+import { APP_GUARD, Public, Roles, RolesGuard } from "@kaonashi-dev/techne/common";
+import { JwtAuthGuard, JwtModule, JwtService } from "@kaonashi-dev/techne/jwt";
 
 @Module({
   imports: [JwtModule.register({ secret: "top-secret" })],
@@ -444,7 +444,7 @@ the builder adds explicitly takes precedence, so the auto-generated spec can
 still be patched without forking.
 
 ```ts
-import { SwaggerModule, DocumentBuilder } from "@kaonashi-dev/bnest/swagger";
+import { SwaggerModule, DocumentBuilder } from "@kaonashi-dev/techne/swagger";
 
 const document = SwaggerModule.createAutoDocument(
   app,
@@ -456,18 +456,18 @@ SwaggerModule.setup("/api-docs", app, document);
 
 The lower-level pieces are also exported for callers that want to integrate
 the emitter directly: `emitOpenApiDocument(app, builder?)` and
-`typeboxToOpenApi(schema)` from `@kaonashi-dev/bnest/swagger`.
+`typeboxToOpenApi(schema)` from `@kaonashi-dev/techne/swagger`.
 
-`HealthCheckService` from `@kaonashi-dev/bnest/health` still provides
+`HealthCheckService` from `@kaonashi-dev/techne/health` still provides
 `pingCheck()` and `memoryCheck()` helpers for callers that want to expose a
 custom Nest-style indicator. The auto-registered `/healthz` and `/readyz`
 endpoints described in [Health & Graceful Shutdown](#health--graceful-shutdown)
-are independent and are wired up by `BnestFactory.create()`.
+are independent and are wired up by `TechneFactory.create()`.
 
 ## File Uploads
 
 ```ts
-import { FileInterceptor, UploadedFile, UseInterceptors } from "@kaonashi-dev/bnest/common";
+import { FileInterceptor, UploadedFile, UseInterceptors } from "@kaonashi-dev/techne/common";
 
 @Post("/upload")
 @UseInterceptors(FileInterceptor("file"))
@@ -478,13 +478,13 @@ upload(@UploadedFile("file") file: any) {
 
 ## Exceptions
 
-Bnest serializes exceptions as RFC 7807 problem documents with
+Techne serializes exceptions as RFC 7807 problem documents with
 `Content-Type: application/problem+json`. Subclasses of `HttpException` accept
 an optional second argument that attaches a machine-readable `code` and an
 explicit problem `type` URI:
 
 ```ts
-import { NotFoundException } from "@kaonashi-dev/bnest/common";
+import { NotFoundException } from "@kaonashi-dev/techne/common";
 
 throw new NotFoundException("User #99 not found", { code: "user.not_found" });
 ```
@@ -493,7 +493,7 @@ The serialized response looks like:
 
 ```json
 {
-  "type": "https://bnest.dev/errors/not-found",
+  "type": "https://github.com/kaonashi-dev/techne/blob/main/docs/errors/not-found",
   "title": "Not Found",
   "status": 404,
   "detail": "User #99 not found",
@@ -508,7 +508,7 @@ The serialized response looks like:
 the response. `errors` is added on 422 validation failures as a
 `ValidationError[]` extension field. In production, `detail` is omitted for
 non-`HttpException` throws so server-side error messages never leak to
-clients. `REASON_PHRASES` is exported from `@kaonashi-dev/bnest/common` for
+clients. `REASON_PHRASES` is exported from `@kaonashi-dev/techne/common` for
 callers that need the standard HTTP reason-phrase table.
 
 ## Testing
@@ -516,7 +516,7 @@ callers that need the standard HTTP reason-phrase table.
 Testing utilities live under `./testing`.
 
 ```ts
-import { Test } from "@kaonashi-dev/bnest/testing";
+import { Test } from "@kaonashi-dev/techne/testing";
 
 const module = await Test.createTestingModule({
   providers: [UserService, DatabaseService],
@@ -542,7 +542,7 @@ import {
   DomainEvent,
   EventBus,
   EventHandler,
-} from "@kaonashi-dev/bnest/cqrs";
+} from "@kaonashi-dev/techne/cqrs";
 
 class CreateUserCommand extends Command<{ name: string }> {}
 
@@ -567,16 +567,16 @@ class UserCreatedLogger {
 }
 ```
 
-`BnestFactory.create()` registers the command, query, and event buses automatically.
+`TechneFactory.create()` registers the command, query, and event buses automatically.
 
 ## Microservices
 
 Microservice utilities live under `./microservices`.
 
 ```ts
-import { Injectable } from "@kaonashi-dev/bnest/common";
-import { BnestFactory } from "@kaonashi-dev/bnest/core";
-import { EventPattern, MessagePattern } from "@kaonashi-dev/bnest/microservices";
+import { Injectable } from "@kaonashi-dev/techne/common";
+import { TechneFactory } from "@kaonashi-dev/techne/core";
+import { EventPattern, MessagePattern } from "@kaonashi-dev/techne/microservices";
 
 @Injectable()
 class UserMessages {
@@ -591,7 +591,7 @@ class UserMessages {
   }
 }
 
-const { server, client } = await BnestFactory.createMicroservice(AppModule, {
+const { server, client } = await TechneFactory.createMicroservice(AppModule, {
   transport: "local",
 });
 
@@ -615,7 +615,7 @@ import {
   MqProcessor,
   Queue,
   Worker,
-} from "@kaonashi-dev/bnest/mq";
+} from "@kaonashi-dev/techne/mq";
 
 const queue = new Queue("emails");
 
@@ -644,7 +644,7 @@ Framework integration is available through `MqModule.register()` and
 
 ## Health & Graceful Shutdown
 
-`BnestFactory.create()` auto-registers two health endpoints:
+`TechneFactory.create()` auto-registers two health endpoints:
 
 - `GET /healthz` — liveness. Always returns 200 once the process is up.
 - `GET /readyz` — readiness. Returns 200 only after `onApplicationBootstrap`
@@ -656,12 +656,12 @@ Paths and checks are configurable through the `health` option, and graceful
 shutdown is configured through `shutdown`:
 
 ```ts
-// bnest.config.ts
-import { defineBnestConfig } from "@kaonashi-dev/bnest/core";
+// techne.config.ts
+import { defineTechneConfig } from "@kaonashi-dev/techne/core";
 import { AppModule } from "./src/app.module";
 import { db } from "./src/db";
 
-export default defineBnestConfig({
+export default defineTechneConfig({
   module: AppModule,
   health: {
     livenessPath: "/healthz",
@@ -692,39 +692,39 @@ entirely.
 
 ```bash
 # Create a new project
-bunx @kaonashi-dev/bnest new my-project
+bunx @kaonashi-dev/techne new my-project
 
 # Run with hot reload and an optional inspector
-bunx @kaonashi-dev/bnest dev --port 3000 --inspect
+bunx @kaonashi-dev/techne dev --port 3000 --inspect
 
 # Run without hot reload (production-style)
-bunx @kaonashi-dev/bnest start --port 3000
+bunx @kaonashi-dev/techne start --port 3000
 
 # Run the test suite
-bunx @kaonashi-dev/bnest test tests/ --watch --coverage
+bunx @kaonashi-dev/techne test tests/ --watch --coverage
 
 # Diagnose tsconfig / project layout
-bunx @kaonashi-dev/bnest doctor
+bunx @kaonashi-dev/techne doctor
 
 # Generate framework files
-bunx @kaonashi-dev/bnest g module users
-bunx @kaonashi-dev/bnest g controller users
-bunx @kaonashi-dev/bnest g service users
-bunx @kaonashi-dev/bnest g resource users
-bunx @kaonashi-dev/bnest g middleware logger
-bunx @kaonashi-dev/bnest g guard auth
-bunx @kaonashi-dev/bnest g pipe trim
-bunx @kaonashi-dev/bnest g filter http-exception
-bunx @kaonashi-dev/bnest g interceptor logging
-bunx @kaonashi-dev/bnest g dto create-user
+bunx @kaonashi-dev/techne g module users
+bunx @kaonashi-dev/techne g controller users
+bunx @kaonashi-dev/techne g service users
+bunx @kaonashi-dev/techne g resource users
+bunx @kaonashi-dev/techne g middleware logger
+bunx @kaonashi-dev/techne g guard auth
+bunx @kaonashi-dev/techne g pipe trim
+bunx @kaonashi-dev/techne g filter http-exception
+bunx @kaonashi-dev/techne g interceptor logging
+bunx @kaonashi-dev/techne g dto create-user
 
 # Scaffold a multi-stage Bun Dockerfile (+ .dockerignore)
-bunx @kaonashi-dev/bnest g docker --port 3000
-bunx @kaonashi-dev/bnest deploy --target docker --port 3000
+bunx @kaonashi-dev/techne g docker --port 3000
+bunx @kaonashi-dev/techne deploy --target docker --port 3000
 
 # Build an entrypoint with bun build
-bunx @kaonashi-dev/bnest build src/main.ts --out dist/app.bun --minify
-bunx @kaonashi-dev/bnest build src/main.ts --target node --out dist/app.js
+bunx @kaonashi-dev/techne build src/main.ts --out dist/app.bun --minify
+bunx @kaonashi-dev/techne build src/main.ts --target node --out dist/app.js
 ```
 
 Commands: `new`, `create`, `dev`, `start`, `build`, `test`, `deploy`,
@@ -733,27 +733,27 @@ Commands: `new`, `create`, `dev`, `start`, `build`, `test`, `deploy`,
 Generator types: `module`, `controller`, `service`, `resource`, `middleware`,
 `guard`, `pipe`, `filter`, `interceptor`, `dto`, `docker`, `client`.
 
-`bnest deploy --target docker` currently writes the same multi-stage
+`techne deploy --target docker` currently writes the same multi-stage
 Dockerfile as the `g docker` generator. Other deploy targets (`fly`, `railway`,
 `cloudflare`, `bun-vm`) are planned but not implemented yet.
 
-Generated starters use `@kaonashi-dev/bnest/common` and
-`@kaonashi-dev/bnest/core` and emit a `bootstrap()` + `bnest.config.ts`
+Generated starters use `@kaonashi-dev/techne/common` and
+`@kaonashi-dev/techne/core` and emit a `bootstrap()` + `techne.config.ts`
 project skeleton.
 
 ## Package Exports
 
 ```ts
-import { BnestFactory } from "@kaonashi-dev/bnest/core";
-import { Controller, Module, ValidationPipe } from "@kaonashi-dev/bnest/common";
-import { ConfigModule } from "@kaonashi-dev/bnest/config";
-import { JwtModule } from "@kaonashi-dev/bnest/jwt";
-import { SwaggerModule } from "@kaonashi-dev/bnest/swagger";
-import { HealthCheckService } from "@kaonashi-dev/bnest/health";
-import { Test } from "@kaonashi-dev/bnest/testing";
-import { CommandBus } from "@kaonashi-dev/bnest/cqrs";
-import { MessagePattern } from "@kaonashi-dev/bnest/microservices";
-import { Queue } from "@kaonashi-dev/bnest/mq";
+import { TechneFactory } from "@kaonashi-dev/techne/core";
+import { Controller, Module, ValidationPipe } from "@kaonashi-dev/techne/common";
+import { ConfigModule } from "@kaonashi-dev/techne/config";
+import { JwtModule } from "@kaonashi-dev/techne/jwt";
+import { SwaggerModule } from "@kaonashi-dev/techne/swagger";
+import { HealthCheckService } from "@kaonashi-dev/techne/health";
+import { Test } from "@kaonashi-dev/techne/testing";
+import { CommandBus } from "@kaonashi-dev/techne/cqrs";
+import { MessagePattern } from "@kaonashi-dev/techne/microservices";
+import { Queue } from "@kaonashi-dev/techne/mq";
 ```
 
 ## Scripts
@@ -777,7 +777,7 @@ src/
   cqrs/           Command, query, event buses and event store
   decorators/     Routing, DI, and metadata decorators
   exceptions/     HTTP exception classes
-  factory/        BnestFactory bootstrap implementation
+  factory/        TechneFactory bootstrap implementation
   health/         Basic health check service and decorator
   jwt/            JWT module, service, and auth guard
   mq/             BullMQ-style queue core and framework integration
@@ -792,7 +792,7 @@ src/
 ## Performance
 
 A benchmark matrix lives under [`benchmarks/`](./benchmarks/README.md) covering
-the code paths that actually matter — raw Elysia vs Bnest, the arity-specialized
+the code paths that actually matter — raw Elysia vs Techne, the arity-specialized
 **fast path** for routes with no enhancers, the cost-tagged **slow path** for
 routes with guards/interceptors/pipes, validation (valid + invalid bodies),
 response schemas (exercising the compiled TypeBox stringifier), container
@@ -810,13 +810,13 @@ Notable optimizations on the hot path:
 - Cost-tagged slow path that hoists static `@Injectable()` guards/interceptors
   out at route registration time.
 - Compiled TypeBox stringifiers (`compileStringifier(schema)` from
-  `@kaonashi-dev/bnest/schema`) used automatically for routes with a
+  `@kaonashi-dev/techne/schema`) used automatically for routes with a
   `response` schema, with a per-schema `WeakMap` cache.
 - Cheaper validation error path and lighter request-id / in-flight tracking.
 
 ## Status
 
-Bnest is still experimental. APIs may change quickly, some areas are incomplete, and documentation will continue to evolve with the framework.
+Techne is still experimental. APIs may change quickly, some areas are incomplete, and documentation will continue to evolve with the framework.
 
 v0.3 (in progress) introduces declarative config, plugin protocol, RFC 7807
 errors, `/healthz` + `/readyz`, graceful shutdown, expanded CLI, and auto
