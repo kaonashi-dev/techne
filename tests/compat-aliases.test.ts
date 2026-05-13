@@ -24,14 +24,8 @@ import {
   BnestConfig,
   defineBnestConfig,
 } from "../src/core/define-techne-config";
-import {
-  TechneMicroservice,
-  BnestMicroservice,
-} from "../src/microservices/abstract-server";
-import type {
-  TechneInterceptor,
-  BnestInterceptor,
-} from "../src/interfaces/interceptor.interface";
+import { TechneMicroservice, BnestMicroservice } from "../src/microservices/abstract-server";
+import type { TechneInterceptor, BnestInterceptor } from "../src/interfaces/interceptor.interface";
 import { techne, bnest } from "../src/core";
 
 // These types must compile against each other to prove they are aliases.

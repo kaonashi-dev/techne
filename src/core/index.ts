@@ -20,12 +20,15 @@ import { Logger } from "../services/logger.service";
 
 /**
  * Shorthand for {@link TechneFactory.create}. Mirrors the declarative API:
- * `await techne()` reads the root module and options from `bnest.config.ts`.
+ * `await techne()` reads the root module and options from `techne.config.ts`.
  */
 export function techne(): Promise<TechneApplication>;
 export function techne(module: any): Promise<TechneApplication>;
 export function techne(module: any, options: TechneApplicationOptions): Promise<TechneApplication>;
-export function techne(module?: any, options?: TechneApplicationOptions): Promise<TechneApplication> {
+export function techne(
+  module?: any,
+  options?: TechneApplicationOptions,
+): Promise<TechneApplication> {
   if (module === undefined) return TechneFactory.create();
   if (options === undefined) return TechneFactory.create(module);
   return TechneFactory.create(module, options);
@@ -41,7 +44,7 @@ export interface BootstrapOverrides extends TechneApplicationOptions {
 
 /**
  * Create the application AND start listening using values declared in
- * `bnest.config.ts` (with overrides applied on top). Returns the started app.
+ * `techne.config.ts` (with overrides applied on top). Returns the started app.
  *
  * Resolution order for `port`: explicit `options.port` → config `port` →
  * `Bun.env.PORT` → 3000. `host` defaults to "0.0.0.0".
@@ -60,10 +63,7 @@ export async function bootstrap(
   // cheap because TechneFactory.create() caches the file load by cwd.
   const fileConfig = await loadTechneConfigFile();
   const port =
-    optPort ??
-    fileConfig?.port ??
-    (Bun.env.PORT ? Number(Bun.env.PORT) : undefined) ??
-    3000;
+    optPort ?? fileConfig?.port ?? (Bun.env.PORT ? Number(Bun.env.PORT) : undefined) ?? 3000;
   const host = optHost ?? fileConfig?.host ?? "0.0.0.0";
 
   const logger = new Logger("Techne");

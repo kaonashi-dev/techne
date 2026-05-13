@@ -1,7 +1,7 @@
 {
   "name": "@kaonashi-dev/techne",
   "version": "0.4.0",
-  "description": "Techne — a Bun-native, NestJS-style framework built on Elysia. (Renamed from Bnest in v0.4.0.)",
+  "description": "Techne — a Bun-native application framework built on Elysia with a decorator-first developer experience",
   "module": "src/index.ts",
   "main": "src/index.ts",
   "types": "dist/types/index.d.ts",
@@ -91,7 +91,7 @@
     "test:watch": "bun test --watch tests/*.test.ts",
     "test:nestjs": "bun test tests/nestjs/",
     "check": "bun run lint && bun run format:check",
-    "check:fix": "bun run lint:fix && bun run format",
+    "check:fix": "bun run lint:fix && bun run format .",
     "bench": "bun run benchmarks/http.ts",
     "build": "tsc -p tsconfig.build.json",
     "prepublishOnly": "bun run build"

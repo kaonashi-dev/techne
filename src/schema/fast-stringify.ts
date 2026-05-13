@@ -130,9 +130,7 @@ export function compileStringifier(schema: TSchema): Stringifier {
   let fn: Stringifier;
   try {
     // eslint-disable-next-line @typescript-eslint/no-implied-eval
-    const factory = new Function(...helperNames, "value", src) as (
-      ...args: any[]
-    ) => string;
+    const factory = new Function(...helperNames, "value", src) as (...args: any[]) => string;
     fn = (value: unknown) => factory(...helpers, value);
   } catch {
     fn = FALLBACK;

@@ -20,8 +20,16 @@ import type { TechneConfig } from "../core/define-techne-config";
  * `bnest.config.{ts,js,mjs}` is a deprecated fallback retained through v0.4.x
  * and removed in v0.5+. Matching the legacy name emits a one-time warning.
  */
-const TECHNE_CONFIG_CANDIDATES = ["techne.config.ts", "techne.config.js", "techne.config.mjs"] as const;
-const LEGACY_BNEST_CONFIG_CANDIDATES = ["bnest.config.ts", "bnest.config.js", "bnest.config.mjs"] as const;
+const TECHNE_CONFIG_CANDIDATES = [
+  "techne.config.ts",
+  "techne.config.js",
+  "techne.config.mjs",
+] as const;
+const LEGACY_BNEST_CONFIG_CANDIDATES = [
+  "bnest.config.ts",
+  "bnest.config.js",
+  "bnest.config.mjs",
+] as const;
 const cwdCache = new Map<string, TechneConfig | null>();
 let warnedLegacyConfig = false;
 
@@ -162,7 +170,7 @@ export class TechneFactory {
     const resolvedModule = module ?? merged.module ?? fileConfig?.module;
     if (!resolvedModule) {
       throw new Error(
-        "TechneFactory.create(): no module supplied and no `module` declared in bnest.config.ts.",
+        "TechneFactory.create(): no module supplied and no `module` declared in techne.config.ts.",
       );
     }
     // Strip bootstrap-only fields from the options passed to the rest of the

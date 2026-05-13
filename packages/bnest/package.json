@@ -1,0 +1,74 @@
+{
+  "name": "@kaonashi-dev/bnest",
+  "version": "0.4.0",
+  "description": "Deprecated compatibility shim for @kaonashi-dev/techne.",
+  "type": "module",
+  "main": "./index.js",
+  "module": "./index.js",
+  "types": "./index.d.ts",
+  "bin": {
+    "bnest": "./bin/bnest.js"
+  },
+  "exports": {
+    ".": {
+      "import": "./index.js",
+      "types": "./index.d.ts"
+    },
+    "./common": {
+      "import": "./common.js",
+      "types": "./common.d.ts"
+    },
+    "./core": {
+      "import": "./core.js",
+      "types": "./core.d.ts"
+    },
+    "./config": {
+      "import": "./config.js",
+      "types": "./config.d.ts"
+    },
+    "./jwt": {
+      "import": "./jwt.js",
+      "types": "./jwt.d.ts"
+    },
+    "./swagger": {
+      "import": "./swagger.js",
+      "types": "./swagger.d.ts"
+    },
+    "./health": {
+      "import": "./health.js",
+      "types": "./health.d.ts"
+    },
+    "./testing": {
+      "import": "./testing.js",
+      "types": "./testing.d.ts"
+    },
+    "./cqrs": {
+      "import": "./cqrs.js",
+      "types": "./cqrs.d.ts"
+    },
+    "./microservices": {
+      "import": "./microservices.js",
+      "types": "./microservices.d.ts"
+    },
+    "./queue": {
+      "import": "./queue.js",
+      "types": "./queue.d.ts"
+    },
+    "./mq": {
+      "import": "./mq.js",
+      "types": "./mq.d.ts"
+    },
+    "./contract": {
+      "import": "./contract.js",
+      "types": "./contract.d.ts"
+    }
+  },
+  "files": [
+    "*.js",
+    "*.d.ts",
+    "bin"
+  ],
+  "dependencies": {
+    "@kaonashi-dev/techne": "0.4.0"
+  }
+}

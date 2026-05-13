@@ -127,11 +127,7 @@ function coerceArrayItem(item: string, kind: FieldKind["itemKind"]): unknown {
   }
 }
 
-function coerceValue(
-  raw: string | undefined,
-  kind: FieldKind,
-  arraySeparator: string,
-): unknown {
+function coerceValue(raw: string | undefined, kind: FieldKind, arraySeparator: string): unknown {
   // Optional + missing/empty → undefined, let the validator skip it.
   if (raw === undefined) return undefined;
   if (kind.optional && raw === "") return undefined;

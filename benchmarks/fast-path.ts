@@ -48,7 +48,7 @@ const elysiaApp = new Elysia()
   .get("/users", () => [{ id: 1, name: "Alice" }])
   .get("/users/:id", ({ params }) => ({ id: params.id, name: "Alice" }));
 
-const bnestApp = await TechneFactory.create(FastModule, { logger: false });
+const techneApp = await TechneFactory.create(FastModule, { logger: false });
 
 export async function runFastPathBench(): Promise<ScenarioResult[]> {
   const opts = getDefaults(isQuick());
@@ -62,7 +62,7 @@ export async function runFastPathBench(): Promise<ScenarioResult[]> {
     out.push(await runScenario("Elysia (fast)", (r) => elysiaApp.handle(r), req, opts));
   }
   for (const req of requests) {
-    out.push(await runScenario("Techne (fast)", (r) => bnestApp.handle(r), req, opts));
+    out.push(await runScenario("Techne (fast)", (r) => techneApp.handle(r), req, opts));
   }
   return out;
 }
