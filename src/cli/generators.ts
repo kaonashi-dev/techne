@@ -73,6 +73,99 @@ export class ${className} {}
   console.log(`CREATE ${name}.service.ts`);
 }
 
+export async function generateMiddleware(name: string, dir: string = ".") {
+  const fnName = `${name}Middleware`;
+  const content = `import type { ExecutionContext } from "@kaonashi-dev/bnest/common";
+
+// TODO: implement ${fnName} logic.
+export async function ${fnName}(context: ExecutionContext) {
+  // Access request via context.switchToHttp().getRequest()
+  return;
+}
+`;
+  await fs.writeFile(path.join(dir, `${name}.middleware.ts`), content);
+  console.log(`CREATE ${name}.middleware.ts`);
+}
+
+export async function generateGuard(name: string, dir: string = ".") {
+  const className = `${capitalize(name)}Guard`;
+  const content = `import { Injectable, type CanActivate, type ExecutionContext } from "@kaonashi-dev/bnest/common";
+
+@Injectable()
+export class ${className} implements CanActivate {
+  canActivate(context: ExecutionContext): boolean | Promise<boolean> {
+    // TODO: implement ${className} authorization logic.
+    return true;
+  }
+}
+`;
+  await fs.writeFile(path.join(dir, `${name}.guard.ts`), content);
+  console.log(`CREATE ${name}.guard.ts`);
+}
+
+export async function generatePipe(name: string, dir: string = ".") {
+  const className = `${capitalize(name)}Pipe`;
+  const content = `import { Injectable, type PipeTransform } from "@kaonashi-dev/bnest/common";
+
+@Injectable()
+export class ${className} implements PipeTransform {
+  transform(value: any) {
+    // TODO: implement ${className} transformation logic.
+    return value;
+  }
+}
+`;
+  await fs.writeFile(path.join(dir, `${name}.pipe.ts`), content);
+  console.log(`CREATE ${name}.pipe.ts`);
+}
+
+export async function generateFilter(name: string, dir: string = ".") {
+  const className = `${capitalize(name)}Filter`;
+  const content = `import { Catch, type ExceptionFilter, type ArgumentsHost } from "@kaonashi-dev/bnest/common";
+
+@Catch()
+export class ${className} implements ExceptionFilter {
+  catch(exception: unknown, host: ArgumentsHost) {
+    // TODO: implement ${className} exception handling.
+  }
+}
+`;
+  await fs.writeFile(path.join(dir, `${name}.filter.ts`), content);
+  console.log(`CREATE ${name}.filter.ts`);
+}
+
+export async function generateInterceptor(name: string, dir: string = ".") {
+  const className = `${capitalize(name)}Interceptor`;
+  const content = `import { Injectable, type BnestInterceptor, type ExecutionContext, type CallHandler } from "@kaonashi-dev/bnest/common";
+
+@Injectable()
+export class ${className} implements BnestInterceptor {
+  async intercept(context: ExecutionContext, next: CallHandler) {
+    // TODO: implement ${className} interception logic.
+    return next.handle();
+  }
+}
+`;
+  await fs.writeFile(path.join(dir, `${name}.interceptor.ts`), content);
+  console.log(`CREATE ${name}.interceptor.ts`);
+}
+
+export async function generateDto(name: string, dir: string = ".") {
+  const schemaName = `${capitalize(name)}Dto`;
+  const content = `import { Schema } from "@kaonashi-dev/bnest/common";
+import type { Static } from "@sinclair/typebox";
+
+export const ${schemaName} = Schema.Object({
+  // TODO: define fields for ${schemaName}
+  example: Schema.String(),
+});
+
+export type ${schemaName} = Static<typeof ${schemaName}>;
+`;
+  await fs.writeFile(path.join(dir, `${name}.dto.ts`), content);
+  console.log(`CREATE ${name}.dto.ts`);
+}
+
 export async function generateResource(name: string) {
   const dir = path.join(process.cwd(), "src", name);
   await fs.mkdir(dir, { recursive: true });
