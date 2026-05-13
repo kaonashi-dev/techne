@@ -145,7 +145,7 @@ export class BnestFactory {
     const loggerEnabled = options?.logger !== false;
     Logger.setEnabled(loggerEnabled);
 
-    const logger = new Logger("BnestFactory");
+    const logger = new Logger("TechneFactory");
     logger.log("Starting application initialization...");
 
     const container = options?.container || new Container();

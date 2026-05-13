@@ -4,7 +4,7 @@ import { Logger } from "../services/logger.service";
 import type { MqRegistry } from "../mq/registry";
 
 export class BnestApplicationContext {
-  private readonly logger = new Logger("BnestApplicationContext");
+  private readonly logger = new Logger("TechneApplicationContext");
   private isClosing = false;
 
   constructor(

@@ -16,7 +16,7 @@ export interface RequestIdPluginOptions {
  * `app.register(requestIdPlugin, { header })`.
  */
 export const requestIdPlugin = definePlugin<RequestIdPluginOptions | undefined>({
-  name: "bnest:request-id",
+  name: "techne:request-id",
   version: "1.0.0",
   setup(ctx, options) {
     const header = options?.header ?? "x-request-id";

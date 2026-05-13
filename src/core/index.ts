@@ -63,7 +63,7 @@ export async function bootstrap(
     3000;
   const host = optHost ?? fileConfig?.host ?? "0.0.0.0";
 
-  const logger = new Logger("Bnest");
+  const logger = new Logger("Techne");
   await app.listen(port, () => {
     logger.log(`🚀 Listening on http://${host}:${port}`);
   });

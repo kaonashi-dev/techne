@@ -181,7 +181,7 @@ export class Container {
   }
 
   public createContextId(): symbol {
-    return Symbol("bnest:context");
+    return Symbol("techne:context");
   }
 
   public clearContext(contextId: symbol): void {

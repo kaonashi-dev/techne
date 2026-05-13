@@ -35,12 +35,12 @@ RUN bun build src/main.ts --target=bun --outfile=dist/app.bun --minify
 FROM oven/bun:${bunVersion}-slim AS runtime
 WORKDIR /app
 
-RUN addgroup --system --gid 1001 bnest && \\
-    adduser --system --uid 1001 --ingroup bnest bnest
+RUN addgroup --system --gid 1001 techne && \\
+    adduser --system --uid 1001 --ingroup techne techne
 
-COPY --from=builder --chown=bnest:bnest /app/dist/app.bun ./app.bun
+COPY --from=builder --chown=techne:techne /app/dist/app.bun ./app.bun
 
-USER bnest
+USER techne
 ENV NODE_ENV=production
 ENV PORT=${port}
 

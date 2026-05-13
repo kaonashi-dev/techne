@@ -67,7 +67,7 @@ const deprecationWarned = new Set<string>();
 function warnDeprecatedSetter(method: string) {
   if (deprecationWarned.has(method)) return;
   deprecationWarned.add(method);
-  new Logger("BnestApplication").warn(
+  new Logger("TechneApplication").warn(
     `${method}() is deprecated: declare this in bnest.config.ts instead. Will be removed in v1.0.`,
   );
 }
@@ -80,7 +80,7 @@ const DEFAULT_HEALTH: HealthOptions = {
 };
 
 export class BnestApplication {
-  private logger = new Logger("BnestApplication");
+  private logger = new Logger("TechneApplication");
   private shutdownHandlers: { signal: ShutdownSignal; handler: () => void }[] = [];
   private isShuttingDown = false;
   private isReady = false;
