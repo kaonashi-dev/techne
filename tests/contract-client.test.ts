@@ -93,7 +93,7 @@ describe("contract / createClient", () => {
 
   test("non-2xx with problem+json throws ClientError carrying the parsed problem", async () => {
     const problem = {
-      type: "https://bnest.dev/errors/not-found",
+      type: "https://github.com/kaonashi-dev/techne/blob/main/docs/errors/not-found.md",
       title: "Not Found",
       status: 404,
       detail: "User u404 does not exist",

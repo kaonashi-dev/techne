@@ -118,7 +118,7 @@ describe("Elysia Adapter via TechneFactory", () => {
     expect(res1.status).toBe(403);
     const body1 = await res1.json();
     expect(body1).toMatchObject({
-      type: "https://bnest.dev/errors/forbidden",
+      type: "https://github.com/kaonashi-dev/techne/blob/main/docs/errors/forbidden.md",
       title: "Forbidden",
       status: 403,
       detail: "Forbidden resource",

@@ -9,7 +9,7 @@ import type { TechneApplicationOptions } from "../factory/techne-factory";
 export type TechneConfig = TechneApplicationOptions & {
   /** Root module class. Required when calling `TechneFactory.create()` / `bootstrap()` with zero args. */
   module?: any;
-  /** Port to listen on. Used by `bnest dev`/`start` and the `bootstrap()` helper. Default 3000. */
+  /** Port to listen on. Used by `techne dev`/`start` and the `bootstrap()` helper. Default 3000. */
   port?: number;
   /** Bind host. Default "0.0.0.0". */
   host?: string;

@@ -26,7 +26,7 @@ describe("RFC 7807 error contract", () => {
 
     const body = await res.json();
     expect(body).toMatchObject({
-      type: "https://bnest.dev/errors/not-found",
+      type: "https://github.com/kaonashi-dev/techne/blob/main/docs/errors/not-found.md",
       title: "Not Found",
       status: 404,
       detail: "User #99 not found",
@@ -66,7 +66,7 @@ describe("RFC 7807 error contract", () => {
       expect(res.status).toBe(500);
       const body = await res.json();
       expect(body).toMatchObject({
-        type: "https://bnest.dev/errors/internal-server-error",
+        type: "https://github.com/kaonashi-dev/techne/blob/main/docs/errors/internal-server-error.md",
         title: "Internal Server Error",
         status: 500,
       });

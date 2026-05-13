@@ -43,7 +43,7 @@ describe("HTTP exceptions", () => {
     expect(notFound.status).toBe(404);
     expect(notFound.headers.get("content-type")).toContain("application/problem+json");
     expect(await notFound.json()).toMatchObject({
-      type: "https://bnest.dev/errors/not-found",
+      type: "https://github.com/kaonashi-dev/techne/blob/main/docs/errors/not-found.md",
       title: "Not Found",
       status: 404,
       detail: "User #99 not found",
@@ -57,7 +57,7 @@ describe("HTTP exceptions", () => {
     expect(generic.status).toBe(500);
     const genericBody = await generic.json();
     expect(genericBody).toMatchObject({
-      type: "https://bnest.dev/errors/internal-server-error",
+      type: "https://github.com/kaonashi-dev/techne/blob/main/docs/errors/internal-server-error.md",
       title: "Internal Server Error",
       status: 500,
     });
