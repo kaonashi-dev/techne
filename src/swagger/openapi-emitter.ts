@@ -1,4 +1,4 @@
-import type { BnestApplication } from "../core/bnest-application";
+import type { TechneApplication } from "../core/techne-application";
 import type { DocumentBuilder } from "./document-builder";
 
 // ─── Public types ────────────────────────────────────────────────────────────
@@ -219,13 +219,13 @@ export function typeboxToOpenApi(schema: unknown): OpenApiSchema {
 
   // ─── Unknown kind ────────────────────────────────────────────────────────
   // Fall through with whatever JSON-Schema-shaped data TypeBox produced. We
-  // attach a `x-bnest-unknown-kind` marker so downstream tooling can spot the
+  // attach a `x-techne-unknown-kind` marker so downstream tooling can spot the
   // gap without us silently corrupting the spec.
   const fallback: OpenApiSchema = {};
   for (const key of Object.keys(node)) {
     fallback[key] = node[key] as unknown;
   }
-  if (kind) fallback["x-bnest-unknown-kind"] = kind;
+  if (kind) fallback["x-techne-unknown-kind"] = kind;
   return fallback;
 }
 
@@ -298,7 +298,7 @@ const PROBLEM_SCHEMA: OpenApiSchema = {
  * a generated operation without forking the emitter.
  */
 export function emitOpenApiDocument(
-  app: Pick<BnestApplication, "getRoutes">,
+  app: Pick<TechneApplication, "getRoutes">,
   builder?: DocumentBuilder,
 ): OpenApiDocument {
   const config = builder
@@ -362,7 +362,7 @@ export function emitOpenApiDocument(
   const doc: OpenApiDocument = {
     openapi: "3.1.0",
     info: {
-      title: config.title ?? "Bnest API",
+      title: config.title ?? "Techne API",
       version: config.version ?? "1.0.0",
       ...(config.description ? { description: config.description } : {}),
     },

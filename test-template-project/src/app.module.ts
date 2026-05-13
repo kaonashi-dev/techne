@@ -1,4 +1,4 @@
-import { Module } from "@kaonashi-dev/bnest/common";
+import { Module } from "@kaonashi-dev/techne/common";
 import { AppController } from "./app.controller";
 import { AppService } from "./app.service";
 

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { Controller } from "../src/decorators/controller.decorator";
 import { Get, Post } from "../src/decorators/routes.decorator";
 import { Module } from "../src/decorators/module.decorator";
-import { BnestFactory } from "../src/factory/bnest-factory";
+import { TechneFactory } from "../src/factory/techne-factory";
 import { Schema } from "../src/schema";
 import {
   ClientError,
@@ -93,7 +93,7 @@ describe("contract / createClient", () => {
 
   test("non-2xx with problem+json throws ClientError carrying the parsed problem", async () => {
     const problem = {
-      type: "https://bnest.dev/errors/not-found",
+      type: "https://github.com/kaonashi-dev/techne/blob/main/docs/errors/not-found.md",
       title: "Not Found",
       status: 404,
       detail: "User u404 does not exist",
@@ -213,11 +213,11 @@ describe("contract / generateRoutesType", () => {
     @Module({ controllers: [UsersController] })
     class AppModule {}
 
-    const app = await BnestFactory.create(AppModule, { logger: false });
+    const app = await TechneFactory.create(AppModule, { logger: false });
     const source = generateRoutesType(app);
 
     // File preamble and re-export hook.
-    expect(source).toContain(`import type { RouteHandler } from "@kaonashi-dev/bnest/contract"`);
+    expect(source).toContain(`import type { RouteHandler } from "@kaonashi-dev/techne/contract"`);
     expect(source).toContain("export type Routes = {");
 
     // Both routes are present, keyed by their full path.
@@ -249,7 +249,7 @@ describe("contract / generateRoutesType", () => {
     @Module({ controllers: [OrdersController] })
     class AppModule {}
 
-    const app = await BnestFactory.create(AppModule, { logger: false });
+    const app = await TechneFactory.create(AppModule, { logger: false });
     const source = generateRoutesType(app);
 
     expect(source).toContain(`"/orders/:orderId/items/:itemId"`);

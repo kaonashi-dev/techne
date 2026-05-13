@@ -27,7 +27,7 @@ interface CompiledCorsOptions {
 
 // Per-context-store flag used to dedupe inflight counter increment/decrement
 // without the cost of WeakSet add/has/delete on the `Request` object.
-const INFLIGHT_COUNTED_KEY = "__bnestInflightCounted";
+const INFLIGHT_COUNTED_KEY = "__techneInflightCounted";
 
 export class ElysiaAdapter {
   private app: Elysia;

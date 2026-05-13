@@ -2,7 +2,7 @@
  * Cold-start benchmark.
  *
  * Measures the wall-clock time from `bun` process start to the point where
- * a Bnest application is bootstrapped and capable of serving a request. We
+ * a Techne application is bootstrapped and capable of serving a request. We
  * vary the module count (N = 1, 10, 50) so the scaling behavior of the
  * scanner and container is visible.
  *
@@ -27,7 +27,7 @@ const DRIVER_PATH = join(import.meta.dir, "_cold-start-driver.ts");
 /** Driver source. Written once on first run; cached on disk to avoid `eval`. */
 const DRIVER_SOURCE = `
 import { Controller, Get, Injectable, Module } from "../src/common";
-import { BnestFactory } from "../src/core";
+import { TechneFactory } from "../src/core";
 
 const t0 = Bun.nanoseconds();
 
@@ -65,7 +65,7 @@ for (let i = 0; i < N; i++) {
 })
 class AppModule {}
 
-const app = await BnestFactory.create(AppModule, { logger: false });
+const app = await TechneFactory.create(AppModule, { logger: false });
 // Force a handle() to ensure the first request path is JITed too.
 await app.handle(new Request("http://localhost/ping"));
 

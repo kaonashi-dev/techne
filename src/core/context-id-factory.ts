@@ -2,7 +2,7 @@ export class ContextIdFactory {
   private static readonly requestIds = new WeakMap<object, symbol>();
 
   static create(): symbol {
-    return Symbol("bnest:context");
+    return Symbol("techne:context");
   }
 
   static getByRequest<T extends object>(request: T): symbol {

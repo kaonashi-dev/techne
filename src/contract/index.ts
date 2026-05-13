@@ -1,11 +1,11 @@
-// Public barrel for `@bnest/contract` — a typed RPC client + codegen for
-// Bnest. Two surfaces:
+// Public barrel for `@kaonashi-dev/techne/contract` — a typed RPC client + codegen for the
+// Techne. Two surfaces:
 //
-//   import { createClient } from "@kaonashi-dev/bnest/contract";
+//   import { createClient } from "@kaonashi-dev/techne/contract";
 //   const api = createClient<Routes>("http://localhost:3000");
 //
-//   // and the codegen, used by `bnest generate client`:
-//   import { generateRoutesType } from "@kaonashi-dev/bnest/contract";
+//   // and the codegen, used by `techne generate client`:
+//   import { generateRoutesType } from "@kaonashi-dev/techne/contract";
 
 export { createClient } from "./client";
 export { generateRoutesType, typeboxToTypeScript } from "./codegen";

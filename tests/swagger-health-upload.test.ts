@@ -3,7 +3,7 @@ import { Controller } from "../src/decorators/controller.decorator";
 import { Get, Post } from "../src/decorators/routes.decorator";
 import { Body, FileInterceptor, HealthCheck, UploadedFile, UseInterceptors } from "../src/common";
 import { Module } from "../src/decorators/module.decorator";
-import { BnestFactory } from "../src/factory/bnest-factory";
+import { TechneFactory } from "../src/factory/techne-factory";
 import { HealthCheckService } from "../src/health";
 import { DocumentBuilder, SwaggerModule } from "../src/swagger";
 
@@ -20,7 +20,7 @@ describe("swagger, health and upload", () => {
     @Module({ controllers: [UsersController] })
     class AppModule {}
 
-    const app = await BnestFactory.create(AppModule, { logger: false });
+    const app = await TechneFactory.create(AppModule, { logger: false });
     const document = SwaggerModule.createDocument(
       app,
       new DocumentBuilder().setTitle("Test API").setVersion("1.0.0").build(),
@@ -59,7 +59,7 @@ describe("swagger, health and upload", () => {
     @Module({ controllers: [OpsController], providers: [HealthCheckService] })
     class AppModule {}
 
-    const app = await BnestFactory.create(AppModule, { logger: false });
+    const app = await TechneFactory.create(AppModule, { logger: false });
 
     const upload = await app.handle(
       new Request("http://localhost/ops/upload", {

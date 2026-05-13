@@ -5,7 +5,7 @@ import * as path from "node:path";
 import { Inject } from "../src/decorators/inject.decorator";
 import { Injectable } from "../src/decorators/injectable.decorator";
 import { Module } from "../src/decorators/module.decorator";
-import { BnestFactory } from "../src/factory/bnest-factory";
+import { TechneFactory } from "../src/factory/techne-factory";
 import { ConfigModule, ConfigService, registerAs } from "../src/config";
 
 describe("ConfigModule", () => {
@@ -83,7 +83,7 @@ describe("ConfigModule", () => {
     })
     class AppModule {}
 
-    const app = await BnestFactory.createApplicationContext(AppModule, { logger: false });
+    const app = await TechneFactory.createApplicationContext(AppModule, { logger: false });
     const consumer = app.get<ConfigConsumer>(ConfigConsumer);
 
     expect(consumer.snapshot()).toEqual({

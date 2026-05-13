@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { Inject } from "../src/decorators/inject.decorator";
 import { Injectable } from "../src/decorators/injectable.decorator";
 import { Module } from "../src/decorators/module.decorator";
-import { BnestFactory } from "../src/factory/bnest-factory";
+import { TechneFactory } from "../src/factory/techne-factory";
 import {
   APP_CONFIG,
   ConfigModule,
@@ -160,7 +160,7 @@ describe("defineConfig", () => {
     })
     class AppModule {}
 
-    const app = await BnestFactory.createApplicationContext(AppModule, { logger: false });
+    const app = await TechneFactory.createApplicationContext(AppModule, { logger: false });
     const consumer = app.get<Consumer>(Consumer);
 
     expect(consumer.direct).toBe(config);

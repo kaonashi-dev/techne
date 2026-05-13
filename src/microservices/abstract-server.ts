@@ -1,6 +1,6 @@
 import type { MessageHandler } from "./types";
 
-export abstract class BnestMicroservice {
+export abstract class TechneMicroservice {
   protected handlers = new Map<string, MessageHandler>();
   protected eventHandlers = new Map<string, MessageHandler[]>();
 
@@ -17,3 +17,6 @@ export abstract class BnestMicroservice {
   abstract listen(): Promise<void>;
   abstract close(): Promise<void>;
 }
+
+/** @deprecated use TechneMicroservice */
+export { TechneMicroservice as BnestMicroservice };

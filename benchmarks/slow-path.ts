@@ -19,7 +19,7 @@ import {
   UseGuards,
   type CanActivate,
 } from "../src/common";
-import { BnestFactory } from "../src/core";
+import { TechneFactory } from "../src/core";
 import { emitResults, getDefaults, isQuick, runScenario, type ScenarioResult } from "./scenarios";
 
 @Injectable()
@@ -58,7 +58,7 @@ class SlowController {
 @Module({ controllers: [SlowController], providers: [SlowService, AllowAllGuard] })
 class SlowModule {}
 
-const bnestApp = await BnestFactory.create(SlowModule, { logger: false });
+const bnestApp = await TechneFactory.create(SlowModule, { logger: false });
 
 export async function runSlowPathBench(): Promise<ScenarioResult[]> {
   const opts = getDefaults(isQuick());
@@ -69,7 +69,7 @@ export async function runSlowPathBench(): Promise<ScenarioResult[]> {
 
   const out: ScenarioResult[] = [];
   for (const req of requests) {
-    out.push(await runScenario("Bnest (slow)", (r) => bnestApp.handle(r), req, opts));
+    out.push(await runScenario("Techne (slow)", (r) => bnestApp.handle(r), req, opts));
   }
   return out;
 }

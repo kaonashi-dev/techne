@@ -128,7 +128,7 @@ async function exists(filePath: string): Promise<boolean> {
 async function doctor() {
   let hasError = false;
 
-  console.log(`${ANSI.dim}Bnest doctor${ANSI.reset}\n`);
+  console.log(`${ANSI.dim}Techne doctor${ANSI.reset}\n`);
 
   // Bun version
   ok(`Bun ${Bun.version}`);
@@ -170,11 +170,13 @@ async function doctor() {
     hasError = true;
   }
 
-  // bnest.config.ts (informational)
-  if (await exists(path.join(process.cwd(), "bnest.config.ts"))) {
-    ok(`bnest.config.ts present`);
+  // techne.config.ts (informational; legacy bnest.config.ts also recognized)
+  if (await exists(path.join(process.cwd(), "techne.config.ts"))) {
+    ok(`techne.config.ts present`);
+  } else if (await exists(path.join(process.cwd(), "bnest.config.ts"))) {
+    warn(`bnest.config.ts present (deprecated — rename to techne.config.ts)`);
   } else {
-    warn(`bnest.config.ts not found (optional)`);
+    warn(`techne.config.ts not found (optional)`);
   }
 
   // .env
@@ -196,17 +198,17 @@ async function doctor() {
 
 function printHelp() {
   console.log(`
-Bnest CLI
+Techne CLI
 
 Usage:
-  bnest new <project-name>
-  bnest dev [--port N] [--inspect]
-  bnest start [--port N]
-  bnest test [pattern] [--watch] [--coverage]
-  bnest build|b [entry] [--out <file>] [--target <bun|node|browser>] [--minify]
-  bnest deploy --target docker [--out Dockerfile] [--port N] [--bun-version V] [--dry-run] [--force]
-  bnest doctor
-  bnest generate|g <type> <name>
+  technenew <project-name>
+  technedev [--port N] [--inspect]
+  technestart [--port N]
+  technetest [pattern] [--watch] [--coverage]
+  technebuild|b [entry] [--out <file>] [--target <bun|node|browser>] [--minify]
+  technedeploy --target docker [--out Dockerfile] [--port N] [--bun-version V] [--dry-run] [--force]
+  technedoctor
+  technegenerate|g <type> <name>
 
 Available generators:
   module
@@ -237,8 +239,16 @@ async function runGenerateClient() {
   const out = flagValue("--out") ?? "src/routes.generated.ts";
   const cwd = process.cwd();
 
-  // Find a bnest.config.{ts,js,mjs} so we know how to boot the user's app.
-  const CANDIDATES = ["bnest.config.ts", "bnest.config.js", "bnest.config.mjs"];
+  // Find a techne.config.{ts,js,mjs} so we know how to boot the user's app.
+  // Falls back to the deprecated bnest.config.* name through v0.4.x.
+  const CANDIDATES = [
+    "techne.config.ts",
+    "techne.config.js",
+    "techne.config.mjs",
+    "bnest.config.ts",
+    "bnest.config.js",
+    "bnest.config.mjs",
+  ];
   let configPath: string | undefined;
   for (const name of CANDIDATES) {
     const candidate = path.join(cwd, name);
@@ -249,7 +259,7 @@ async function runGenerateClient() {
   }
   if (!configPath) {
     fail(
-      `bnest.config.ts not found in ${cwd}. Create one with \`export default defineBnestConfig({ module: AppModule })\` and re-run.`,
+      `techne.config.ts not found in ${cwd}. Create one with \`export default defineTechneConfig({ module: AppModule })\` and re-run.`,
     );
     process.exit(1);
   }
@@ -258,15 +268,15 @@ async function runGenerateClient() {
     const cfgMod = await import(configPath);
     const config = cfgMod?.default;
     if (!config || !config.module) {
-      fail(`bnest.config.ts must export a default config with a \`module\` field.`);
+      fail(`techne.config.ts must export a default config with a \`module\` field.`);
       process.exit(1);
     }
 
     // Lazy-import to keep CLI startup fast for unrelated commands.
-    const { BnestFactory } = await import("../factory/bnest-factory");
+    const { TechneFactory } = await import("../factory/techne-factory");
     const { generateRoutesType } = await import("../contract/codegen");
 
-    const app = await BnestFactory.create(config.module, { ...config, logger: false });
+    const app = await TechneFactory.create(config.module, { ...config, logger: false });
     const source = generateRoutesType(app);
 
     const outPath = path.isAbsolute(out) ? out : path.join(cwd, out);
@@ -286,7 +296,7 @@ async function runDeploy() {
   const target = flagValue("--target");
   if (!target || target !== "docker") {
     console.error(
-      `bnest deploy: only --target docker is supported for now (planned: fly, railway, cloudflare, bun-vm)`,
+      `techne deploy: only --target docker is supported for now (planned: fly, railway, cloudflare, bun-vm)`,
     );
     process.exit(1);
   }
@@ -298,7 +308,7 @@ async function runDockerGenerate(_opts: { requireTarget: boolean }) {
   const portRaw = flagValue("--port");
   const port = portRaw ? Number(portRaw) : 3000;
   if (!Number.isFinite(port) || port <= 0) {
-    console.error(`bnest: invalid --port value "${portRaw}"`);
+    console.error(`techne: invalid --port value "${portRaw}"`);
     process.exit(1);
   }
   const bunVersion = flagValue("--bun-version") ?? "1";
@@ -331,7 +341,7 @@ async function runDockerGenerate(_opts: { requireTarget: boolean }) {
     console.log(`  docker compose up\n`);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error(`bnest: ${message}`);
+    console.error(`techne: ${message}`);
     process.exit(1);
   }
 }
@@ -340,7 +350,7 @@ async function main() {
   if (command === "new") {
     const projectName = args[1];
     if (!projectName) {
-      console.error("Please specify a project name: bnest new <project-name>");
+      console.error("Please specify a project name: techne new <project-name>");
       process.exit(1);
     }
     await createProject(projectName);
@@ -377,7 +387,7 @@ async function main() {
     const type = args[1];
 
     if (!type) {
-      console.error("Usage: bnest generate <type> <name>");
+      console.error("Usage: techne generate <type> <name>");
       process.exit(1);
     }
 
@@ -393,7 +403,7 @@ async function main() {
 
     const name = args[2];
     if (!name) {
-      console.error("Usage: bnest generate <type> <name>");
+      console.error("Usage: techne generate <type> <name>");
       process.exit(1);
     }
 

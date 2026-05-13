@@ -4,7 +4,7 @@ import { Get } from "../src/decorators/routes.decorator";
 import { Module } from "../src/decorators/module.decorator";
 import { UseGuards } from "../src/decorators/use-guards.decorator";
 import { Injectable } from "../src/decorators/injectable.decorator";
-import { BnestFactory } from "../src/factory/bnest-factory";
+import { TechneFactory } from "../src/factory/techne-factory";
 
 describe("Cost-tagged routes", () => {
   test("route with no enhancers and no request-scoped deps responds 200", async () => {
@@ -27,7 +27,7 @@ describe("Cost-tagged routes", () => {
     @Module({ controllers: [GreetController], providers: [GreetService] })
     class AppModule {}
 
-    const app = await BnestFactory.create(AppModule, { logger: false });
+    const app = await TechneFactory.create(AppModule, { logger: false });
     const res = await app.handle(new Request("http://localhost/g/hello"));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ msg: "hello" });
@@ -63,7 +63,7 @@ describe("Cost-tagged routes", () => {
     })
     class AppModule {}
 
-    const app = await BnestFactory.create(AppModule, { logger: false });
+    const app = await TechneFactory.create(AppModule, { logger: false });
 
     for (let i = 0; i < 3; i++) {
       const res = await app.handle(new Request("http://localhost/counted"));
@@ -100,7 +100,7 @@ describe("Cost-tagged routes", () => {
     @Module({ controllers: [DenyController], providers: [DenyGuard] })
     class AppModule {}
 
-    const app = await BnestFactory.create(AppModule, { logger: false });
+    const app = await TechneFactory.create(AppModule, { logger: false });
 
     for (let i = 0; i < 3; i++) {
       const res = await app.handle(new Request("http://localhost/deny"));

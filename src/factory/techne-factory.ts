@@ -1,5 +1,5 @@
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from "../common/constants";
-import { BnestApplicationContext } from "../core/application-context";
+import { TechneApplicationContext } from "../core/application-context";
 import type { CorsOptions, GlobalPrefixOptions, VersioningOptions } from "../core/http-options";
 import { Scanner } from "../core/scanner";
 import { Container } from "../core/container";
@@ -7,35 +7,62 @@ import { RoutesResolver } from "../core/router/routes-resolver";
 import { ElysiaAdapter } from "../platform/elysia-adapter";
 import { Logger } from "../services/logger.service";
 import { BusRegistry } from "../cqrs/bus";
-import { BnestApplication } from "../core/bnest-application";
+import { TechneApplication } from "../core/techne-application";
 import { MicroservicesAdapter } from "../microservices/adapter";
 import type { MicroserviceOptions } from "../microservices/types";
 import { MqRegistry } from "../mq/registry";
 import { MQ_DRIVER } from "../mq/tokens";
 import type { CanActivate } from "../interfaces/can-activate.interface";
-import type { BnestConfig } from "../core/define-bnest-config";
-
-const CONFIG_FILE_CANDIDATES = ["bnest.config.ts", "bnest.config.js", "bnest.config.mjs"] as const;
-const cwdCache = new Map<string, BnestConfig | null>();
+import type { TechneConfig } from "../core/define-techne-config";
 
 /**
- * Loads `bnest.config.{ts,js,mjs}` from `process.cwd()` if present.
- * Results are cached per cwd; tests that swap directories between cases
- * should call {@link __resetBnestConfigCache}.
+ * Config file lookup order: `techne.config.{ts,js,mjs}` is canonical;
+ * `bnest.config.{ts,js,mjs}` is a deprecated fallback retained through v0.4.x
+ * and removed in v0.5+. Matching the legacy name emits a one-time warning.
  */
-export async function loadBnestConfigFile(): Promise<BnestConfig | null> {
+const TECHNE_CONFIG_CANDIDATES = ["techne.config.ts", "techne.config.js", "techne.config.mjs"] as const;
+const LEGACY_BNEST_CONFIG_CANDIDATES = ["bnest.config.ts", "bnest.config.js", "bnest.config.mjs"] as const;
+const cwdCache = new Map<string, TechneConfig | null>();
+let warnedLegacyConfig = false;
+
+/**
+ * Loads the framework config from `process.cwd()` if present.
+ * Tries `techne.config.{ts,js,mjs}` first, then the deprecated
+ * `bnest.config.{ts,js,mjs}`. Results are cached per cwd; tests that swap
+ * directories between cases should call {@link __resetTechneConfigCache}.
+ */
+export async function loadTechneConfigFile(): Promise<TechneConfig | null> {
   const cwd = process.cwd();
   if (cwdCache.has(cwd)) return cwdCache.get(cwd) ?? null;
-  for (const name of CONFIG_FILE_CANDIDATES) {
+  for (const name of TECHNE_CONFIG_CANDIDATES) {
     const filePath = `${cwd}/${name}`;
     if (!(await Bun.file(filePath).exists())) continue;
     const mod = await import(filePath);
     if (!mod || mod.default === undefined) {
       throw new Error(
-        `Found ${name} but it has no default export. Use \`export default defineBnestConfig({...})\`.`,
+        `Found ${name} but it has no default export. Use \`export default defineTechneConfig({...})\`.`,
       );
     }
-    const value = mod.default as BnestConfig;
+    const value = mod.default as TechneConfig;
+    cwdCache.set(cwd, value);
+    return value;
+  }
+  for (const name of LEGACY_BNEST_CONFIG_CANDIDATES) {
+    const filePath = `${cwd}/${name}`;
+    if (!(await Bun.file(filePath).exists())) continue;
+    if (!warnedLegacyConfig) {
+      warnedLegacyConfig = true;
+      new Logger("TechneFactory").warn(
+        `Found ${name}; rename to ${name.replace("bnest.", "techne.")} (legacy name removed in v0.5).`,
+      );
+    }
+    const mod = await import(filePath);
+    if (!mod || mod.default === undefined) {
+      throw new Error(
+        `Found ${name} but it has no default export. Use \`export default defineTechneConfig({...})\`.`,
+      );
+    }
+    const value = mod.default as TechneConfig;
     cwdCache.set(cwd, value);
     return value;
   }
@@ -44,17 +71,19 @@ export async function loadBnestConfigFile(): Promise<BnestConfig | null> {
 }
 
 /**
- * Test/internal hook: clears the cached `bnest.config.ts` resolution so the
- * next call re-reads the file. Tests that swap `cwd` between cases need this.
+ * Test/internal hook: clears the cached config resolution so the next call
+ * re-reads the file. Tests that swap `cwd` between cases need this. Also
+ * resets the one-time legacy-config warning latch.
  */
-export function __resetBnestConfigCache() {
+export function __resetTechneConfigCache() {
   cwdCache.clear();
+  warnedLegacyConfig = false;
 }
 
 function mergeConfig(
-  base: BnestConfig | null,
-  overrides?: BnestApplicationOptions,
-): BnestApplicationOptions & { module?: any; port?: number; host?: string } {
+  base: TechneConfig | null,
+  overrides?: TechneApplicationOptions,
+): TechneApplicationOptions & { module?: any; port?: number; host?: string } {
   if (!base && !overrides) return {};
   if (!base) return { ...(overrides ?? {}) };
   if (!overrides) return { ...base };
@@ -69,14 +98,14 @@ function mergeConfig(
   return merged;
 }
 
-export interface BnestShutdownOptions {
+export interface TechneShutdownOptions {
   /** ms to wait for in-flight requests before forcing shutdown. Default: 10_000 */
   gracePeriod?: number;
   /** Signals that should trigger graceful shutdown. Default: ["SIGTERM", "SIGINT"] */
   signals?: ("SIGTERM" | "SIGINT" | "SIGHUP")[];
 }
 
-export interface BnestHealthOptions {
+export interface TechneHealthOptions {
   /** Enable auto-registered health endpoints. Default: true */
   enabled?: boolean;
   /** Path for liveness probe (always 200 once the process is up). Default: "/healthz" */
@@ -87,14 +116,14 @@ export interface BnestHealthOptions {
   checks?: Array<() => Promise<{ healthy: boolean; name: string; detail?: any }>>;
 }
 
-export interface BnestApplicationOptions {
+export interface TechneApplicationOptions {
   logger?: boolean | string[];
   container?: Container;
   /**
    * Guards to apply globally to every route. Because guards are wired into
    * Elysia's `beforeHandle` at registration time, providing them here is the
    * reliable way to ensure they apply to every route. Calling
-   * `app.useGlobalGuards()` after `BnestFactory.create()` only applies to
+   * `app.useGlobalGuards()` after `TechneFactory.create()` only applies to
    * routes registered after the call.
    */
   globalGuards?: (CanActivate | Function)[];
@@ -107,37 +136,37 @@ export interface BnestApplicationOptions {
    * adapter begins refusing new requests with HTTP 503 and waits up to
    * `gracePeriod` ms for in-flight work to settle before stopping.
    */
-  shutdown?: BnestShutdownOptions;
+  shutdown?: TechneShutdownOptions;
   /**
    * Auto-registered health endpoints. Disable by setting `enabled: false`.
    * Liveness returns 200 once the process is up; readiness returns 200 only
    * after `onApplicationBootstrap` completes and every configured check
    * reports `healthy: true`.
    */
-  health?: BnestHealthOptions;
+  health?: TechneHealthOptions;
 }
 
-export class BnestFactory {
-  public static async create(): Promise<BnestApplication>;
-  public static async create(module: any): Promise<BnestApplication>;
+export class TechneFactory {
+  public static async create(): Promise<TechneApplication>;
+  public static async create(module: any): Promise<TechneApplication>;
   public static async create(
     module: any,
-    options: BnestApplicationOptions,
-  ): Promise<BnestApplication>;
+    options: TechneApplicationOptions,
+  ): Promise<TechneApplication>;
   public static async create(
     module?: any,
-    options?: BnestApplicationOptions,
-  ): Promise<BnestApplication> {
-    const fileConfig = await loadBnestConfigFile();
+    options?: TechneApplicationOptions,
+  ): Promise<TechneApplication> {
+    const fileConfig = await loadTechneConfigFile();
     const merged = mergeConfig(fileConfig, options);
     const resolvedModule = module ?? merged.module ?? fileConfig?.module;
     if (!resolvedModule) {
       throw new Error(
-        "BnestFactory.create(): no module supplied and no `module` declared in bnest.config.ts.",
+        "TechneFactory.create(): no module supplied and no `module` declared in bnest.config.ts.",
       );
     }
     // Strip bootstrap-only fields from the options passed to the rest of the
-    // factory — they aren't part of `BnestApplicationOptions`.
+    // factory — they aren't part of `TechneApplicationOptions`.
     const { module: _m, port: _p, host: _h, ...effectiveOptions } = merged as any;
     options = effectiveOptions;
     module = resolvedModule;
@@ -145,7 +174,7 @@ export class BnestFactory {
     const loggerEnabled = options?.logger !== false;
     Logger.setEnabled(loggerEnabled);
 
-    const logger = new Logger("BnestFactory");
+    const logger = new Logger("TechneFactory");
     logger.log("Starting application initialization...");
 
     const container = options?.container || new Container();
@@ -164,7 +193,7 @@ export class BnestFactory {
 
     const adapter = new ElysiaAdapter({ logger: loggerEnabled, container });
     const routesResolver = new RoutesResolver(scanner);
-    const app = new BnestApplication(
+    const app = new TechneApplication(
       adapter,
       scanner,
       container,
@@ -240,8 +269,8 @@ export class BnestFactory {
 
   public static async createApplicationContext(
     module: any,
-    options?: Pick<BnestApplicationOptions, "container" | "logger">,
-  ): Promise<BnestApplicationContext> {
+    options?: Pick<TechneApplicationOptions, "container" | "logger">,
+  ): Promise<TechneApplicationContext> {
     const loggerEnabled = options?.logger !== false;
     Logger.setEnabled(loggerEnabled);
 
@@ -260,7 +289,7 @@ export class BnestFactory {
       mqRegistry.registerFromClasses([...scanner.getProviders(), ...scanner.getControllers()]);
     }
 
-    return new BnestApplicationContext(scanner, container, mqRegistry).init();
+    return new TechneApplicationContext(scanner, container, mqRegistry).init();
   }
 
   private static normalizeGlobalProvider<T>(container: Container, token: any): T[] {
@@ -285,3 +314,17 @@ export class BnestFactory {
     return Array.isArray(resolved) ? resolved : [resolved];
   }
 }
+
+// ─── Deprecated Bnest aliases (kept through v0.4.x; removed in v0.5+) ───
+/** @deprecated use TechneFactory */
+export { TechneFactory as BnestFactory };
+/** @deprecated use TechneApplicationOptions */
+export type BnestApplicationOptions = TechneApplicationOptions;
+/** @deprecated use TechneHealthOptions */
+export type BnestHealthOptions = TechneHealthOptions;
+/** @deprecated use TechneShutdownOptions */
+export type BnestShutdownOptions = TechneShutdownOptions;
+/** @deprecated use loadTechneConfigFile */
+export const loadBnestConfigFile = loadTechneConfigFile;
+/** @deprecated use __resetTechneConfigCache */
+export const __resetBnestConfigCache = __resetTechneConfigCache;

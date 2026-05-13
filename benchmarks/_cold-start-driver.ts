@@ -1,6 +1,6 @@
 
 import { Controller, Get, Injectable, Module } from "../src/common";
-import { BnestFactory } from "../src/core";
+import { TechneFactory } from "../src/core";
 
 const t0 = Bun.nanoseconds();
 
@@ -38,7 +38,7 @@ for (let i = 0; i < N; i++) {
 })
 class AppModule {}
 
-const app = await BnestFactory.create(AppModule, { logger: false });
+const app = await TechneFactory.create(AppModule, { logger: false });
 // Force a handle() to ensure the first request path is JITed too.
 await app.handle(new Request("http://localhost/ping"));
 

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { BnestFactory } from "../src/factory/bnest-factory";
+import { TechneFactory } from "../src/factory/techne-factory";
 import { Controller } from "../src/decorators/controller.decorator";
 import { Get } from "../src/decorators/routes.decorator";
 import { Module } from "../src/decorators/module.decorator";
@@ -18,7 +18,7 @@ describe("RFC 7807 error contract", () => {
     @Module({ controllers: [UsersController] })
     class AppModule {}
 
-    const app = await BnestFactory.create(AppModule, { logger: false });
+    const app = await TechneFactory.create(AppModule, { logger: false });
 
     const res = await app.handle(new Request("http://localhost/users/99"));
     expect(res.status).toBe(404);
@@ -26,7 +26,7 @@ describe("RFC 7807 error contract", () => {
 
     const body = await res.json();
     expect(body).toMatchObject({
-      type: "https://bnest.dev/errors/not-found",
+      type: "https://github.com/kaonashi-dev/techne/blob/main/docs/errors/not-found.md",
       title: "Not Found",
       status: 404,
       detail: "User #99 not found",
@@ -61,12 +61,12 @@ describe("RFC 7807 error contract", () => {
       @Module({ controllers: [BoomController] })
       class AppModule {}
 
-      const app = await BnestFactory.create(AppModule, { logger: false });
+      const app = await TechneFactory.create(AppModule, { logger: false });
       const res = await app.handle(new Request("http://localhost/boom"));
       expect(res.status).toBe(500);
       const body = await res.json();
       expect(body).toMatchObject({
-        type: "https://bnest.dev/errors/internal-server-error",
+        type: "https://github.com/kaonashi-dev/techne/blob/main/docs/errors/internal-server-error.md",
         title: "Internal Server Error",
         status: 500,
       });
@@ -87,7 +87,7 @@ describe("RFC 7807 error contract", () => {
       @Module({ controllers: [BoomDevController] })
       class AppModule {}
 
-      const app = await BnestFactory.create(AppModule, { logger: false });
+      const app = await TechneFactory.create(AppModule, { logger: false });
       const res = await app.handle(new Request("http://localhost/boom-dev"));
       expect(res.status).toBe(500);
       const body = await res.json();
@@ -107,7 +107,7 @@ describe("RFC 7807 error contract", () => {
     @Module({ controllers: [EchoController] })
     class AppModule {}
 
-    const app = await BnestFactory.create(AppModule, { logger: false });
+    const app = await TechneFactory.create(AppModule, { logger: false });
 
     const inbound = "test-request-id-1234";
     const res = await app.handle(
@@ -132,7 +132,7 @@ describe("RFC 7807 error contract", () => {
     @Module({ controllers: [GenController] })
     class AppModule {}
 
-    const app = await BnestFactory.create(AppModule, { logger: false });
+    const app = await TechneFactory.create(AppModule, { logger: false });
 
     const res = await app.handle(new Request("http://localhost/gen"));
     expect(res.status).toBe(200);
@@ -157,7 +157,7 @@ describe("RFC 7807 error contract", () => {
       @Module({ controllers: [ThrowStringController] })
       class AppModule {}
 
-      const app = await BnestFactory.create(AppModule, { logger: false });
+      const app = await TechneFactory.create(AppModule, { logger: false });
       const res = await app.handle(new Request("http://localhost/throw-string"));
       expect(res.status).toBe(500);
       const body = await res.json();

@@ -1,5 +1,5 @@
 /**
- * HTTP Benchmark — Raw Elysia vs Bnest.
+ * HTTP Benchmark — Raw Elysia vs Techne.
  *
  * Methodology fixes vs the original:
  *  - Concurrent batches of 100 issued via `Promise.all` instead of an awaited
@@ -20,7 +20,7 @@
 
 import { Elysia } from "elysia";
 import { Controller, Get, Injectable, Module, Param } from "../src/common";
-import { BnestFactory } from "../src/core";
+import { TechneFactory } from "../src/core";
 import {
   emitResults,
   getDefaults,
@@ -36,7 +36,7 @@ const elysiaApp = new Elysia()
   .get("/users", () => [{ id: 1, name: "Alice" }])
   .get("/users/:id", ({ params }) => ({ id: params.id, name: "Alice" }));
 
-// ─── Bnest (the framework under test) ──────────────────────────────────────
+// ─── Techne (the framework under test) ──────────────────────────────────────
 
 @Injectable()
 class UserService {
@@ -66,7 +66,7 @@ class UserController {
 @Module({ controllers: [UserController], providers: [UserService] })
 class AppModule {}
 
-const bnestApp = await BnestFactory.create(AppModule, { logger: false });
+const bnestApp = await TechneFactory.create(AppModule, { logger: false });
 
 // ─── Run ───────────────────────────────────────────────────────────────────
 
@@ -82,7 +82,7 @@ export async function runHttpBench(): Promise<ScenarioResult[]> {
     results.push(await runScenario("Raw Elysia", (r) => elysiaApp.handle(r), req, opts));
   }
   for (const req of requests) {
-    results.push(await runScenario("Bnest", (r) => bnestApp.handle(r), req, opts));
+    results.push(await runScenario("Techne", (r) => bnestApp.handle(r), req, opts));
   }
   return results;
 }
