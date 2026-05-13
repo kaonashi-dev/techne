@@ -10,7 +10,7 @@ describe("CLI project generator", () => {
 
   beforeEach(async () => {
     originalCwd = process.cwd();
-    tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "bnest-cli-"));
+    tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "techne-cli-"));
     process.chdir(tempRoot);
   });
 
@@ -36,10 +36,10 @@ describe("CLI project generator", () => {
     );
     const appService = await fs.readFile(path.join(projectDir, "src", "app.service.ts"), "utf8");
     const mainFile = await fs.readFile(path.join(projectDir, "src", "main.ts"), "utf8");
-    const bnestConfig = await fs.readFile(path.join(projectDir, "bnest.config.ts"), "utf8");
+    const techneConfig = await fs.readFile(path.join(projectDir, "techne.config.ts"), "utf8");
     const gitignore = await fs.readFile(path.join(projectDir, ".gitignore"), "utf8");
 
-    expect(packageJson.dependencies["@kaonashi-dev/bnest"]).toBe("latest");
+    expect(packageJson.dependencies["@kaonashi-dev/techne"]).toBe("latest");
     expect(packageJson.scripts.build).toContain("bun build src/main.ts");
     expect(packageJson.scripts.check).toBe("bun run lint && bun run format:check");
     expect(packageJson.devDependencies.oxlint).toBe("^1.56.0");
@@ -49,16 +49,16 @@ describe("CLI project generator", () => {
     expect(oxfmt.ignorePatterns).toEqual(["*.md", "*.json", ".*.json"]);
     expect(appModule).toContain("AppController");
     expect(appModule).toContain("AppService");
-    expect(appModule).toContain("@kaonashi-dev/bnest/common");
+    expect(appModule).toContain("@kaonashi-dev/techne/common");
     expect(appController).toContain('@Controller("/")');
-    expect(appController).toContain("@kaonashi-dev/bnest/common");
-    expect(appService).toContain("Hello from Bnest!");
-    expect(appService).toContain("@kaonashi-dev/bnest/common");
-    expect(mainFile).toContain("@kaonashi-dev/bnest/core");
+    expect(appController).toContain("@kaonashi-dev/techne/common");
+    expect(appService).toContain("Hello from Techne!");
+    expect(appService).toContain("@kaonashi-dev/techne/common");
+    expect(mainFile).toContain("@kaonashi-dev/techne/core");
     expect(mainFile).toContain("bootstrap");
-    expect(bnestConfig).toContain("defineTechneConfig");
-    expect(bnestConfig).toContain("module: AppModule");
-    expect(bnestConfig).toContain("Number(Bun.env.PORT ?? 3000)");
+    expect(techneConfig).toContain("defineTechneConfig");
+    expect(techneConfig).toContain("module: AppModule");
+    expect(techneConfig).toContain("Number(Bun.env.PORT ?? 3000)");
     expect(gitignore).toContain("node_modules");
     expect(gitignore).toContain("dist");
   });

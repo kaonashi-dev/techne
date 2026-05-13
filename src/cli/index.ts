@@ -128,7 +128,7 @@ async function exists(filePath: string): Promise<boolean> {
 async function doctor() {
   let hasError = false;
 
-  console.log(`${ANSI.dim}Bnest doctor${ANSI.reset}\n`);
+  console.log(`${ANSI.dim}Techne doctor${ANSI.reset}\n`);
 
   // Bun version
   ok(`Bun ${Bun.version}`);
@@ -198,17 +198,17 @@ async function doctor() {
 
 function printHelp() {
   console.log(`
-Bnest CLI
+Techne CLI
 
 Usage:
-  bnest new <project-name>
-  bnest dev [--port N] [--inspect]
-  bnest start [--port N]
-  bnest test [pattern] [--watch] [--coverage]
-  bnest build|b [entry] [--out <file>] [--target <bun|node|browser>] [--minify]
-  bnest deploy --target docker [--out Dockerfile] [--port N] [--bun-version V] [--dry-run] [--force]
-  bnest doctor
-  bnest generate|g <type> <name>
+  technenew <project-name>
+  technedev [--port N] [--inspect]
+  technestart [--port N]
+  technetest [pattern] [--watch] [--coverage]
+  technebuild|b [entry] [--out <file>] [--target <bun|node|browser>] [--minify]
+  technedeploy --target docker [--out Dockerfile] [--port N] [--bun-version V] [--dry-run] [--force]
+  technedoctor
+  technegenerate|g <type> <name>
 
 Available generators:
   module
@@ -296,7 +296,7 @@ async function runDeploy() {
   const target = flagValue("--target");
   if (!target || target !== "docker") {
     console.error(
-      `bnest deploy: only --target docker is supported for now (planned: fly, railway, cloudflare, bun-vm)`,
+      `techne deploy: only --target docker is supported for now (planned: fly, railway, cloudflare, bun-vm)`,
     );
     process.exit(1);
   }
@@ -308,7 +308,7 @@ async function runDockerGenerate(_opts: { requireTarget: boolean }) {
   const portRaw = flagValue("--port");
   const port = portRaw ? Number(portRaw) : 3000;
   if (!Number.isFinite(port) || port <= 0) {
-    console.error(`bnest: invalid --port value "${portRaw}"`);
+    console.error(`techne: invalid --port value "${portRaw}"`);
     process.exit(1);
   }
   const bunVersion = flagValue("--bun-version") ?? "1";
@@ -341,7 +341,7 @@ async function runDockerGenerate(_opts: { requireTarget: boolean }) {
     console.log(`  docker compose up\n`);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error(`bnest: ${message}`);
+    console.error(`techne: ${message}`);
     process.exit(1);
   }
 }
@@ -350,7 +350,7 @@ async function main() {
   if (command === "new") {
     const projectName = args[1];
     if (!projectName) {
-      console.error("Please specify a project name: bnest new <project-name>");
+      console.error("Please specify a project name: techne new <project-name>");
       process.exit(1);
     }
     await createProject(projectName);
@@ -387,7 +387,7 @@ async function main() {
     const type = args[1];
 
     if (!type) {
-      console.error("Usage: bnest generate <type> <name>");
+      console.error("Usage: techne generate <type> <name>");
       process.exit(1);
     }
 
@@ -403,7 +403,7 @@ async function main() {
 
     const name = args[2];
     if (!name) {
-      console.error("Usage: bnest generate <type> <name>");
+      console.error("Usage: techne generate <type> <name>");
       process.exit(1);
     }
 
