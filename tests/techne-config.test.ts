@@ -41,6 +41,10 @@ class DenyGuard implements CanActivate {
 }
 
 async function writeConfig(dir: string, contents: string) {
+  await fs.writeFile(path.join(dir, "techne.config.ts"), contents);
+}
+
+async function writeLegacyBnestConfig(dir: string, contents: string) {
   await fs.writeFile(path.join(dir, "bnest.config.ts"), contents);
 }
 
@@ -51,13 +55,13 @@ describe("defineTechneConfig", () => {
   });
 });
 
-describe("TechneFactory.create + bnest.config.ts", () => {
+describe("TechneFactory.create + techne.config.ts", () => {
   let originalCwd: string;
   let tempRoot: string;
 
   beforeEach(async () => {
     originalCwd = process.cwd();
-    tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "bnest-config-"));
+    tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "techne-config-"));
     process.chdir(tempRoot);
     __resetTechneConfigCache();
   });
@@ -68,7 +72,7 @@ describe("TechneFactory.create + bnest.config.ts", () => {
     __resetTechneConfigCache();
   });
 
-  test("uses cors / globalPrefix from a bnest.config.ts in cwd", async () => {
+  test("uses cors / globalPrefix from a techne.config.ts in cwd", async () => {
     // Reference symbols by re-importing the module under the test's cwd. The
     // simplest path is to write a config file that imports AppModule from a
     // local module we also write. To keep this self-contained we instead set
@@ -175,7 +179,7 @@ export default { module: AppModule, logger: false };\n`,
 
   test("throws when config file exists but has no default export", async () => {
     await fs.writeFile(
-      path.join(tempRoot, "bnest.config.ts"),
+      path.join(tempRoot, "techne.config.ts"),
       `export const cfg = { logger: false };\n`,
     );
     __resetTechneConfigCache();
@@ -187,6 +191,29 @@ export default { module: AppModule, logger: false };\n`,
     const app = await bnest(AppModule, { logger: false });
     const res = await app.handle(new Request("http://localhost/via-bnest/users"));
     expect(res.status).toBe(200);
+  });
+
+  test("legacy bnest.config.ts still loads as a deprecated fallback", async () => {
+    // Regression net: through v0.4.x users can keep the old filename. The
+    // loader prefers techne.config.ts when both exist; this test only writes
+    // the legacy name and verifies the values still flow through.
+    await writeLegacyBnestConfig(
+      tempRoot,
+      `export default { globalPrefix: "legacy" };\n`,
+    );
+    const app = await TechneFactory.create(AppModule, { logger: false });
+    const res = await app.handle(new Request("http://localhost/legacy/users"));
+    expect(res.status).toBe(200);
+  });
+
+  test("techne.config.ts wins when both filenames are present", async () => {
+    await writeConfig(tempRoot, `export default { globalPrefix: "winner" };\n`);
+    await writeLegacyBnestConfig(tempRoot, `export default { globalPrefix: "loser" };\n`);
+    const app = await TechneFactory.create(AppModule, { logger: false });
+    const ok = await app.handle(new Request("http://localhost/winner/users"));
+    expect(ok.status).toBe(200);
+    const miss = await app.handle(new Request("http://localhost/loser/users"));
+    expect(miss.status).toBe(404);
   });
 
   test("bootstrap() listens on the configured port and respects Bun.env.PORT", async () => {
@@ -203,7 +230,7 @@ export default { module: AppModule, logger: false };\n`,
 
     // Now verify Bun.env.PORT wins over the config when no explicit port is
     // given via options. We have to do this in a fresh dir because cache.
-    await fs.rm(path.join(tempRoot, "bnest.config.ts"), { force: true });
+    await fs.rm(path.join(tempRoot, "techne.config.ts"), { force: true });
     await writeConfig(tempRoot, `export default { logger: false };\n`);
     __resetTechneConfigCache();
     const prevPort = Bun.env.PORT;

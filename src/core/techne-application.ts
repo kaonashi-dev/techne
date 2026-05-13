@@ -68,7 +68,7 @@ function warnDeprecatedSetter(method: string) {
   if (deprecationWarned.has(method)) return;
   deprecationWarned.add(method);
   new Logger("TechneApplication").warn(
-    `${method}() is deprecated: declare this in bnest.config.ts instead. Will be removed in v1.0.`,
+    `${method}() is deprecated: declare this in techne.config.ts instead. Will be removed in v0.5+.`,
   );
 }
 

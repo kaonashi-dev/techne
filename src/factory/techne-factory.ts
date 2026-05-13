@@ -15,20 +15,47 @@ import { MQ_DRIVER } from "../mq/tokens";
 import type { CanActivate } from "../interfaces/can-activate.interface";
 import type { TechneConfig } from "../core/define-techne-config";
 
-const CONFIG_FILE_CANDIDATES = ["bnest.config.ts", "bnest.config.js", "bnest.config.mjs"] as const;
+/**
+ * Config file lookup order: `techne.config.{ts,js,mjs}` is canonical;
+ * `bnest.config.{ts,js,mjs}` is a deprecated fallback retained through v0.4.x
+ * and removed in v0.5+. Matching the legacy name emits a one-time warning.
+ */
+const TECHNE_CONFIG_CANDIDATES = ["techne.config.ts", "techne.config.js", "techne.config.mjs"] as const;
+const LEGACY_BNEST_CONFIG_CANDIDATES = ["bnest.config.ts", "bnest.config.js", "bnest.config.mjs"] as const;
 const cwdCache = new Map<string, TechneConfig | null>();
+let warnedLegacyConfig = false;
 
 /**
- * Loads `bnest.config.{ts,js,mjs}` from `process.cwd()` if present.
- * Results are cached per cwd; tests that swap directories between cases
- * should call {@link __resetTechneConfigCache}.
+ * Loads the framework config from `process.cwd()` if present.
+ * Tries `techne.config.{ts,js,mjs}` first, then the deprecated
+ * `bnest.config.{ts,js,mjs}`. Results are cached per cwd; tests that swap
+ * directories between cases should call {@link __resetTechneConfigCache}.
  */
 export async function loadTechneConfigFile(): Promise<TechneConfig | null> {
   const cwd = process.cwd();
   if (cwdCache.has(cwd)) return cwdCache.get(cwd) ?? null;
-  for (const name of CONFIG_FILE_CANDIDATES) {
+  for (const name of TECHNE_CONFIG_CANDIDATES) {
     const filePath = `${cwd}/${name}`;
     if (!(await Bun.file(filePath).exists())) continue;
+    const mod = await import(filePath);
+    if (!mod || mod.default === undefined) {
+      throw new Error(
+        `Found ${name} but it has no default export. Use \`export default defineTechneConfig({...})\`.`,
+      );
+    }
+    const value = mod.default as TechneConfig;
+    cwdCache.set(cwd, value);
+    return value;
+  }
+  for (const name of LEGACY_BNEST_CONFIG_CANDIDATES) {
+    const filePath = `${cwd}/${name}`;
+    if (!(await Bun.file(filePath).exists())) continue;
+    if (!warnedLegacyConfig) {
+      warnedLegacyConfig = true;
+      new Logger("TechneFactory").warn(
+        `Found ${name}; rename to ${name.replace("bnest.", "techne.")} (legacy name removed in v0.5).`,
+      );
+    }
     const mod = await import(filePath);
     if (!mod || mod.default === undefined) {
       throw new Error(
@@ -44,11 +71,13 @@ export async function loadTechneConfigFile(): Promise<TechneConfig | null> {
 }
 
 /**
- * Test/internal hook: clears the cached `bnest.config.ts` resolution so the
- * next call re-reads the file. Tests that swap `cwd` between cases need this.
+ * Test/internal hook: clears the cached config resolution so the next call
+ * re-reads the file. Tests that swap `cwd` between cases need this. Also
+ * resets the one-time legacy-config warning latch.
  */
 export function __resetTechneConfigCache() {
   cwdCache.clear();
+  warnedLegacyConfig = false;
 }
 
 function mergeConfig(

@@ -170,11 +170,13 @@ async function doctor() {
     hasError = true;
   }
 
-  // bnest.config.ts (informational)
-  if (await exists(path.join(process.cwd(), "bnest.config.ts"))) {
-    ok(`bnest.config.ts present`);
+  // techne.config.ts (informational; legacy bnest.config.ts also recognized)
+  if (await exists(path.join(process.cwd(), "techne.config.ts"))) {
+    ok(`techne.config.ts present`);
+  } else if (await exists(path.join(process.cwd(), "bnest.config.ts"))) {
+    warn(`bnest.config.ts present (deprecated — rename to techne.config.ts)`);
   } else {
-    warn(`bnest.config.ts not found (optional)`);
+    warn(`techne.config.ts not found (optional)`);
   }
 
   // .env
@@ -237,8 +239,16 @@ async function runGenerateClient() {
   const out = flagValue("--out") ?? "src/routes.generated.ts";
   const cwd = process.cwd();
 
-  // Find a bnest.config.{ts,js,mjs} so we know how to boot the user's app.
-  const CANDIDATES = ["bnest.config.ts", "bnest.config.js", "bnest.config.mjs"];
+  // Find a techne.config.{ts,js,mjs} so we know how to boot the user's app.
+  // Falls back to the deprecated bnest.config.* name through v0.4.x.
+  const CANDIDATES = [
+    "techne.config.ts",
+    "techne.config.js",
+    "techne.config.mjs",
+    "bnest.config.ts",
+    "bnest.config.js",
+    "bnest.config.mjs",
+  ];
   let configPath: string | undefined;
   for (const name of CANDIDATES) {
     const candidate = path.join(cwd, name);
@@ -249,7 +259,7 @@ async function runGenerateClient() {
   }
   if (!configPath) {
     fail(
-      `bnest.config.ts not found in ${cwd}. Create one with \`export default defineTechneConfig({ module: AppModule })\` and re-run.`,
+      `techne.config.ts not found in ${cwd}. Create one with \`export default defineTechneConfig({ module: AppModule })\` and re-run.`,
     );
     process.exit(1);
   }
@@ -258,7 +268,7 @@ async function runGenerateClient() {
     const cfgMod = await import(configPath);
     const config = cfgMod?.default;
     if (!config || !config.module) {
-      fail(`bnest.config.ts must export a default config with a \`module\` field.`);
+      fail(`techne.config.ts must export a default config with a \`module\` field.`);
       process.exit(1);
     }
 
