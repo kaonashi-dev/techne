@@ -13,7 +13,7 @@
 
 import { Elysia } from "elysia";
 import { Controller, Get, Injectable, Module, Param } from "../src/common";
-import { BnestFactory } from "../src/core";
+import { TechneFactory } from "../src/core";
 import { emitResults, getDefaults, isQuick, runScenario, type ScenarioResult } from "./scenarios";
 
 @Injectable()
@@ -48,7 +48,7 @@ const elysiaApp = new Elysia()
   .get("/users", () => [{ id: 1, name: "Alice" }])
   .get("/users/:id", ({ params }) => ({ id: params.id, name: "Alice" }));
 
-const bnestApp = await BnestFactory.create(FastModule, { logger: false });
+const bnestApp = await TechneFactory.create(FastModule, { logger: false });
 
 export async function runFastPathBench(): Promise<ScenarioResult[]> {
   const opts = getDefaults(isQuick());

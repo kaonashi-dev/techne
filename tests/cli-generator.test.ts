@@ -56,7 +56,7 @@ describe("CLI project generator", () => {
     expect(appService).toContain("@kaonashi-dev/bnest/common");
     expect(mainFile).toContain("@kaonashi-dev/bnest/core");
     expect(mainFile).toContain("bootstrap");
-    expect(bnestConfig).toContain("defineBnestConfig");
+    expect(bnestConfig).toContain("defineTechneConfig");
     expect(bnestConfig).toContain("module: AppModule");
     expect(bnestConfig).toContain("Number(Bun.env.PORT ?? 3000)");
     expect(gitignore).toContain("node_modules");

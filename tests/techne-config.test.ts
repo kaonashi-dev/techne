@@ -6,8 +6,8 @@ import { Controller } from "../src/decorators/controller.decorator";
 import { Get } from "../src/decorators/routes.decorator";
 import { Module } from "../src/decorators/module.decorator";
 import { Injectable } from "../src/decorators/injectable.decorator";
-import { BnestFactory, __resetBnestConfigCache } from "../src/factory/techne-factory";
-import { defineBnestConfig, bnest, bootstrap } from "../src/core";
+import { TechneFactory, __resetTechneConfigCache } from "../src/factory/techne-factory";
+import { defineTechneConfig, bnest, bootstrap } from "../src/core";
 import type { CanActivate } from "../src/interfaces/can-activate.interface";
 import { Logger } from "../src/services/logger.service";
 
@@ -44,14 +44,14 @@ async function writeConfig(dir: string, contents: string) {
   await fs.writeFile(path.join(dir, "bnest.config.ts"), contents);
 }
 
-describe("defineBnestConfig", () => {
+describe("defineTechneConfig", () => {
   test("returns the input unchanged (identity)", () => {
     const cfg = { module: AppModule, port: 4242, globalPrefix: "api" };
-    expect(defineBnestConfig(cfg)).toBe(cfg);
+    expect(defineTechneConfig(cfg)).toBe(cfg);
   });
 });
 
-describe("BnestFactory.create + bnest.config.ts", () => {
+describe("TechneFactory.create + bnest.config.ts", () => {
   let originalCwd: string;
   let tempRoot: string;
 
@@ -59,13 +59,13 @@ describe("BnestFactory.create + bnest.config.ts", () => {
     originalCwd = process.cwd();
     tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "bnest-config-"));
     process.chdir(tempRoot);
-    __resetBnestConfigCache();
+    __resetTechneConfigCache();
   });
 
   afterEach(async () => {
     process.chdir(originalCwd);
     await fs.rm(tempRoot, { recursive: true, force: true });
-    __resetBnestConfigCache();
+    __resetTechneConfigCache();
   });
 
   test("uses cors / globalPrefix from a bnest.config.ts in cwd", async () => {
@@ -78,7 +78,7 @@ describe("BnestFactory.create + bnest.config.ts", () => {
       `export default { globalPrefix: "api", cors: { origin: true } };\n`,
     );
 
-    const app = await BnestFactory.create(AppModule, { logger: false });
+    const app = await TechneFactory.create(AppModule, { logger: false });
 
     const ok = await app.handle(new Request("http://localhost/api/users"));
     expect(ok.status).toBe(200);
@@ -99,7 +99,7 @@ describe("BnestFactory.create + bnest.config.ts", () => {
       `export default { globalPrefix: "fromfile" };\n`,
     );
 
-    const app = await BnestFactory.create(AppModule, {
+    const app = await TechneFactory.create(AppModule, {
       logger: false,
       globalPrefix: "fromopts",
     });
@@ -129,7 +129,7 @@ describe("BnestFactory.create + bnest.config.ts", () => {
 export default { globalGuards: [new DenyGuard()] };\n`,
     );
 
-    const app = await BnestFactory.create(AppModule, {
+    const app = await TechneFactory.create(AppModule, {
       logger: false,
       globalGuards: [new AllowGuard()],
     });
@@ -139,7 +139,7 @@ export default { globalGuards: [new DenyGuard()] };\n`,
     expect(res.status).not.toBe(200);
   });
 
-  test("zero-arg BnestFactory.create() resolves module from config", async () => {
+  test("zero-arg TechneFactory.create() resolves module from config", async () => {
     // Write the module and config to disk so dynamic import sees real files.
     const modulePath = path.join(tempRoot, "app.module.ts");
     await fs.writeFile(
@@ -162,7 +162,7 @@ export class AppModule {}
 export default { module: AppModule, logger: false };\n`,
     );
 
-    const app = await BnestFactory.create();
+    const app = await TechneFactory.create();
     const res = await app.handle(new Request("http://localhost/ping"));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ping: true });
@@ -170,7 +170,7 @@ export default { module: AppModule, logger: false };\n`,
 
   test("zero-arg create() throws when config has no module", async () => {
     await writeConfig(tempRoot, `export default { logger: false };\n`);
-    await expect(BnestFactory.create()).rejects.toThrow(/no module supplied/);
+    await expect(TechneFactory.create()).rejects.toThrow(/no module supplied/);
   });
 
   test("throws when config file exists but has no default export", async () => {
@@ -178,11 +178,11 @@ export default { module: AppModule, logger: false };\n`,
       path.join(tempRoot, "bnest.config.ts"),
       `export const cfg = { logger: false };\n`,
     );
-    __resetBnestConfigCache();
-    await expect(BnestFactory.create(AppModule)).rejects.toThrow(/no default export/);
+    __resetTechneConfigCache();
+    await expect(TechneFactory.create(AppModule)).rejects.toThrow(/no default export/);
   });
 
-  test("bnest() shorthand calls through to BnestFactory.create", async () => {
+  test("bnest() shorthand calls through to TechneFactory.create", async () => {
     await writeConfig(tempRoot, `export default { globalPrefix: "via-bnest" };\n`);
     const app = await bnest(AppModule, { logger: false });
     const res = await app.handle(new Request("http://localhost/via-bnest/users"));
@@ -205,7 +205,7 @@ export default { module: AppModule, logger: false };\n`,
     // given via options. We have to do this in a fresh dir because cache.
     await fs.rm(path.join(tempRoot, "bnest.config.ts"), { force: true });
     await writeConfig(tempRoot, `export default { logger: false };\n`);
-    __resetBnestConfigCache();
+    __resetTechneConfigCache();
     const prevPort = Bun.env.PORT;
     Bun.env.PORT = "0";
     try {

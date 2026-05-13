@@ -1,7 +1,7 @@
-import { BnestMicroservice } from "../../abstract-server";
+import { TechneMicroservice } from "../../abstract-server";
 import type { MessagePayload, MicroserviceResponse } from "../../types";
 
-export class RedisServer extends BnestMicroservice {
+export class RedisServer extends TechneMicroservice {
   private pub: any;
   private sub: any;
   private readonly prefix: string;

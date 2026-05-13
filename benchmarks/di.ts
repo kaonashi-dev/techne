@@ -11,7 +11,7 @@
  */
 
 import { Injectable, Module } from "../src/common";
-import { BnestFactory } from "../src/core";
+import { TechneFactory } from "../src/core";
 import { emitResults, isQuick, stabilize } from "./scenarios";
 import type { ScenarioResult } from "./scenarios";
 
@@ -40,12 +40,12 @@ class TopLevelService {
 @Module({ providers: [DependencyA, DependencyB, TopLevelService] })
 class DiModule {}
 
-const app = await BnestFactory.create(DiModule, { logger: false });
+const app = await TechneFactory.create(DiModule, { logger: false });
 const container = (app as any).container ?? (app as any).adapter?.container;
 
 if (!container) {
   // The container is held privately; reach in via the application context.
-  // BnestApplication extends BnestApplicationContext which exposes get().
+  // TechneApplication extends TechneApplicationContext which exposes get().
   // We fall back to that.
 }
 
@@ -108,7 +108,7 @@ export async function runDiBench(): Promise<ScenarioResult[]> {
     ["TopLevelService (cold)", TopLevelService] as const,
     ["DependencyA (cold)", DependencyA] as const,
   ]) {
-    const tmp = await BnestFactory.create(DiModule, { logger: false });
+    const tmp = await TechneFactory.create(DiModule, { logger: false });
     const tmpStart = Bun.nanoseconds();
     (tmp as any).get(Token);
     const firstCallUs = (Bun.nanoseconds() - tmpStart) / 1_000;

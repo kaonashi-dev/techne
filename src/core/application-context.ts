@@ -3,8 +3,8 @@ import type { Scanner } from "./scanner";
 import { Logger } from "../services/logger.service";
 import type { MqRegistry } from "../mq/registry";
 
-/** Canonical name. `BnestApplicationContext` is kept as a deprecated alias below. */
-export class BnestApplicationContext {
+/** Canonical name. `TechneApplicationContext` is kept as a deprecated alias below. */
+export class TechneApplicationContext {
   private readonly logger = new Logger("TechneApplicationContext");
   private isClosing = false;
 
@@ -45,5 +45,5 @@ export class BnestApplicationContext {
   }
 }
 
-/** Canonical name. `BnestApplicationContext` is kept as a deprecated alias through v0.4.x. */
-export { BnestApplicationContext as TechneApplicationContext };
+/** @deprecated use TechneApplicationContext */
+export { TechneApplicationContext as BnestApplicationContext };

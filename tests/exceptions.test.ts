@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { BnestFactory } from "../src/factory/techne-factory";
+import { TechneFactory } from "../src/factory/techne-factory";
 import { Controller } from "../src/decorators/controller.decorator";
 import { Get } from "../src/decorators/routes.decorator";
 import { Module } from "../src/decorators/module.decorator";
@@ -37,7 +37,7 @@ describe("HTTP exceptions", () => {
     @Module({ controllers: [ErrorController] })
     class AppModule {}
 
-    const app = await BnestFactory.create(AppModule, { logger: false });
+    const app = await TechneFactory.create(AppModule, { logger: false });
 
     const notFound = await app.handle(new Request("http://localhost/errors/not-found"));
     expect(notFound.status).toBe(404);

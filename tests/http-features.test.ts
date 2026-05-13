@@ -3,7 +3,7 @@ import { Controller } from "../src/decorators/controller.decorator";
 import { Version } from "../src/decorators/version.decorator";
 import { Get } from "../src/decorators/routes.decorator";
 import { Module } from "../src/decorators/module.decorator";
-import { BnestFactory } from "../src/factory/techne-factory";
+import { TechneFactory } from "../src/factory/techne-factory";
 
 describe("HTTP application features", () => {
   test("setGlobalPrefix remaps routes", async () => {
@@ -18,7 +18,7 @@ describe("HTTP application features", () => {
     @Module({ controllers: [UsersController] })
     class AppModule {}
 
-    const app = await BnestFactory.create(AppModule, { logger: false });
+    const app = await TechneFactory.create(AppModule, { logger: false });
     app.setGlobalPrefix("api");
 
     const response = await app.handle(new Request("http://localhost/api/users"));
@@ -39,7 +39,7 @@ describe("HTTP application features", () => {
     @Module({ controllers: [UsersController] })
     class AppModule {}
 
-    const app = await BnestFactory.create(AppModule, { logger: false });
+    const app = await TechneFactory.create(AppModule, { logger: false });
     app.enableVersioning({ type: "uri" });
 
     const response = await app.handle(new Request("http://localhost/v1/users"));
@@ -60,7 +60,7 @@ describe("HTTP application features", () => {
     @Module({ controllers: [ReportsController] })
     class AppModule {}
 
-    const app = await BnestFactory.create(AppModule, { logger: false });
+    const app = await TechneFactory.create(AppModule, { logger: false });
     app.enableVersioning({ type: "header", header: "x-api-version" });
 
     const missing = await app.handle(new Request("http://localhost/reports"));
@@ -87,7 +87,7 @@ describe("HTTP application features", () => {
     @Module({ controllers: [CorsController] })
     class AppModule {}
 
-    const app = await BnestFactory.create(AppModule, { logger: false });
+    const app = await TechneFactory.create(AppModule, { logger: false });
     app.enableCors({ origin: true, credentials: true });
 
     const response = await app.handle(

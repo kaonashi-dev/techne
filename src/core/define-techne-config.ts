@@ -1,13 +1,13 @@
-import type { BnestApplicationOptions } from "../factory/techne-factory";
+import type { TechneApplicationOptions } from "../factory/techne-factory";
 
 /**
- * Declarative Bnest configuration. Extends {@link BnestApplicationOptions}
+ * Declarative Bnest configuration. Extends {@link TechneApplicationOptions}
  * with bootstrap-only fields (`module`, `port`, `host`) consumed by the
- * `bootstrap()` helper and `BnestFactory.create()` when loading
+ * `bootstrap()` helper and `TechneFactory.create()` when loading
  * `bnest.config.ts` from `process.cwd()`.
  */
-export type BnestConfig = BnestApplicationOptions & {
-  /** Root module class. Required when calling `BnestFactory.create()` / `bootstrap()` with zero args. */
+export type TechneConfig = TechneApplicationOptions & {
+  /** Root module class. Required when calling `TechneFactory.create()` / `bootstrap()` with zero args. */
   module?: any;
   /** Port to listen on. Used by `bnest dev`/`start` and the `bootstrap()` helper. Default 3000. */
   port?: number;
@@ -16,16 +16,16 @@ export type BnestConfig = BnestApplicationOptions & {
 };
 
 /**
- * Identity helper that gives users autocomplete on every `BnestConfig` field
+ * Identity helper that gives users autocomplete on every `TechneConfig` field
  * when authoring a `bnest.config.ts` default export. The runtime returns the
- * input unchanged — all merging happens in `BnestFactory.create()`.
+ * input unchanged — all merging happens in `TechneFactory.create()`.
  */
-export function defineBnestConfig(config: BnestConfig): BnestConfig {
+export function defineTechneConfig(config: TechneConfig): TechneConfig {
   return config;
 }
 
-/** Canonical name. `BnestConfig` is kept as a deprecated alias through v0.4.x. */
-export type TechneConfig = BnestConfig;
+/** @deprecated use TechneConfig */
+export type BnestConfig = TechneConfig;
 
-/** Canonical name. `defineBnestConfig` is kept as a deprecated alias through v0.4.x. */
-export const defineTechneConfig = defineBnestConfig;
+/** @deprecated use defineTechneConfig */
+export const defineBnestConfig = defineTechneConfig;

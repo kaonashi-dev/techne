@@ -11,40 +11,30 @@ export * from "./scope";
 export * from "../factory/techne-factory";
 
 import {
-  BnestFactory,
-  loadBnestConfigFile,
-  type BnestApplicationOptions,
+  TechneFactory,
+  loadTechneConfigFile,
+  type TechneApplicationOptions,
 } from "../factory/techne-factory";
-import type { BnestApplication } from "./techne-application";
+import type { TechneApplication } from "./techne-application";
 import { Logger } from "../services/logger.service";
 
 /**
- * Shorthand for {@link BnestFactory.create}. Mirrors the declarative API:
- * `await bnest()` reads the root module and options from `bnest.config.ts`.
+ * Shorthand for {@link TechneFactory.create}. Mirrors the declarative API:
+ * `await techne()` reads the root module and options from `bnest.config.ts`.
  */
-export function bnest(): Promise<BnestApplication>;
-export function bnest(module: any): Promise<BnestApplication>;
-export function bnest(module: any, options: BnestApplicationOptions): Promise<BnestApplication>;
-export function bnest(module?: any, options?: BnestApplicationOptions): Promise<BnestApplication> {
-  if (module === undefined) return BnestFactory.create();
-  if (options === undefined) return BnestFactory.create(module);
-  return BnestFactory.create(module, options);
+export function techne(): Promise<TechneApplication>;
+export function techne(module: any): Promise<TechneApplication>;
+export function techne(module: any, options: TechneApplicationOptions): Promise<TechneApplication>;
+export function techne(module?: any, options?: TechneApplicationOptions): Promise<TechneApplication> {
+  if (module === undefined) return TechneFactory.create();
+  if (options === undefined) return TechneFactory.create(module);
+  return TechneFactory.create(module, options);
 }
 
-/**
- * Canonical name. `bnest()` is kept as a deprecated alias through v0.4.x.
- * Identical signature; calls through to {@link BnestFactory.create}.
- */
-export function techne(): Promise<BnestApplication>;
-export function techne(module: any): Promise<BnestApplication>;
-export function techne(module: any, options: BnestApplicationOptions): Promise<BnestApplication>;
-export function techne(module?: any, options?: BnestApplicationOptions): Promise<BnestApplication> {
-  if (module === undefined) return BnestFactory.create();
-  if (options === undefined) return BnestFactory.create(module);
-  return BnestFactory.create(module, options);
-}
+/** @deprecated use `techne()` */
+export const bnest = techne;
 
-export interface BootstrapOverrides extends BnestApplicationOptions {
+export interface BootstrapOverrides extends TechneApplicationOptions {
   port?: number;
   host?: string;
 }
@@ -59,16 +49,16 @@ export interface BootstrapOverrides extends BnestApplicationOptions {
 export async function bootstrap(
   module?: any,
   options?: BootstrapOverrides,
-): Promise<BnestApplication> {
+): Promise<TechneApplication> {
   const { port: optPort, host: optHost, ...factoryOptions } = options ?? {};
   const app =
     module === undefined
-      ? await BnestFactory.create()
-      : await BnestFactory.create(module, factoryOptions as BnestApplicationOptions);
+      ? await TechneFactory.create()
+      : await TechneFactory.create(module, factoryOptions as TechneApplicationOptions);
 
   // Re-read the config to discover port/host the user declared there. This is
-  // cheap because BnestFactory.create() caches the file load by cwd.
-  const fileConfig = await loadBnestConfigFile();
+  // cheap because TechneFactory.create() caches the file load by cwd.
+  const fileConfig = await loadTechneConfigFile();
   const port =
     optPort ??
     fileConfig?.port ??

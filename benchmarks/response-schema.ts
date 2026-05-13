@@ -16,7 +16,7 @@
  */
 
 import { Controller, Get, Injectable, Module, Schema } from "../src/common";
-import { BnestFactory } from "../src/core";
+import { TechneFactory } from "../src/core";
 import {
   emitResults,
   getDefaults,
@@ -67,7 +67,7 @@ class WithSchemaController {
 @Module({ controllers: [WithSchemaController], providers: [UserService] })
 class RespModule {}
 
-const bnestApp = await BnestFactory.create(RespModule, { logger: false });
+const bnestApp = await TechneFactory.create(RespModule, { logger: false });
 
 export async function runResponseSchemaBench(): Promise<ScenarioResult[]> {
   const opts = getDefaults(isQuick());

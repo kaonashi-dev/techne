@@ -2,7 +2,7 @@ import { ForbiddenException } from "../../exceptions";
 import { CATCH_METADATA } from "../../common/constants";
 import type { ParamMetadata } from "../../decorators/params.decorator";
 import type { ExceptionFilter } from "../../interfaces/exception-filter.interface";
-import type { BnestInterceptor, CallHandler } from "../../interfaces/interceptor.interface";
+import type { TechneInterceptor, CallHandler } from "../../interfaces/interceptor.interface";
 import type { PipeTransform, ArgumentMetadata } from "../../interfaces/pipe-transform.interface";
 import { ContextIdFactory } from "../context-id-factory";
 import { ExecutionContextHost } from "../execution-context";
@@ -49,7 +49,7 @@ interface RouteRuntimeCache {
   routePipes: any[];
   staticFilters: ExceptionFilter[];
   contextualFilters: any[];
-  staticInterceptors: BnestInterceptor[];
+  staticInterceptors: TechneInterceptor[];
   contextualInterceptors: any[];
   staticPipes: PipeTransform[];
   contextualPipes: any[];
@@ -240,7 +240,7 @@ export class RouterExecutionContext {
   private readonly routeCaches: RouteRuntimeCache[] = [];
   private readonly executionContextHosts = new WeakMap<object, ExecutionContextHost>();
   private globalFilters: ExceptionFilter[] = [];
-  private globalInterceptors: BnestInterceptor[] = [];
+  private globalInterceptors: TechneInterceptor[] = [];
   private globalPipes: PipeTransform[] = [];
   private globalGuards: any[] = [];
   private routesRegistered = false;
@@ -254,7 +254,7 @@ export class RouterExecutionContext {
     }
   }
 
-  public setGlobalInterceptors(interceptors: BnestInterceptor[]) {
+  public setGlobalInterceptors(interceptors: TechneInterceptor[]) {
     this.globalInterceptors = interceptors;
     for (const cache of this.routeCaches) {
       this.refreshRouteCache(cache);
@@ -273,7 +273,7 @@ export class RouterExecutionContext {
    * Because guards are materialized as Elysia `beforeHandle` hooks at route
    * registration time, changing them after routes exist cannot retroactively
    * inject them. Callers should invoke this before `routesResolver.resolve()`
-   * (either through `BnestApplicationOptions.globalGuards` or by calling
+   * (either through `TechneApplicationOptions.globalGuards` or by calling
    * `app.useGlobalGuards()` before any route is registered).
    */
   public setGlobalGuards(guards: any[]): boolean {
@@ -407,7 +407,7 @@ export class RouterExecutionContext {
         container,
         resolutionContext,
       );
-      const mergedInterceptors = this.resolveRouteInstances<BnestInterceptor>(
+      const mergedInterceptors = this.resolveRouteInstances<TechneInterceptor>(
         cache.staticInterceptors,
         cache.contextualInterceptors,
         container,
@@ -536,7 +536,7 @@ export class RouterExecutionContext {
     applyPipes: (args: any[], paramsMetadata: ParamMetadata[], pipes: PipeTransform[]) => void,
     applyInterceptors: (
       context: RequestHandlerContext,
-      interceptors: BnestInterceptor[],
+      interceptors: TechneInterceptor[],
       handler: () => any,
     ) => any,
   ): unknown {
@@ -653,7 +653,7 @@ export class RouterExecutionContext {
     cache.staticFilters = filters.staticInstances;
     cache.contextualFilters = filters.contextualTokens;
 
-    const interceptors = this.partitionRouteInstances<BnestInterceptor>(
+    const interceptors = this.partitionRouteInstances<TechneInterceptor>(
       mergeArrays(this.globalInterceptors, cache.routeInterceptors),
       cache.container,
       cache.module,
@@ -800,7 +800,7 @@ export class RouterExecutionContext {
 
   private applyInterceptors(
     context: RequestHandlerContext,
-    interceptors: BnestInterceptor[],
+    interceptors: TechneInterceptor[],
     handler: () => any,
   ): any {
     // Build the interceptor chain from inside out

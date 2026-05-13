@@ -15,7 +15,7 @@
  *      from accidentally regressing.
  */
 import { describe, expect, test } from "bun:test";
-import { BnestFactory } from "../src/factory/techne-factory";
+import { TechneFactory } from "../src/factory/techne-factory";
 import { Controller } from "../src/decorators/controller.decorator";
 import { Get, Post } from "../src/decorators/routes.decorator";
 import { Body } from "../src/decorators/params.decorator";
@@ -42,7 +42,7 @@ describe("Batch 3 perf-fix regressions", () => {
     @Module({ controllers: [TypedController] })
     class AppModule {}
 
-    const app = await BnestFactory.create(AppModule, { logger: false });
+    const app = await TechneFactory.create(AppModule, { logger: false });
     const res = await app.handle(new Request("http://localhost/typed/user"));
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toBe("application/json; charset=utf-8");
@@ -98,7 +98,7 @@ describe("Batch 3 perf-fix regressions", () => {
     // Logger explicitly enabled here. The point is to ensure the
     // request-id optimization in `setupRequestLogging` did not regress
     // the propagation behavior on the default code path.
-    const app = await BnestFactory.create(AppModule, { logger: true });
+    const app = await TechneFactory.create(AppModule, { logger: true });
     const inbound = "perf-fix-correlation-id";
     const res = await app.handle(
       new Request("http://localhost/echo-logged", {
@@ -165,7 +165,7 @@ describe("Batch 3 perf-fix regressions", () => {
     @Module({ controllers: [TypedPostController] })
     class AppModule {}
 
-    const app = await BnestFactory.create(AppModule, { logger: false });
+    const app = await TechneFactory.create(AppModule, { logger: false });
     const res = await app.handle(
       new Request("http://localhost/typed-post", {
         method: "POST",

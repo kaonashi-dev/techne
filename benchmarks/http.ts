@@ -20,7 +20,7 @@
 
 import { Elysia } from "elysia";
 import { Controller, Get, Injectable, Module, Param } from "../src/common";
-import { BnestFactory } from "../src/core";
+import { TechneFactory } from "../src/core";
 import {
   emitResults,
   getDefaults,
@@ -66,7 +66,7 @@ class UserController {
 @Module({ controllers: [UserController], providers: [UserService] })
 class AppModule {}
 
-const bnestApp = await BnestFactory.create(AppModule, { logger: false });
+const bnestApp = await TechneFactory.create(AppModule, { logger: false });
 
 // ─── Run ───────────────────────────────────────────────────────────────────
 

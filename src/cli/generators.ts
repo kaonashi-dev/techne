@@ -245,10 +245,10 @@ export class ${className} implements ExceptionFilter {
 
 export async function generateInterceptor(name: string, dir: string = ".") {
   const className = `${capitalize(name)}Interceptor`;
-  const content = `import { Injectable, type BnestInterceptor, type ExecutionContext, type CallHandler } from "@kaonashi-dev/bnest/common";
+  const content = `import { Injectable, type TechneInterceptor, type ExecutionContext, type CallHandler } from "@kaonashi-dev/bnest/common";
 
 @Injectable()
-export class ${className} implements BnestInterceptor {
+export class ${className} implements TechneInterceptor {
   async intercept(context: ExecutionContext, next: CallHandler) {
     // TODO: implement ${className} interception logic.
     return next.handle();
@@ -531,10 +531,10 @@ export class AppModule {}
 
   await writeTextFile(
     path.join(dir, "bnest.config.ts"),
-    `import { defineBnestConfig } from "@kaonashi-dev/bnest/core";
+    `import { defineTechneConfig } from "@kaonashi-dev/bnest/core";
 import { AppModule } from "./src/app.module";
 
-export default defineBnestConfig({
+export default defineTechneConfig({
   module: AppModule,
   port: Number(Bun.env.PORT ?? 3000),
   cors: { origin: true },

@@ -1,6 +1,6 @@
 import { test, expect, describe } from "bun:test";
 import { Elysia } from "elysia";
-import { BnestFactory } from "../src/factory/techne-factory";
+import { TechneFactory } from "../src/factory/techne-factory";
 import { definePlugin } from "../src/core/plugins/define-plugin";
 import type { PluginDefinition } from "../src/core/plugins/define-plugin";
 import { requestIdPlugin } from "../src/core/plugins/built-in/request-id.plugin";
@@ -19,7 +19,7 @@ describe("Plugin protocol", () => {
   });
 
   test("register() invokes setup once with a populated context", async () => {
-    const app = await BnestFactory.create(EmptyModule, { logger: false });
+    const app = await TechneFactory.create(EmptyModule, { logger: false });
     let calls = 0;
     let captured: any;
 
@@ -47,7 +47,7 @@ describe("Plugin protocol", () => {
   });
 
   test("provide() makes a value resolvable via app.get()", async () => {
-    const app = await BnestFactory.create(EmptyModule, { logger: false });
+    const app = await TechneFactory.create(EmptyModule, { logger: false });
     const TOKEN = Symbol("CACHE_CLIENT");
     const value = { ping: () => "pong" };
 
@@ -64,8 +64,8 @@ describe("Plugin protocol", () => {
     await app.close();
   });
 
-  test("options are a frozen view of BnestFactory.create options", async () => {
-    const app = await BnestFactory.create(EmptyModule, {
+  test("options are a frozen view of TechneFactory.create options", async () => {
+    const app = await TechneFactory.create(EmptyModule, {
       logger: false,
       globalPrefix: "api",
     });
@@ -98,7 +98,7 @@ describe("Plugin protocol", () => {
     @Module({ providers: [BootstrapService] })
     class AppModule {}
 
-    const app = await BnestFactory.create(AppModule, { logger: false });
+    const app = await TechneFactory.create(AppModule, { logger: false });
 
     await app.register(
       definePlugin({
@@ -121,7 +121,7 @@ describe("Plugin protocol", () => {
   });
 
   test("onShutdown handlers fire in reverse registration order on close()", async () => {
-    const app = await BnestFactory.create(EmptyModule, { logger: false });
+    const app = await TechneFactory.create(EmptyModule, { logger: false });
     const order: string[] = [];
 
     await app.register(
@@ -161,7 +161,7 @@ describe("Plugin protocol", () => {
   });
 
   test("dependency check throws when a named dependency is missing", async () => {
-    const app = await BnestFactory.create(EmptyModule, { logger: false });
+    const app = await TechneFactory.create(EmptyModule, { logger: false });
 
     const dependent = definePlugin({
       name: "needs-base",
@@ -180,7 +180,7 @@ describe("Plugin protocol", () => {
   });
 
   test("registering the same plugin name with a different setup throws", async () => {
-    const app = await BnestFactory.create(EmptyModule, { logger: false });
+    const app = await TechneFactory.create(EmptyModule, { logger: false });
     await app.register(definePlugin({ name: "dup", setup: () => {} }));
     await expect(
       app.register(definePlugin({ name: "dup", setup: () => {} })),
@@ -189,7 +189,7 @@ describe("Plugin protocol", () => {
   });
 
   test("registering the exact same plugin twice is a no-op", async () => {
-    const app = await BnestFactory.create(EmptyModule, { logger: false });
+    const app = await TechneFactory.create(EmptyModule, { logger: false });
     let calls = 0;
     const plugin = definePlugin({
       name: "idem",
@@ -215,7 +215,7 @@ describe("Plugin protocol", () => {
     @Module({ controllers: [RootController] })
     class AppModule {}
 
-    const app = await BnestFactory.create(AppModule, { logger: false });
+    const app = await TechneFactory.create(AppModule, { logger: false });
     const elysiaPlugin = new Elysia().get("/plugin-route", () => ({ from: "plugin" }));
 
     expect(() => app.use(elysiaPlugin)).not.toThrow();
@@ -243,7 +243,7 @@ describe("Plugin protocol", () => {
     @Module({ controllers: [HelloController] })
     class AppModule {}
 
-    const app = await BnestFactory.create(AppModule, { logger: false });
+    const app = await TechneFactory.create(AppModule, { logger: false });
     await app.register(requestIdPlugin, { header: "x-trace-id" });
 
     const res = await app.handle(new Request("http://localhost/hello"));

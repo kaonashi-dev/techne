@@ -249,7 +249,7 @@ async function runGenerateClient() {
   }
   if (!configPath) {
     fail(
-      `bnest.config.ts not found in ${cwd}. Create one with \`export default defineBnestConfig({ module: AppModule })\` and re-run.`,
+      `bnest.config.ts not found in ${cwd}. Create one with \`export default defineTechneConfig({ module: AppModule })\` and re-run.`,
     );
     process.exit(1);
   }
@@ -263,10 +263,10 @@ async function runGenerateClient() {
     }
 
     // Lazy-import to keep CLI startup fast for unrelated commands.
-    const { BnestFactory } = await import("../factory/techne-factory");
+    const { TechneFactory } = await import("../factory/techne-factory");
     const { generateRoutesType } = await import("../contract/codegen");
 
-    const app = await BnestFactory.create(config.module, { ...config, logger: false });
+    const app = await TechneFactory.create(config.module, { ...config, logger: false });
     const source = generateRoutesType(app);
 
     const outPath = path.isAbsolute(out) ? out : path.join(cwd, out);

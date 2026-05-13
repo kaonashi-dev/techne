@@ -1,4 +1,4 @@
-import type { BnestApplication } from "../core/techne-application";
+import type { TechneApplication } from "../core/techne-application";
 import { DocumentBuilder, type SwaggerDocumentOptions } from "./document-builder";
 import { emitOpenApiDocument, type OpenApiDocument } from "./openapi-emitter";
 
@@ -37,7 +37,7 @@ export class SwaggerModule {
    * patch the generated spec without forking it.
    */
   static createDocument(
-    app: Pick<BnestApplication, "getRoutes">,
+    app: Pick<TechneApplication, "getRoutes">,
     builderOrConfig?: BuilderOrConfig,
   ): OpenApiDocument {
     return emitOpenApiDocument(app, toBuilder(builderOrConfig));
@@ -45,7 +45,7 @@ export class SwaggerModule {
 
   /** Alias for {@link createDocument} — emphasises the auto-discovery aspect. */
   static createAutoDocument(
-    app: Pick<BnestApplication, "getRoutes">,
+    app: Pick<TechneApplication, "getRoutes">,
     builderOrConfig?: BuilderOrConfig,
   ): OpenApiDocument {
     return emitOpenApiDocument(app, toBuilder(builderOrConfig));
@@ -53,7 +53,7 @@ export class SwaggerModule {
 
   static setup(
     path: string,
-    app: Pick<BnestApplication, "getHttpAdapter">,
+    app: Pick<TechneApplication, "getHttpAdapter">,
     document: OpenApiDocument | (() => OpenApiDocument),
   ) {
     const adapter = app.getHttpAdapter() as any;

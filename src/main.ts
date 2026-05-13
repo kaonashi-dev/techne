@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Injectable, Module, Param, Post, Schema } from "./common";
-import { BnestFactory } from "./core";
+import { TechneFactory } from "./core";
 
 @Injectable()
 class UserService {
@@ -50,7 +50,7 @@ class UserController {
 })
 class AppModule {}
 
-const app = await BnestFactory.create(AppModule);
+const app = await TechneFactory.create(AppModule);
 
 app.listen(3000, () => {
   console.log(`🦊 Bnest is running at ${app.getUrl()}`);

@@ -4,7 +4,7 @@ import { Controller } from "../src/decorators/controller.decorator";
 import { Get } from "../src/decorators/routes.decorator";
 import { Injectable } from "../src/decorators/injectable.decorator";
 import { Module } from "../src/decorators/module.decorator";
-import { BnestFactory } from "../src/factory/techne-factory";
+import { TechneFactory } from "../src/factory/techne-factory";
 import { ModuleRef } from "../src/core/module-ref";
 import { Scope } from "../src/core/scope";
 import type { CanActivate } from "../src/interfaces/can-activate.interface";
@@ -26,7 +26,7 @@ describe("core runtime", () => {
     @Module({ providers: [UsersService, AppService] })
     class AppModule {}
 
-    const app = await BnestFactory.createApplicationContext(AppModule, { logger: false });
+    const app = await TechneFactory.createApplicationContext(AppModule, { logger: false });
     const moduleRef = app.get<ModuleRef>(ModuleRef);
 
     expect(moduleRef.get<UsersService>(UsersService).getName()).toBe("Ada");
@@ -52,7 +52,7 @@ describe("core runtime", () => {
     @Module({ providers: [TransientService, ConsumerService] })
     class AppModule {}
 
-    const app = await BnestFactory.createApplicationContext(AppModule, { logger: false });
+    const app = await TechneFactory.createApplicationContext(AppModule, { logger: false });
     const consumer = app.get<ConsumerService>(ConsumerService);
 
     expect(consumer.first).not.toBe(consumer.second);
@@ -79,7 +79,7 @@ describe("core runtime", () => {
     @Module({ controllers: [ScopedController], providers: [RequestIdService] })
     class AppModule {}
 
-    const app = await BnestFactory.create(AppModule, { logger: false });
+    const app = await TechneFactory.create(AppModule, { logger: false });
     const first = await app.handle(new Request("http://localhost/scoped")).then((r) => r.json());
     const second = await app.handle(new Request("http://localhost/scoped")).then((r) => r.json());
 
@@ -106,7 +106,7 @@ describe("core runtime", () => {
     })
     class AppModule {}
 
-    const app = await BnestFactory.createApplicationContext(AppModule, { logger: false });
+    const app = await TechneFactory.createApplicationContext(AppModule, { logger: false });
 
     expect(() => app.get<PrivateService>(PrivateService)).toThrow(
       "Provider PrivateService is not visible inside module AppModule.",
@@ -146,7 +146,7 @@ describe("core runtime", () => {
     })
     class AppModule {}
 
-    const app = await BnestFactory.createApplicationContext(AppModule, { logger: false });
+    const app = await TechneFactory.createApplicationContext(AppModule, { logger: false });
 
     expect(app.get<ConsumerService>(ConsumerService).config.getName()).toBe("bnest");
 
@@ -196,7 +196,7 @@ describe("core runtime", () => {
     })
     class AppModule {}
 
-    const app = await BnestFactory.create(AppModule, { logger: false });
+    const app = await TechneFactory.create(AppModule, { logger: false });
     const first = await app.handle(new Request("http://localhost/state")).then((r) => r.json());
     const second = await app.handle(new Request("http://localhost/state")).then((r) => r.json());
 

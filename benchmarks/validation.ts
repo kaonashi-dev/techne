@@ -11,7 +11,7 @@
  */
 
 import { Body, Controller, Injectable, Module, Post, Schema } from "../src/common";
-import { BnestFactory } from "../src/core";
+import { TechneFactory } from "../src/core";
 import { emitResults, getDefaults, isQuick, runScenario, type ScenarioResult } from "./scenarios";
 
 const CreateUserSchema = Schema.Object({
@@ -39,7 +39,7 @@ class ValidationController {
 @Module({ controllers: [ValidationController], providers: [ValidationService] })
 class ValidationModule {}
 
-const bnestApp = await BnestFactory.create(ValidationModule, { logger: false });
+const bnestApp = await TechneFactory.create(ValidationModule, { logger: false });
 
 const validBody = JSON.stringify({ name: "Alice", age: 30 });
 const invalidBody = JSON.stringify({ name: "Alice" }); // missing `age`

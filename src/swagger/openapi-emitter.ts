@@ -1,4 +1,4 @@
-import type { BnestApplication } from "../core/techne-application";
+import type { TechneApplication } from "../core/techne-application";
 import type { DocumentBuilder } from "./document-builder";
 
 // ─── Public types ────────────────────────────────────────────────────────────
@@ -298,7 +298,7 @@ const PROBLEM_SCHEMA: OpenApiSchema = {
  * a generated operation without forking the emitter.
  */
 export function emitOpenApiDocument(
-  app: Pick<BnestApplication, "getRoutes">,
+  app: Pick<TechneApplication, "getRoutes">,
   builder?: DocumentBuilder,
 ): OpenApiDocument {
   const config = builder

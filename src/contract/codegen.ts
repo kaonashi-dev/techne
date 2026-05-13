@@ -1,4 +1,4 @@
-import type { BnestApplication } from "../core/techne-application";
+import type { TechneApplication } from "../core/techne-application";
 
 // ─── TypeBox introspection ───────────────────────────────────────────────────
 // Mirrors the pattern in `src/swagger/openapi-emitter.ts` — we read the
@@ -155,7 +155,7 @@ const HEADER = [
  * `export type Routes = { ... }` declaration. The output is import-ready and
  * pairs with `createClient<Routes>(baseUrl)`.
  */
-export function generateRoutesType(app: Pick<BnestApplication, "getRoutes">): string {
+export function generateRoutesType(app: Pick<TechneApplication, "getRoutes">): string {
   type Operation = { method: string; entry: string };
   const grouped = new Map<string, Operation[]>();
 

@@ -3,7 +3,7 @@ import type { Container, ResolutionContext } from "./container";
 import type { RouterExecutionContext } from "./router/router-execution-context";
 import type { CanActivate } from "../interfaces/can-activate.interface";
 import type { ExceptionFilter } from "../interfaces/exception-filter.interface";
-import type { BnestInterceptor } from "../interfaces/interceptor.interface";
+import type { TechneInterceptor } from "../interfaces/interceptor.interface";
 import type { PipeTransform } from "../interfaces/pipe-transform.interface";
 import { Logger } from "../services/logger.service";
 import type { MqRegistry } from "../mq/registry";
@@ -41,7 +41,7 @@ export interface ReadinessReport {
   checks: Array<{ name: string; healthy: boolean; detail?: any }>;
 }
 
-interface BnestApplicationInternalOptions {
+interface TechneApplicationInternalOptions {
   shutdown?: Partial<ShutdownOptions>;
   health?: Partial<HealthOptions>;
   /**
@@ -79,7 +79,7 @@ const DEFAULT_HEALTH: HealthOptions = {
   checks: [],
 };
 
-export class BnestApplication {
+export class TechneApplication {
   private logger = new Logger("TechneApplication");
   private shutdownHandlers: { signal: ShutdownSignal; handler: () => void }[] = [];
   private isShuttingDown = false;
@@ -101,7 +101,7 @@ export class BnestApplication {
     private readonly routesResolver: RoutesResolver,
     private readonly executionContext?: RouterExecutionContext,
     private readonly mqRegistry?: MqRegistry,
-    options?: BnestApplicationInternalOptions,
+    options?: TechneApplicationInternalOptions,
   ) {
     this.shutdownOptions = {
       ...DEFAULT_SHUTDOWN,
@@ -120,7 +120,7 @@ export class BnestApplication {
     return this;
   }
 
-  useGlobalInterceptors(...interceptors: BnestInterceptor[]): this {
+  useGlobalInterceptors(...interceptors: TechneInterceptor[]): this {
     this.executionContext?.setGlobalInterceptors(interceptors);
     return this;
   }
@@ -135,7 +135,7 @@ export class BnestApplication {
     const appliedInTime = this.executionContext?.setGlobalGuards(guards) ?? false;
     if (!appliedInTime) {
       this.logger.warn(
-        "useGlobalGuards() was called after routes were registered — only routes registered after this call will receive the new guards. Pass `globalGuards` to BnestFactory.create() for retroactive application.",
+        "useGlobalGuards() was called after routes were registered — only routes registered after this call will receive the new guards. Pass `globalGuards` to TechneFactory.create() for retroactive application.",
       );
     }
     return this;
@@ -162,7 +162,7 @@ export class BnestApplication {
     return this;
   }
 
-  /** @internal — used by BnestFactory to apply declarative CORS without firing the deprecation. */
+  /** @internal — used by TechneFactory to apply declarative CORS without firing the deprecation. */
   applyCorsFromConfig(options: CorsOptions): this {
     this.adapter.enableCors(options);
     this.refreshRoutesIfInitialized();
@@ -303,7 +303,7 @@ export class BnestApplication {
   }
 
   /**
-   * Register a first-class Bnest plugin. Plugins are the preferred extension
+   * Register a first-class Techne plugin. Plugins are the preferred extension
    * mechanism — they compose with the module system, can read DI, hook into
    * lifecycle, and reach the raw Elysia instance.
    *
@@ -376,10 +376,10 @@ export class BnestApplication {
   /**
    * Shorthand for registering a native Elysia plugin against the underlying
    * Elysia instance. Returns `this` for chaining. Prefer `register()` for
-   * Bnest-native plugins; this is a passthrough for ecosystem plugins.
+   * Techne-native plugins; this is a passthrough for ecosystem plugins.
    *
    * Note: Elysia composes plugins onto the current app, so any routes the
-   * plugin adds become available immediately. The plugin sees Bnest-mapped
+   * plugin adds become available immediately. The plugin sees Techne-mapped
    * routes as already registered — this matches Elysia's documented
    * "register plugins before routes that depend on them" guidance.
    */
@@ -468,5 +468,5 @@ export class BnestApplication {
   }
 }
 
-/** Canonical name. `BnestApplication` is kept as a deprecated alias through v0.4.x. */
-export { BnestApplication as TechneApplication };
+/** @deprecated use TechneApplication */
+export { TechneApplication as BnestApplication };

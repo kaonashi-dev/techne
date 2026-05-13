@@ -1,6 +1,6 @@
 import type { MessageHandler } from "./types";
 
-export abstract class BnestMicroservice {
+export abstract class TechneMicroservice {
   protected handlers = new Map<string, MessageHandler>();
   protected eventHandlers = new Map<string, MessageHandler[]>();
 
@@ -18,5 +18,5 @@ export abstract class BnestMicroservice {
   abstract close(): Promise<void>;
 }
 
-/** Canonical name. `BnestMicroservice` is kept as a deprecated alias through v0.4.x. */
-export { BnestMicroservice as TechneMicroservice };
+/** @deprecated use TechneMicroservice */
+export { TechneMicroservice as BnestMicroservice };

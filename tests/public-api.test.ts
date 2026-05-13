@@ -14,7 +14,7 @@ describe("public API", () => {
     expect(typeof common.HttpException).toBe("function");
     expect(typeof common.Scope).toBe("object");
     expect(typeof common.Public).toBe("function");
-    expect(typeof core.BnestFactory).toBe("function");
+    expect(typeof core.TechneFactory).toBe("function");
     expect(typeof core.Reflector).toBe("function");
     expect(typeof core.Container).toBe("function");
     expect(typeof core.ContextIdFactory).toBe("function");
