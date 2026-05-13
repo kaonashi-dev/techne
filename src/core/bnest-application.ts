@@ -467,3 +467,6 @@ export class BnestApplication {
     this.shutdownHandlers = [];
   }
 }
+
+/** Canonical name. `BnestApplication` is kept as a deprecated alias through v0.4.x. */
+export { BnestApplication as TechneApplication };

@@ -29,7 +29,14 @@ describe("public API", () => {
   test("keeps the root export minimal", async () => {
     const root = await import("@kaonashi-dev/bnest");
 
-    expect(Object.keys(root).sort()).toEqual(["BnestApplication", "BnestFactory"]);
+    // The root export keeps a minimal surface but now exposes both the legacy
+    // Bnest* names and the canonical Techne* aliases introduced for the rename.
+    expect(Object.keys(root).sort()).toEqual([
+      "BnestApplication",
+      "BnestFactory",
+      "TechneApplication",
+      "TechneFactory",
+    ]);
     expect("Controller" in root).toBe(false);
     expect("Reflector" in root).toBe(false);
     expect("Test" in root).toBe(false);

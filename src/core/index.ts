@@ -31,6 +31,19 @@ export function bnest(module?: any, options?: BnestApplicationOptions): Promise<
   return BnestFactory.create(module, options);
 }
 
+/**
+ * Canonical name. `bnest()` is kept as a deprecated alias through v0.4.x.
+ * Identical signature; calls through to {@link BnestFactory.create}.
+ */
+export function techne(): Promise<BnestApplication>;
+export function techne(module: any): Promise<BnestApplication>;
+export function techne(module: any, options: BnestApplicationOptions): Promise<BnestApplication>;
+export function techne(module?: any, options?: BnestApplicationOptions): Promise<BnestApplication> {
+  if (module === undefined) return BnestFactory.create();
+  if (options === undefined) return BnestFactory.create(module);
+  return BnestFactory.create(module, options);
+}
+
 export interface BootstrapOverrides extends BnestApplicationOptions {
   port?: number;
   host?: string;

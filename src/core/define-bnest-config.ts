@@ -23,3 +23,9 @@ export type BnestConfig = BnestApplicationOptions & {
 export function defineBnestConfig(config: BnestConfig): BnestConfig {
   return config;
 }
+
+/** Canonical name. `BnestConfig` is kept as a deprecated alias through v0.4.x. */
+export type TechneConfig = BnestConfig;
+
+/** Canonical name. `defineBnestConfig` is kept as a deprecated alias through v0.4.x. */
+export const defineTechneConfig = defineBnestConfig;

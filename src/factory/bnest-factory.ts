@@ -285,3 +285,11 @@ export class BnestFactory {
     return Array.isArray(resolved) ? resolved : [resolved];
   }
 }
+
+// ─── Techne canonical names (Bnest names kept as deprecated aliases through v0.4.x) ───
+export { BnestFactory as TechneFactory };
+export type TechneApplicationOptions = BnestApplicationOptions;
+export type TechneHealthOptions = BnestHealthOptions;
+export type TechneShutdownOptions = BnestShutdownOptions;
+export const loadTechneConfigFile = loadBnestConfigFile;
+export const __resetTechneConfigCache = __resetBnestConfigCache;

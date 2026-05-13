@@ -17,3 +17,6 @@ export abstract class BnestMicroservice {
   abstract listen(): Promise<void>;
   abstract close(): Promise<void>;
 }
+
+/** Canonical name. `BnestMicroservice` is kept as a deprecated alias through v0.4.x. */
+export { BnestMicroservice as TechneMicroservice };
