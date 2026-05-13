@@ -69,6 +69,18 @@ interface RouteRuntimeCache {
 
 const EMPTY_ARRAY: readonly never[] = Object.freeze([]);
 
+// Module-level frozen constants to avoid re-allocating Headers/ResponseInit on
+// every typed response. Reused for the common status=200 case in
+// `maybeStringify` — the headers object identity is shared across all
+// responses, which is safe because `Response` snapshots the init eagerly.
+const JSON_CONTENT_TYPE: Readonly<Record<string, string>> = Object.freeze({
+  "content-type": "application/json; charset=utf-8",
+});
+const RESPONSE_INIT_OK: ResponseInit = Object.freeze({
+  status: 200,
+  headers: JSON_CONTENT_TYPE as Record<string, string>,
+}) as ResponseInit;
+
 function mergeArrays<T>(globals: T[], route: T[]): T[] {
   if (globals.length === 0) return route;
   if (route.length === 0) return globals;
@@ -599,6 +611,11 @@ export class RouterExecutionContext {
   /**
    * Apply the precompiled response stringifier if one exists, otherwise
    * return the result unmodified.
+   *
+   * Perf note: the common `status=200` path reuses the module-level frozen
+   * `RESPONSE_INIT_OK` so we don't allocate a fresh `Headers` / init object
+   * per request. Only when the handler set a non-200 status do we allocate
+   * a per-call init (still reusing the shared headers object).
    */
   private maybeStringify(
     context: RequestHandlerContext,
@@ -613,10 +630,13 @@ export class RouterExecutionContext {
     if (t !== "object") return result; // string / number / boolean — Elysia handles
     try {
       const body = stringifier(result);
-      const status = (context as any)?.set?.status ?? 200;
+      const status = (context as any)?.set?.status;
+      if (status === undefined || status === 200) {
+        return new Response(body, RESPONSE_INIT_OK);
+      }
       return new Response(body, {
         status: typeof status === "number" ? status : 200,
-        headers: { "content-type": "application/json; charset=utf-8" },
+        headers: JSON_CONTENT_TYPE as Record<string, string>,
       });
     } catch {
       // Fallback: let Elysia serialize on its own.
