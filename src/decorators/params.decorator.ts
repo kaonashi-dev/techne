@@ -96,7 +96,7 @@ export const Headers = createBuiltinParamDecorator("headers");
 export const UploadedFile = createBuiltinParamDecorator("file");
 
 /**
- * NestJS-compatible `createParamDecorator`. Given a factory that reads from
+ * Techne custom parameter decorator helper. Given a factory that reads from
  * the `ExecutionContext`, returns a parameter decorator that injects the
  * factory's return value into a handler argument at request time.
  *

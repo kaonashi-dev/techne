@@ -2,9 +2,9 @@ import "../reflect-setup";
 import { CATCH_METADATA } from "../common/constants";
 
 /**
- * NestJS-compatible `@Catch` decorator. Declares the exception types an
+ * Techne `@Catch` decorator. Declares the exception types an
  * `ExceptionFilter` handles. `@Catch()` with no arguments = catch-all
- * (the existing Bnest default).
+ * (the default Techne catch-all behavior).
  *
  * ```ts
  * @Catch(BadRequestException)

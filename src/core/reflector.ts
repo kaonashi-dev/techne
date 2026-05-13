@@ -1,7 +1,7 @@
 import "../reflect-setup";
 
 /**
- * NestJS-compatible Reflector. Thin wrapper over `Reflect.getMetadata` that
+ * Techne Reflector. Thin wrapper over `Reflect.getMetadata` that
  * exposes ergonomic helpers for reading handler/class metadata from Guards,
  * Interceptors, and Filters.
  *
@@ -69,7 +69,7 @@ export class Reflector {
   /**
    * Read metadata from all targets and return the first defined value.
    * Useful when handler-level decorators should override controller-level
-   * ones (the standard NestJS override order is `[handler, class]`).
+   * ones (Techne convention is `[handler, class]`).
    */
   public getAllAndOverride<TResult = any, TKey extends PropertyKey = PropertyKey>(
     key: TKey,

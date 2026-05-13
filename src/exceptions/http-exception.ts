@@ -57,11 +57,11 @@ export interface HttpExceptionOptions {
 }
 
 /**
- * NestJS-compatible HttpException.
+ * Techne HTTP exception with structured RFC 7807 metadata support.
  *
  * Accepts two constructor signatures:
  *
- *   new HttpException(response, status, options?)             // NestJS-style
+ *   new HttpException(response, status, options?)             // structured form
  *     - response: string | object
  *     - status: number
  *     - options?: HttpExceptionOptions
@@ -113,7 +113,7 @@ export class HttpException extends Error {
         error: this.error,
       };
     } else {
-      // NestJS signature: (response, status, options?)
+      // Structured signature: (response, status, options?)
       const status = typeof statusOrMessage === "number" ? statusOrMessage : 500;
       const message =
         typeof statusCodeOrResponse === "string"
@@ -122,8 +122,7 @@ export class HttpException extends Error {
       super(message);
       this.statusCode = status;
       this.error = extractError(statusCodeOrResponse) ?? REASON_PHRASES[status] ?? "Error";
-      this.options =
-        errorOrOptions && typeof errorOrOptions === "object" ? errorOrOptions : {};
+      this.options = errorOrOptions && typeof errorOrOptions === "object" ? errorOrOptions : {};
       this.responseBody =
         typeof statusCodeOrResponse === "object" && statusCodeOrResponse !== null
           ? { statusCode: status, ...statusCodeOrResponse }
@@ -133,13 +132,13 @@ export class HttpException extends Error {
     this.name = this.constructor.name;
   }
 
-  /** NestJS-compatible: returns the HTTP status code. */
+  /** Returns the HTTP status code. */
   public getStatus(): number {
     return this.statusCode;
   }
 
   /**
-   * NestJS-compatible: returns the response body that should be serialized.
+   * Returns the response body that should be serialized.
    * If the exception was built with an object payload, that payload is
    * returned directly (with `statusCode` merged in).
    */

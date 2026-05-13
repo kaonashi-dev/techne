@@ -1,8 +1,8 @@
 # Techne
 
-> Experimental Nest-style framework for Bun, using Elysia as the HTTP layer.
+> Experimental Bun-native application framework using Elysia as the HTTP layer.
 
-Techne is a personal project focused on bringing familiar NestJS-style patterns to Bun without a Node.js runtime. It is built for exploration, not production use, and breaking changes should be expected.
+Techne is a personal project focused on a decorator-first developer experience, explicit application architecture, and Bun-native runtime ergonomics. It is built for exploration, not production use, and breaking changes should be expected.
 
 ## Why Techne
 
@@ -97,9 +97,9 @@ app.listen(3000, () => {
 });
 ```
 
-## Coming from NestJS
+## Techne Surfaces
 
-The recommended mental model is now:
+The recommended mental model is:
 
 - `@kaonashi-dev/techne/common` for decorators, exceptions, pipes, DTO/schema helpers, and request lifecycle interfaces.
 - `@kaonashi-dev/techne/core` for bootstrap and infrastructure APIs.
@@ -107,13 +107,13 @@ The recommended mental model is now:
 
 ### Import Map
 
-| NestJS | Techne |
+| Area | Package |
 | --- | --- |
-| `@nestjs/common` | `@kaonashi-dev/techne/common` |
-| `@nestjs/core` | `@kaonashi-dev/techne/core` |
-| `@nestjs/testing` | `@kaonashi-dev/techne/testing` |
-| `@nestjs/cqrs` | `@kaonashi-dev/techne/cqrs` |
-| `@nestjs/microservices` | `@kaonashi-dev/techne/microservices` |
+| Decorators, exceptions, pipes, schemas | `@kaonashi-dev/techne/common` |
+| Bootstrap, DI container, reflector, config loader | `@kaonashi-dev/techne/core` |
+| Testing utilities | `@kaonashi-dev/techne/testing` |
+| CQRS buses and event store | `@kaonashi-dev/techne/cqrs` |
+| Microservice transports | `@kaonashi-dev/techne/microservices` |
 
 ### Migration
 
@@ -460,7 +460,7 @@ the emitter directly: `emitOpenApiDocument(app, builder?)` and
 
 `HealthCheckService` from `@kaonashi-dev/techne/health` still provides
 `pingCheck()` and `memoryCheck()` helpers for callers that want to expose a
-custom Nest-style indicator. The auto-registered `/healthz` and `/readyz`
+custom health indicator. The auto-registered `/healthz` and `/readyz`
 endpoints described in [Health & Graceful Shutdown](#health--graceful-shutdown)
 are independent and are wired up by `TechneFactory.create()`.
 
@@ -770,7 +770,7 @@ bun run bench
 ```text
 src/
   cli/            CLI scaffolding and generators
-  common/         Nest-style public common API barrel
+  common/         Public decorators, exceptions, pipes, and schema helpers
   config/         ConfigModule, ConfigService, and registerAs helpers
   core/           Application core, DI container, and bootstrap APIs
     plugins/      Plugin protocol (`definePlugin`, `PluginContext`)
