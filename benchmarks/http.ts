@@ -1,20 +1,43 @@
 /**
- * HTTP Benchmark — Raw Elysia vs Bnest
+ * HTTP Benchmark — Raw Elysia vs Bnest.
  *
- * Measures requests/sec and latency for equivalent endpoints.
- * Run: bun run benchmarks/http.ts
+ * Methodology fixes vs the original:
+ *  - Concurrent batches of 100 issued via `Promise.all` instead of an awaited
+ *    serial loop, so the request pipeline is actually exercised the way a
+ *    real server would dispatch overlapping work.
+ *  - 5 measured iterations; highest and lowest are dropped, the remaining 3
+ *    are averaged. Reports min/avg/max + p50/p95/p99.
+ *  - `Bun.nanoseconds()` for timing.
+ *  - Pre-measurement stabilization: `Bun.gc(true)` + `Bun.sleep(50)` to
+ *    drain microtasks so a stop-the-world collection doesn't land inside
+ *    the timing window.
+ *
+ * Run:
+ *   bun run benchmarks/http.ts
+ *   bun run benchmarks/http.ts --quick
+ *   bun run benchmarks/http.ts --json
  */
 
 import { Elysia } from "elysia";
 import { Controller, Get, Injectable, Module, Param } from "../src/common";
 import { BnestFactory } from "../src/core";
+import {
+  emitResults,
+  getDefaults,
+  isJson,
+  isQuick,
+  runScenario,
+  type ScenarioResult,
+} from "./scenarios";
 
-// --- Raw Elysia ---
+// ─── Raw Elysia (the ceiling) ───────────────────────────────────────────────
+
 const elysiaApp = new Elysia()
   .get("/users", () => [{ id: 1, name: "Alice" }])
   .get("/users/:id", ({ params }) => ({ id: params.id, name: "Alice" }));
 
-// --- Bnest ---
+// ─── Bnest (the framework under test) ──────────────────────────────────────
+
 @Injectable()
 class UserService {
   getAll() {
@@ -45,55 +68,31 @@ class AppModule {}
 
 const bnestApp = await BnestFactory.create(AppModule, { logger: false });
 
-// --- Benchmark ---
-const ITERATIONS = 10_000;
-const WARMUP = 1_000;
+// ─── Run ───────────────────────────────────────────────────────────────────
 
-async function bench(name: string, handler: (req: Request) => Promise<Response>) {
-  const listReq = new Request("http://localhost/users");
-  const paramReq = new Request("http://localhost/users/42");
+export async function runHttpBench(): Promise<ScenarioResult[]> {
+  const opts = getDefaults(isQuick());
+  const requests = [
+    { label: "GET /users", make: () => new Request("http://localhost/users") },
+    { label: "GET /users/:id", make: () => new Request("http://localhost/users/42") },
+  ];
 
-  // Warmup
-  for (let i = 0; i < WARMUP; i++) {
-    await handler(listReq);
-    await handler(paramReq);
+  const results: ScenarioResult[] = [];
+  for (const req of requests) {
+    results.push(await runScenario("Raw Elysia", (r) => elysiaApp.handle(r), req, opts));
   }
-
-  // List endpoint
-  const listStart = performance.now();
-  for (let i = 0; i < ITERATIONS; i++) {
-    await handler(listReq);
+  for (const req of requests) {
+    results.push(await runScenario("Bnest", (r) => bnestApp.handle(r), req, opts));
   }
-  const listDuration = performance.now() - listStart;
-
-  // Param endpoint
-  const paramStart = performance.now();
-  for (let i = 0; i < ITERATIONS; i++) {
-    await handler(paramReq);
-  }
-  const paramDuration = performance.now() - paramStart;
-
-  const listRps = Math.round(ITERATIONS / (listDuration / 1000));
-  const paramRps = Math.round(ITERATIONS / (paramDuration / 1000));
-  const listAvg = (listDuration / ITERATIONS).toFixed(3);
-  const paramAvg = (paramDuration / ITERATIONS).toFixed(3);
-
-  console.log(`\n${name}:`);
-  console.log(`  GET /users     ${listRps.toLocaleString()} req/s  (avg ${listAvg}ms)`);
-  console.log(`  GET /users/:id ${paramRps.toLocaleString()} req/s  (avg ${paramAvg}ms)`);
-
-  return { listRps, paramRps };
+  return results;
 }
 
-console.log(
-  `Benchmark: ${ITERATIONS.toLocaleString()} iterations, ${WARMUP.toLocaleString()} warmup\n`,
-);
-
-const elysia = await bench("Raw Elysia", (req) => elysiaApp.handle(req));
-const bnest = await bench("Bnest", (req) => bnestApp.handle(req));
-
-console.log("\n--- Overhead ---");
-const listOverhead = ((1 - bnest.listRps / elysia.listRps) * 100).toFixed(1);
-const paramOverhead = ((1 - bnest.paramRps / elysia.paramRps) * 100).toFixed(1);
-console.log(`  GET /users     ${listOverhead}% slower`);
-console.log(`  GET /users/:id ${paramOverhead}% slower`);
+if (import.meta.main) {
+  const results = await runHttpBench();
+  if (!isJson()) {
+    console.log(
+      `\nHTTP fast-path: ${results[0]?.total.toLocaleString()} req per iter, drop-high/drop-low across iterations.\n`,
+    );
+  }
+  emitResults(results);
+}
