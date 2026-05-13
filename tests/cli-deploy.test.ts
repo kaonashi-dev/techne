@@ -10,7 +10,7 @@ describe("CLI Dockerfile generator", () => {
 
   beforeEach(async () => {
     originalCwd = process.cwd();
-    tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "bnest-cli-deploy-"));
+    tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "techne-cli-deploy-"));
     process.chdir(tempRoot);
   });
 
@@ -47,9 +47,7 @@ describe("CLI Dockerfile generator", () => {
     expect(await Bun.file(path.join(tempRoot, "Dockerfile")).exists()).toBe(true);
     expect(await Bun.file(path.join(tempRoot, ".dockerignore")).exists()).toBe(true);
 
-    await expect(generateDockerfile({ outDir: tempRoot })).rejects.toThrow(
-      /refusing to overwrite/,
-    );
+    await expect(generateDockerfile({ outDir: tempRoot })).rejects.toThrow(/refusing to overwrite/);
 
     // Force overwrites
     await generateDockerfile({ outDir: tempRoot, force: true, port: 4242 });

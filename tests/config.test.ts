@@ -13,7 +13,7 @@ describe("ConfigModule", () => {
   let previousEnv: Record<string, string | undefined>;
 
   beforeEach(async () => {
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bnest-config-"));
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "techne-config-"));
     previousEnv = {
       APP_NAME: process.env.APP_NAME,
       DATABASE_URL: process.env.DATABASE_URL,
