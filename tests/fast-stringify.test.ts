@@ -104,10 +104,7 @@ describe("compileStringifier", () => {
   });
 
   test("matches JSON.stringify semantically for several shapes", () => {
-    expectEqualsJson(
-      () => Type.Object({ a: Type.Number(), b: Type.String() }),
-      { a: 1, b: "x" },
-    );
+    expectEqualsJson(() => Type.Object({ a: Type.Number(), b: Type.String() }), { a: 1, b: "x" });
     expectEqualsJson(
       () => Type.Array(Type.Object({ id: Type.Number() })),
       [{ id: 1 }, { id: 2 }, { id: 3 }],

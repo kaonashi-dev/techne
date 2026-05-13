@@ -1,9 +1,4 @@
-import type {
-  OpenApiPathItem,
-  OpenApiSchema,
-  OpenApiServer,
-  OpenApiTag,
-} from "./openapi-emitter";
+import type { OpenApiPathItem, OpenApiSchema, OpenApiServer, OpenApiTag } from "./openapi-emitter";
 
 export interface SwaggerDocumentOptions {
   title?: string;

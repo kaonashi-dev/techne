@@ -198,8 +198,7 @@ export class Container {
     if (this.providers.has(token)) {
       const provider = this.providers.get(token)!;
       resolved =
-        getProviderScope(provider) === Scope.DEFAULT && !this.providerHasContextualDeps(provider)
-      ;
+        getProviderScope(provider) === Scope.DEFAULT && !this.providerHasContextualDeps(provider);
     } else {
       resolved = getClassScope(token) === Scope.DEFAULT && !this.classHasContextualDeps(token);
     }

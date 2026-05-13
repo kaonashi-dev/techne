@@ -95,9 +95,7 @@ export class Logger {
 
     const coloredContext = `${colors.yellow}[${ctx}]${colors.reset}`;
     const coloredLevel = `${levelColor}${levelStr}${colors.reset}`;
-    const reqTag = this.requestId
-      ? ` ${colors.gray}[req=${this.requestId}]${colors.reset}`
-      : "";
+    const reqTag = this.requestId ? ` ${colors.gray}[req=${this.requestId}]${colors.reset}` : "";
     const prefix = `${colors.green}[Techne] ${pid}  -${colors.reset} ${timestamp}     ${coloredLevel} ${coloredContext}${reqTag}`;
 
     if (typeof message === "object") {
@@ -118,14 +116,13 @@ export class Logger {
     return JSON.stringify(record);
   }
 
-  private emit(
-    level: LogLevel,
-    sink: (line: string) => void,
-    message: any,
-    context?: string,
-  ) {
+  private emit(level: LogLevel, sink: (line: string) => void, message: any, context?: string) {
     if (!Logger.enabled || Logger.mode === false) return;
-    sink(this.isJson() ? this.jsonRecord(level, message, context) : this.prettyMessage(level, message, context));
+    sink(
+      this.isJson()
+        ? this.jsonRecord(level, message, context)
+        : this.prettyMessage(level, message, context),
+    );
   }
 
   log(message: any, context?: string) {
@@ -135,7 +132,11 @@ export class Logger {
   error(message: any, trace?: string, context?: string) {
     if (!Logger.enabled || Logger.mode === false) return;
     const sink = console.error.bind(console);
-    sink(this.isJson() ? this.jsonRecord("error", message, context) : this.prettyMessage("error", message, context));
+    sink(
+      this.isJson()
+        ? this.jsonRecord("error", message, context)
+        : this.prettyMessage("error", message, context),
+    );
     if (trace) {
       sink(trace);
     }
