@@ -61,6 +61,17 @@ const DEFAULT_SHUTDOWN: ShutdownOptions = {
   signals: ["SIGTERM", "SIGINT"],
 };
 
+// One-time deprecation warnings keyed by method name. The warning fires at
+// most once per method per process so noisy test suites don't get spammed.
+const deprecationWarned = new Set<string>();
+function warnDeprecatedSetter(method: string) {
+  if (deprecationWarned.has(method)) return;
+  deprecationWarned.add(method);
+  new Logger("BnestApplication").warn(
+    `${method}() is deprecated: declare this in bnest.config.ts instead. Will be removed in v1.0.`,
+  );
+}
+
 const DEFAULT_HEALTH: HealthOptions = {
   enabled: true,
   livenessPath: "/healthz",
@@ -120,6 +131,7 @@ export class BnestApplication {
   }
 
   useGlobalGuards(...guards: (CanActivate | Function)[]): this {
+    warnDeprecatedSetter("useGlobalGuards");
     const appliedInTime = this.executionContext?.setGlobalGuards(guards) ?? false;
     if (!appliedInTime) {
       this.logger.warn(
@@ -130,18 +142,28 @@ export class BnestApplication {
   }
 
   setGlobalPrefix(prefix: string, options: GlobalPrefixOptions = {}): this {
+    warnDeprecatedSetter("setGlobalPrefix");
     this.routeOptions.globalPrefix = { prefix, exclude: options.exclude };
     this.refreshRoutesIfInitialized();
     return this;
   }
 
   enableVersioning(options: VersioningOptions): this {
+    warnDeprecatedSetter("enableVersioning");
     this.routeOptions.versioning = options;
     this.refreshRoutesIfInitialized();
     return this;
   }
 
   enableCors(options: CorsOptions = {}): this {
+    warnDeprecatedSetter("enableCors");
+    this.adapter.enableCors(options);
+    this.refreshRoutesIfInitialized();
+    return this;
+  }
+
+  /** @internal — used by BnestFactory to apply declarative CORS without firing the deprecation. */
+  applyCorsFromConfig(options: CorsOptions): this {
     this.adapter.enableCors(options);
     this.refreshRoutesIfInitialized();
     return this;

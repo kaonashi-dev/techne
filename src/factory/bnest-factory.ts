@@ -13,6 +13,61 @@ import type { MicroserviceOptions } from "../microservices/types";
 import { MqRegistry } from "../mq/registry";
 import { MQ_DRIVER } from "../mq/tokens";
 import type { CanActivate } from "../interfaces/can-activate.interface";
+import type { BnestConfig } from "../core/define-bnest-config";
+
+const CONFIG_FILE_CANDIDATES = ["bnest.config.ts", "bnest.config.js", "bnest.config.mjs"] as const;
+const cwdCache = new Map<string, BnestConfig | null>();
+
+/**
+ * Loads `bnest.config.{ts,js,mjs}` from `process.cwd()` if present.
+ * Results are cached per cwd; tests that swap directories between cases
+ * should call {@link __resetBnestConfigCache}.
+ */
+export async function loadBnestConfigFile(): Promise<BnestConfig | null> {
+  const cwd = process.cwd();
+  if (cwdCache.has(cwd)) return cwdCache.get(cwd) ?? null;
+  for (const name of CONFIG_FILE_CANDIDATES) {
+    const filePath = `${cwd}/${name}`;
+    if (!(await Bun.file(filePath).exists())) continue;
+    const mod = await import(filePath);
+    if (!mod || mod.default === undefined) {
+      throw new Error(
+        `Found ${name} but it has no default export. Use \`export default defineBnestConfig({...})\`.`,
+      );
+    }
+    const value = mod.default as BnestConfig;
+    cwdCache.set(cwd, value);
+    return value;
+  }
+  cwdCache.set(cwd, null);
+  return null;
+}
+
+/**
+ * Test/internal hook: clears the cached `bnest.config.ts` resolution so the
+ * next call re-reads the file. Tests that swap `cwd` between cases need this.
+ */
+export function __resetBnestConfigCache() {
+  cwdCache.clear();
+}
+
+function mergeConfig(
+  base: BnestConfig | null,
+  overrides?: BnestApplicationOptions,
+): BnestApplicationOptions & { module?: any; port?: number; host?: string } {
+  if (!base && !overrides) return {};
+  if (!base) return { ...(overrides ?? {}) };
+  if (!overrides) return { ...base };
+  // Shallow merge per top-level key. `globalGuards` is the only field that
+  // concatenates so config-declared guards stay attached when callers add more.
+  const merged: any = { ...base, ...overrides };
+  const baseGuards = base.globalGuards ?? [];
+  const overrideGuards = overrides.globalGuards ?? [];
+  if (baseGuards.length || overrideGuards.length) {
+    merged.globalGuards = [...baseGuards, ...overrideGuards];
+  }
+  return merged;
+}
 
 export interface BnestShutdownOptions {
   /** ms to wait for in-flight requests before forcing shutdown. Default: 10_000 */
@@ -63,10 +118,30 @@ export interface BnestApplicationOptions {
 }
 
 export class BnestFactory {
+  public static async create(): Promise<BnestApplication>;
+  public static async create(module: any): Promise<BnestApplication>;
   public static async create(
     module: any,
+    options: BnestApplicationOptions,
+  ): Promise<BnestApplication>;
+  public static async create(
+    module?: any,
     options?: BnestApplicationOptions,
   ): Promise<BnestApplication> {
+    const fileConfig = await loadBnestConfigFile();
+    const merged = mergeConfig(fileConfig, options);
+    const resolvedModule = module ?? merged.module ?? fileConfig?.module;
+    if (!resolvedModule) {
+      throw new Error(
+        "BnestFactory.create(): no module supplied and no `module` declared in bnest.config.ts.",
+      );
+    }
+    // Strip bootstrap-only fields from the options passed to the rest of the
+    // factory — they aren't part of `BnestApplicationOptions`.
+    const { module: _m, port: _p, host: _h, ...effectiveOptions } = merged as any;
+    options = effectiveOptions;
+    module = resolvedModule;
+
     const loggerEnabled = options?.logger !== false;
     Logger.setEnabled(loggerEnabled);
 
@@ -125,7 +200,7 @@ export class BnestFactory {
     }
 
     if (options?.cors) {
-      app.enableCors(options.cors);
+      app.applyCorsFromConfig(options.cors);
     }
 
     app.initializeRoutes({
