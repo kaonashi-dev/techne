@@ -11,6 +11,7 @@ import {
   generateFilter,
   generateInterceptor,
   generateDto,
+  generateDockerfile,
   createProject,
 } from "./generators";
 
@@ -203,6 +204,7 @@ Usage:
   bnest start [--port N]
   bnest test [pattern] [--watch] [--coverage]
   bnest build|b [entry] [--out <file>] [--target <bun|node|browser>] [--minify]
+  bnest deploy --target docker [--out Dockerfile] [--port N] [--bun-version V] [--dry-run] [--force]
   bnest doctor
   bnest generate|g <type> <name>
 
@@ -217,12 +219,71 @@ Available generators:
   filter
   interceptor
   dto
+  docker          (writes Dockerfile + .dockerignore; supports --port, --bun-version, --out, --force, --dry-run)
 
 Build targets:
   bun      Standalone Bun binary (default)
   node     Node.js ESM module
   browser  Browser bundle
+
+Deploy targets:
+  docker   Multi-stage Bun Dockerfile (only target supported for now)
+           Planned: fly, railway, cloudflare, bun-vm
   `);
+}
+
+async function runDeploy() {
+  const target = flagValue("--target");
+  if (!target || target !== "docker") {
+    console.error(
+      `bnest deploy: only --target docker is supported for now (planned: fly, railway, cloudflare, bun-vm)`,
+    );
+    process.exit(1);
+  }
+  await runDockerGenerate({ requireTarget: false });
+}
+
+async function runDockerGenerate(_opts: { requireTarget: boolean }) {
+  const out = flagValue("--out") ?? "Dockerfile";
+  const portRaw = flagValue("--port");
+  const port = portRaw ? Number(portRaw) : 3000;
+  if (!Number.isFinite(port) || port <= 0) {
+    console.error(`bnest: invalid --port value "${portRaw}"`);
+    process.exit(1);
+  }
+  const bunVersion = flagValue("--bun-version") ?? "1";
+  const dryRun = flag("--dry-run");
+  const force = flag("--force");
+
+  try {
+    const result = await generateDockerfile({
+      outDir: process.cwd(),
+      port,
+      bunVersion,
+      outName: out,
+      force,
+      dryRun,
+      writeDockerignore: true,
+    });
+
+    if (dryRun) {
+      console.log(result.dockerfile);
+      if (result.dockerignore) {
+        console.log(`# --- .dockerignore ---`);
+        console.log(result.dockerignore);
+      }
+      return;
+    }
+
+    console.log(`\nNext steps:`);
+    console.log(`  docker build -t app .`);
+    console.log(`  docker run -p ${port}:${port} app`);
+    console.log(`  docker compose up\n`);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`bnest: ${message}`);
+    process.exit(1);
+  }
 }
 
 async function main() {
@@ -260,11 +321,23 @@ async function main() {
     await runTests(pattern, watch, coverage);
   } else if (command === "doctor") {
     await doctor();
+  } else if (command === "deploy") {
+    await runDeploy();
   } else if (command === "generate" || command === "g") {
     const type = args[1];
-    const name = args[2];
 
-    if (!type || !name) {
+    if (!type) {
+      console.error("Usage: bnest generate <type> <name>");
+      process.exit(1);
+    }
+
+    if (type === "docker") {
+      await runDockerGenerate({ requireTarget: false });
+      return;
+    }
+
+    const name = args[2];
+    if (!name) {
       console.error("Usage: bnest generate <type> <name>");
       process.exit(1);
     }

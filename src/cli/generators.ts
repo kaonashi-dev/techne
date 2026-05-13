@@ -10,6 +10,115 @@ async function writeTextFile(filePath: string, content: string) {
   console.log(`CREATE ${path.relative(process.cwd(), filePath)}`);
 }
 
+export interface DockerfileOptions {
+  outDir?: string;
+  projectName?: string;
+  port?: number;
+  bunVersion?: string;
+  outName?: string;
+  force?: boolean;
+  dryRun?: boolean;
+  writeDockerignore?: boolean;
+}
+
+function renderDockerfile(bunVersion: string, port: number): string {
+  return `# syntax=docker/dockerfile:1.7
+FROM oven/bun:${bunVersion} AS builder
+WORKDIR /app
+
+COPY package.json bun.lock* ./
+RUN bun install --frozen-lockfile
+
+COPY . .
+RUN bun build src/main.ts --target=bun --outfile=dist/app.bun --minify
+
+FROM oven/bun:${bunVersion}-slim AS runtime
+WORKDIR /app
+
+RUN addgroup --system --gid 1001 bnest && \\
+    adduser --system --uid 1001 --ingroup bnest bnest
+
+COPY --from=builder --chown=bnest:bnest /app/dist/app.bun ./app.bun
+
+USER bnest
+ENV NODE_ENV=production
+ENV PORT=${port}
+
+EXPOSE ${port}
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \\
+  CMD bun -e "fetch('http://localhost:${port}/healthz').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+
+CMD ["./app.bun"]
+`;
+}
+
+function renderDockerignore(): string {
+  return `node_modules
+dist
+.git
+.github
+.claude
+.cursor
+.vscode
+*.log
+.env*
+!.env.example
+tests
+benchmarks
+README.md
+*.md
+coverage
+`;
+}
+
+export async function generateDockerfile(
+  opts: DockerfileOptions = {},
+): Promise<{ dockerfile: string; dockerignore: string | null }> {
+  const outDir = opts.outDir ?? process.cwd();
+  const port = opts.port ?? 3000;
+  const bunVersion = opts.bunVersion ?? "1";
+  const outName = opts.outName ?? "Dockerfile";
+  const force = opts.force ?? false;
+  const dryRun = opts.dryRun ?? false;
+  const writeDockerignore = opts.writeDockerignore ?? true;
+
+  const dockerfile = renderDockerfile(bunVersion, port);
+  const dockerignore = writeDockerignore ? renderDockerignore() : null;
+
+  if (dryRun) {
+    return { dockerfile, dockerignore };
+  }
+
+  const dockerfilePath = path.join(outDir, outName);
+  if (!force) {
+    const exists = await Bun.file(dockerfilePath).exists();
+    if (exists) {
+      throw new Error(
+        `refusing to overwrite ${dockerfilePath}; pass --out or remove the existing file (use --force to override)`,
+      );
+    }
+  }
+  await Bun.write(dockerfilePath, dockerfile);
+  console.log(`CREATE ${path.relative(process.cwd(), dockerfilePath)}`);
+
+  if (dockerignore !== null) {
+    const dockerignorePath = path.join(outDir, ".dockerignore");
+    if (!force) {
+      const exists = await Bun.file(dockerignorePath).exists();
+      if (exists) {
+        throw new Error(
+          `refusing to overwrite ${dockerignorePath}; pass --out or remove the existing file (use --force to override)`,
+        );
+      }
+    }
+    await Bun.write(dockerignorePath, dockerignore);
+    console.log(`CREATE ${path.relative(process.cwd(), dockerignorePath)}`);
+  }
+
+  return { dockerfile, dockerignore };
+}
+
 async function writeJsonFile(filePath: string, value: unknown) {
   await writeTextFile(filePath, JSON.stringify(value, null, 2));
 }
@@ -434,9 +543,18 @@ app.listen(port, () => {
 `,
   );
 
+  await generateDockerfile({
+    outDir: dir,
+    projectName: name,
+    port: 3000,
+    bunVersion: "1",
+  });
+
   console.log(`\nProject ${name} created successfully.`);
   console.log(`\nNext steps:`);
   console.log(`  cd ${name}`);
   console.log(`  bun install`);
-  console.log(`  bun run dev\n`);
+  console.log(`  bun run dev`);
+  console.log(`  docker build -t ${name} .`);
+  console.log(`  docker run -p 3000:3000 ${name}\n`);
 }
