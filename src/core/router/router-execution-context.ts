@@ -9,6 +9,7 @@ import { ExecutionContextHost } from "../execution-context";
 import { HandlerMetadataStorage } from "./handler-metadata-storage";
 import { RouterResponseController } from "./router-response-controller";
 import type { DiscoveredRouteDefinition } from "./router-explorer";
+import { compileStringifier } from "../../schema/fast-stringify";
 
 type RequestHandlerContext = any;
 type CompiledArgsBinder = (
@@ -29,16 +30,19 @@ interface CachedHandlerMetadata {
   hasCustomParam: boolean;
 }
 
+interface ContainerLike {
+  get<T>(token: any, context?: { module?: any }): T;
+  resolve<T>(
+    token: any,
+    context?: { request?: any; contextId?: symbol; inquirer?: any; module?: any },
+  ): T;
+  isStatic(token: any): boolean;
+  clearContext(contextId: symbol): void;
+  hasContextualDeps?(token: any): boolean;
+}
+
 interface RouteRuntimeCache {
-  container: {
-    get<T>(token: any, context?: { module?: any }): T;
-    resolve<T>(
-      token: any,
-      context?: { request?: any; contextId?: symbol; inquirer?: any; module?: any },
-    ): T;
-    isStatic(token: any): boolean;
-    clearContext(contextId: symbol): void;
-  };
+  container: ContainerLike;
   module?: any;
   routeFilters: any[];
   routeInterceptors: any[];
@@ -50,9 +54,32 @@ interface RouteRuntimeCache {
   staticPipes: PipeTransform[];
   contextualPipes: any[];
   hasRuntimeEnhancers: boolean;
+  // Cost-tagging: precomputed at boot.
+  hasGuards: boolean;
+  hasFilters: boolean;
+  hasInterceptors: boolean;
+  hasPipes: boolean;
+  hasRequestScopedDeps: boolean;
+  // Optional precompiled response stringifier (only set if response schema declared).
+  responseStringifier?: (v: unknown) => string;
+  // Cached enhancer tokens for cost-tag refresh.
+  controllerClass?: any;
+  guards: any[];
 }
 
 const EMPTY_ARRAY: readonly never[] = Object.freeze([]);
+
+// Module-level frozen constants to avoid re-allocating Headers/ResponseInit on
+// every typed response. Reused for the common status=200 case in
+// `maybeStringify` — the headers object identity is shared across all
+// responses, which is safe because `Response` snapshots the init eagerly.
+const JSON_CONTENT_TYPE: Readonly<Record<string, string>> = Object.freeze({
+  "content-type": "application/json; charset=utf-8",
+});
+const RESPONSE_INIT_OK: ResponseInit = Object.freeze({
+  status: 200,
+  headers: JSON_CONTENT_TYPE as Record<string, string>,
+}) as ResponseInit;
 
 function mergeArrays<T>(globals: T[], route: T[]): T[] {
   if (globals.length === 0) return route;
@@ -262,18 +289,7 @@ export class RouterExecutionContext {
     this.routeCaches.length = 0;
   }
 
-  public create(
-    route: DiscoveredRouteDefinition,
-    container: {
-      get<T>(token: any, context?: { module?: any }): T;
-      resolve<T>(
-        token: any,
-        context?: { request?: any; contextId?: symbol; inquirer?: any; module?: any },
-      ): T;
-      isStatic(token: any): boolean;
-      clearContext(contextId: symbol): void;
-    },
-  ) {
+  public create(route: DiscoveredRouteDefinition, container: ContainerLike) {
     this.routesRegistered = true;
     const metadata = this.getMetadata(route);
     const controllerClass = route.controller;
@@ -305,7 +321,21 @@ export class RouterExecutionContext {
       staticPipes: [],
       contextualPipes: [],
       hasRuntimeEnhancers: false,
+      hasGuards: mergedGuards.length > 0,
+      hasFilters: false,
+      hasInterceptors: false,
+      hasPipes: false,
+      hasRequestScopedDeps: false,
+      controllerClass,
+      guards: mergedGuards,
     };
+    if (route.schema && (route.schema as any).response) {
+      try {
+        cache.responseStringifier = compileStringifier((route.schema as any).response);
+      } catch {
+        cache.responseStringifier = undefined;
+      }
+    }
     this.refreshRouteCache(cache);
     this.routeCaches.push(cache);
 
@@ -333,15 +363,7 @@ export class RouterExecutionContext {
     cache: RouteRuntimeCache,
     controllerClass: any,
     handlerRef: Function,
-    container: {
-      get<T>(token: any, context?: { module?: any }): T;
-      resolve<T>(
-        token: any,
-        context?: { request?: any; contextId?: symbol; inquirer?: any; module?: any },
-      ): T;
-      isStatic(token: any): boolean;
-      clearContext(contextId: symbol): void;
-    },
+    container: ContainerLike,
   ): (context: RequestHandlerContext) => unknown {
     const responseController = this.responseController;
     const handlerName = route.handlerName;
@@ -352,6 +374,25 @@ export class RouterExecutionContext {
     const applyInterceptors = this.applyInterceptors;
 
     const slow = (context: RequestHandlerContext) => {
+      // Cost-tagged fast slow-path: skip request-scoped DI bookkeeping when
+      // nothing on the route (controller, guards, filters, interceptors,
+      // pipes) is contextual.
+      if (!cache.hasRequestScopedDeps) {
+        return this.runWithoutResolutionContext(
+          context,
+          cache,
+          controllerClass,
+          handlerName,
+          handlerRef,
+          paramsMetadata,
+          bindArgs,
+          hasCustomParam,
+          container,
+          applyPipes,
+          applyInterceptors,
+        );
+      }
+
       const requestKey = this.getRequestContextKey(context);
       const contextId = ContextIdFactory.getByRequest(requestKey);
       const resolutionContext = { module: route.module, request: context, contextId };
@@ -412,11 +453,23 @@ export class RouterExecutionContext {
         if (mergedInterceptors.length > 0) {
           const callHandler = () => controllerInstance[handlerName](...args);
           const result = applyInterceptors(getExecutionContext(), mergedInterceptors, callHandler);
-          return isPromiseLike(result) ? result.catch(handleException) : result;
+          if (isPromiseLike(result)) {
+            return (result as Promise<unknown>).then(
+              (r) => this.maybeStringify(context, cache, r),
+              handleException,
+            );
+          }
+          return this.maybeStringify(context, cache, result);
         }
 
         const result = controllerInstance[handlerName](...args);
-        return isPromiseLike(result) ? result.catch(handleException) : result;
+        if (isPromiseLike(result)) {
+          return (result as Promise<unknown>).then(
+            (r) => this.maybeStringify(context, cache, r),
+            handleException,
+          );
+        }
+        return this.maybeStringify(context, cache, result);
       } catch (error) {
         return handleException(error);
       } finally {
@@ -447,9 +500,13 @@ export class RouterExecutionContext {
           }
           try {
             const result = fast(context);
-            return isPromiseLike(result)
-              ? result.catch((err) => responseController.mapException(context, err))
-              : result;
+            if (isPromiseLike(result)) {
+              return (result as Promise<unknown>).then(
+                (r) => this.maybeStringify(context, cache, r),
+                (err) => responseController.mapException(context, err),
+              );
+            }
+            return this.maybeStringify(context, cache, result);
           } catch (error) {
             return responseController.mapException(context, error);
           }
@@ -458,6 +515,133 @@ export class RouterExecutionContext {
     }
 
     return slow;
+  }
+
+  /**
+   * Cost-tagged slow path: when no enhancer (filter/interceptor/pipe) or
+   * dependency on the route is request-scoped, we skip ContextIdFactory,
+   * resolutionContext bookkeeping, and execution-context-host management
+   * entirely. Static guards have already been resolved at boot.
+   */
+  private runWithoutResolutionContext(
+    context: RequestHandlerContext,
+    cache: RouteRuntimeCache,
+    controllerClass: any,
+    handlerName: string,
+    handlerRef: Function,
+    paramsMetadata: ParamMetadata[],
+    bindArgs: CompiledArgsBinder,
+    hasCustomParam: boolean,
+    container: ContainerLike,
+    applyPipes: (args: any[], paramsMetadata: ParamMetadata[], pipes: PipeTransform[]) => void,
+    applyInterceptors: (
+      context: RequestHandlerContext,
+      interceptors: BnestInterceptor[],
+      handler: () => any,
+    ) => any,
+  ): unknown {
+    const responseController = this.responseController;
+    const controllerInstance = container.get<any>(
+      controllerClass,
+      cache.module !== undefined ? { module: cache.module } : undefined,
+    );
+    const mergedFilters = cache.staticFilters;
+    const mergedInterceptors = cache.staticInterceptors;
+    const mergedPipes = cache.staticPipes;
+
+    let executionContext: ExecutionContextHost | undefined = hasCustomParam
+      ? this.getOrCreateExecutionContext(context, controllerClass, handlerRef)
+      : undefined;
+    const getExecutionContext = () => {
+      if (!executionContext) {
+        executionContext = this.getOrCreateExecutionContext(context, controllerClass, handlerRef);
+      }
+      return executionContext;
+    };
+
+    const handleException = (error: unknown): unknown => {
+      for (let i = mergedFilters.length - 1; i >= 0; i--) {
+        const filter = mergedFilters[i];
+        if (!filterShouldCatch(filter, error)) continue;
+        try {
+          return filter.catch(error, getExecutionContext());
+        } catch {
+          // Filter didn't handle it, try next
+        }
+      }
+      return responseController.mapException(context, error);
+    };
+
+    try {
+      const args = bindArgs(context, executionContext);
+      if (mergedPipes.length > 0) {
+        applyPipes(args, paramsMetadata, mergedPipes);
+      }
+
+      if (mergedInterceptors.length > 0) {
+        const callHandler = () => controllerInstance[handlerName](...args);
+        const result = applyInterceptors(getExecutionContext(), mergedInterceptors, callHandler);
+        if (isPromiseLike(result)) {
+          return (result as Promise<unknown>).then(
+            (r) => this.maybeStringify(context, cache, r),
+            handleException,
+          );
+        }
+        return this.maybeStringify(context, cache, result);
+      }
+
+      const result = controllerInstance[handlerName](...args);
+      if (isPromiseLike(result)) {
+        return (result as Promise<unknown>).then(
+          (r) => this.maybeStringify(context, cache, r),
+          handleException,
+        );
+      }
+      return this.maybeStringify(context, cache, result);
+    } catch (error) {
+      return handleException(error);
+    } finally {
+      if (executionContext) {
+        // Only created if hasCustomParam was true — clean up.
+        this.executionContextHosts.delete(this.getRequestContextKey(context));
+      }
+    }
+  }
+
+  /**
+   * Apply the precompiled response stringifier if one exists, otherwise
+   * return the result unmodified.
+   *
+   * Perf note: the common `status=200` path reuses the module-level frozen
+   * `RESPONSE_INIT_OK` so we don't allocate a fresh `Headers` / init object
+   * per request. Only when the handler set a non-200 status do we allocate
+   * a per-call init (still reusing the shared headers object).
+   */
+  private maybeStringify(
+    context: RequestHandlerContext,
+    cache: RouteRuntimeCache,
+    result: unknown,
+  ): unknown {
+    const stringifier = cache.responseStringifier;
+    if (!stringifier) return result;
+    if (result === undefined || result === null) return result;
+    if (result instanceof Response) return result;
+    const t = typeof result;
+    if (t !== "object") return result; // string / number / boolean — Elysia handles
+    try {
+      const body = stringifier(result);
+      const status = (context as any)?.set?.status;
+      if (status === undefined || status === 200) {
+        return new Response(body, RESPONSE_INIT_OK);
+      }
+      return new Response(body, {
+        status: typeof status === "number" ? status : 200,
+        headers: JSON_CONTENT_TYPE as Record<string, string>,
+      });
+    } catch {
+      // Fallback: let Elysia serialize on its own.
+      return result;
+    }
   }
 
   private refreshRouteCache(cache: RouteRuntimeCache): void {
@@ -484,21 +668,53 @@ export class RouterExecutionContext {
     );
     cache.staticPipes = pipes.staticInstances;
     cache.contextualPipes = pipes.contextualTokens;
-    cache.hasRuntimeEnhancers =
-      cache.staticFilters.length > 0 ||
-      cache.contextualFilters.length > 0 ||
-      cache.staticInterceptors.length > 0 ||
-      cache.contextualInterceptors.length > 0 ||
-      cache.staticPipes.length > 0 ||
-      cache.contextualPipes.length > 0;
+    cache.hasFilters = cache.staticFilters.length > 0 || cache.contextualFilters.length > 0;
+    cache.hasInterceptors =
+      cache.staticInterceptors.length > 0 || cache.contextualInterceptors.length > 0;
+    cache.hasPipes = cache.staticPipes.length > 0 || cache.contextualPipes.length > 0;
+    cache.hasRuntimeEnhancers = cache.hasFilters || cache.hasInterceptors || cache.hasPipes;
+
+    // Cost tag: does this route need request-scoped DI bookkeeping?
+    cache.hasRequestScopedDeps = this.computeHasRequestScopedDeps(cache);
+  }
+
+  private computeHasRequestScopedDeps(cache: RouteRuntimeCache): boolean {
+    const container = cache.container;
+    const isContextual = (token: any): boolean => {
+      if (typeof token !== "function") return false;
+      if (container.hasContextualDeps) return container.hasContextualDeps(token);
+      // Fall back to isStatic — anything not static is contextual.
+      return !container.isStatic(token);
+    };
+
+    if (cache.controllerClass && isContextual(cache.controllerClass)) return true;
+    for (const g of cache.guards) {
+      if (isContextual(g)) return true;
+    }
+    for (const f of cache.contextualFilters) {
+      if (isContextual(f)) return true;
+    }
+    for (const f of cache.routeFilters) {
+      if (isContextual(f)) return true;
+    }
+    for (const i of cache.contextualInterceptors) {
+      if (isContextual(i)) return true;
+    }
+    for (const i of cache.routeInterceptors) {
+      if (isContextual(i)) return true;
+    }
+    for (const p of cache.contextualPipes) {
+      if (isContextual(p)) return true;
+    }
+    for (const p of cache.routePipes) {
+      if (isContextual(p)) return true;
+    }
+    return false;
   }
 
   private partitionRouteInstances<T>(
     items: any[],
-    container: {
-      get<T>(token: any, context?: { module?: any }): T;
-      isStatic(token: any): boolean;
-    },
+    container: ContainerLike,
     module?: any,
   ): { staticInstances: T[]; contextualTokens: any[] } {
     const staticInstances: T[] = [];
@@ -526,13 +742,7 @@ export class RouterExecutionContext {
   private resolveRouteInstances<T>(
     staticInstances: T[],
     contextualTokens: any[],
-    container: {
-      get<T>(token: any, context?: { module?: any }): T;
-      resolve<T>(
-        token: any,
-        context?: { request?: any; contextId?: symbol; inquirer?: any; module?: any },
-      ): T;
-    },
+    container: ContainerLike,
     context?: { request?: any; contextId?: symbol; inquirer?: any; module?: any },
   ): T[] {
     if (contextualTokens.length === 0) {
@@ -547,13 +757,7 @@ export class RouterExecutionContext {
 
   private resolveInstances<T>(
     classes: any[],
-    container: {
-      get<T>(token: any, context?: { module?: any }): T;
-      resolve<T>(
-        token: any,
-        context?: { request?: any; contextId?: symbol; inquirer?: any; module?: any },
-      ): T;
-    },
+    container: ContainerLike,
     context?: { request?: any; contextId?: symbol; inquirer?: any; module?: any },
   ): T[] {
     return classes.map((cls) => {
@@ -570,14 +774,7 @@ export class RouterExecutionContext {
 
   private resolveInstance<T>(
     token: any,
-    container: {
-      get<T>(token: any, context?: { module?: any }): T;
-      resolve<T>(
-        token: any,
-        context?: { request?: any; contextId?: symbol; inquirer?: any; module?: any },
-      ): T;
-      isStatic(token: any): boolean;
-    },
+    container: ContainerLike,
     context: { request?: any; contextId?: symbol; inquirer?: any; module?: any },
   ): T {
     return container.isStatic(token)
@@ -674,31 +871,65 @@ export class RouterExecutionContext {
 
   private createGuardHooks(
     guards: any[],
-    container: {
-      get<T>(token: any, context?: { module?: any }): T;
-      resolve<T>(
-        token: any,
-        context?: { request?: any; contextId?: symbol; inquirer?: any; module?: any },
-      ): T;
-      isStatic(token: any): boolean;
-      clearContext(contextId: symbol): void;
-    },
+    container: ContainerLike,
     controllerClass: any,
     handlerRef: Function,
     module?: any,
   ) {
     return guards.map((guardClass: any) => {
+      // Static-guard hoisting: when the guard's DI tree has no request-scoped
+      // deps, resolve it once at boot and capture the instance in the
+      // closure. The per-request hook then skips ContextIdFactory entirely.
+      const isClassToken = typeof guardClass === "function";
+      const isStaticGuard =
+        !isClassToken ||
+        (container.isStatic(guardClass) &&
+          (!container.hasContextualDeps || !container.hasContextualDeps(guardClass)));
+
+      if (isStaticGuard) {
+        const guardInstance = isClassToken
+          ? container.get<any>(guardClass, module !== undefined ? { module } : undefined)
+          : guardClass;
+
+        return (context: RequestHandlerContext) => {
+          const executionContext = this.getOrCreateExecutionContext(
+            context,
+            controllerClass,
+            handlerRef,
+          );
+          try {
+            const result = guardInstance.canActivate(executionContext);
+
+            if (isPromiseLike<boolean>(result)) {
+              return result
+                .then((canActivate) => {
+                  if (!canActivate) {
+                    return this.responseController.mapException(context, new ForbiddenException());
+                  }
+                })
+                .catch((error: unknown) =>
+                  this.responseController.mapException(context, error),
+                );
+            }
+
+            if (!result) {
+              return this.responseController.mapException(context, new ForbiddenException());
+            }
+          } catch (error) {
+            return this.responseController.mapException(context, error);
+          }
+        };
+      }
+
+      // Contextual guard: must resolve per-request.
       return (context: RequestHandlerContext) => {
         const requestKey = this.getRequestContextKey(context);
         const contextId = ContextIdFactory.getByRequest(requestKey);
-        const guardInstance =
-          typeof guardClass === "function"
-            ? this.resolveInstance<any>(guardClass, container, {
-                module,
-                request: context,
-                contextId,
-              })
-            : guardClass;
+        const guardInstance = this.resolveInstance<any>(guardClass, container, {
+          module,
+          request: context,
+          contextId,
+        });
         const executionContext = this.getOrCreateExecutionContext(
           context,
           controllerClass,
