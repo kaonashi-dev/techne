@@ -66,6 +66,11 @@
       "bun": "./src/mq/index.ts",
       "import": "./src/mq/index.ts",
       "types": "./dist/types/mq/index.d.ts"
+    },
+    "./contract": {
+      "bun": "./src/contract/index.ts",
+      "import": "./src/contract/index.ts",
+      "types": "./dist/types/contract/index.d.ts"
     }
   },
   "bin": {

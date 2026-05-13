@@ -220,6 +220,7 @@ Available generators:
   interceptor
   dto
   docker          (writes Dockerfile + .dockerignore; supports --port, --bun-version, --out, --force, --dry-run)
+  client          (writes a typed RPC route map; supports --out, defaults to src/routes.generated.ts)
 
 Build targets:
   bun      Standalone Bun binary (default)
@@ -230,6 +231,55 @@ Deploy targets:
   docker   Multi-stage Bun Dockerfile (only target supported for now)
            Planned: fly, railway, cloudflare, bun-vm
   `);
+}
+
+async function runGenerateClient() {
+  const out = flagValue("--out") ?? "src/routes.generated.ts";
+  const cwd = process.cwd();
+
+  // Find a bnest.config.{ts,js,mjs} so we know how to boot the user's app.
+  const CANDIDATES = ["bnest.config.ts", "bnest.config.js", "bnest.config.mjs"];
+  let configPath: string | undefined;
+  for (const name of CANDIDATES) {
+    const candidate = path.join(cwd, name);
+    if (await exists(candidate)) {
+      configPath = candidate;
+      break;
+    }
+  }
+  if (!configPath) {
+    fail(
+      `bnest.config.ts not found in ${cwd}. Create one with \`export default defineBnestConfig({ module: AppModule })\` and re-run.`,
+    );
+    process.exit(1);
+  }
+
+  try {
+    const cfgMod = await import(configPath);
+    const config = cfgMod?.default;
+    if (!config || !config.module) {
+      fail(`bnest.config.ts must export a default config with a \`module\` field.`);
+      process.exit(1);
+    }
+
+    // Lazy-import to keep CLI startup fast for unrelated commands.
+    const { BnestFactory } = await import("../factory/bnest-factory");
+    const { generateRoutesType } = await import("../contract/codegen");
+
+    const app = await BnestFactory.create(config.module, { ...config, logger: false });
+    const source = generateRoutesType(app);
+
+    const outPath = path.isAbsolute(out) ? out : path.join(cwd, out);
+    await Bun.write(outPath, source);
+    ok(`Wrote ${path.relative(cwd, outPath)}`);
+
+    // Make sure we don't keep the event loop alive after the CLI returns.
+    await app.close();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    fail(`generate client failed: ${message}`);
+    process.exit(1);
+  }
 }
 
 async function runDeploy() {
@@ -333,6 +383,11 @@ async function main() {
 
     if (type === "docker") {
       await runDockerGenerate({ requireTarget: false });
+      return;
+    }
+
+    if (type === "client") {
+      await runGenerateClient();
       return;
     }
 
