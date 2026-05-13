@@ -9,7 +9,7 @@ export class RedisServer extends TechneMicroservice {
 
   constructor(private readonly options: Record<string, any> = {}) {
     super();
-    this.prefix = options.prefix || "bnest";
+    this.prefix = options.prefix || "techne";
     this.timeout = options.timeout || 5000;
     this.pub = options.publisher || this.createClient();
     this.sub = options.subscriber || this.createClient();
