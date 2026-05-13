@@ -1,74 +1,60 @@
 import type { BnestApplication } from "../core/bnest-application";
+import { DocumentBuilder, type SwaggerDocumentOptions } from "./document-builder";
+import { emitOpenApiDocument, type OpenApiDocument } from "./openapi-emitter";
 
-function transformPathParams(path: string) {
-  return path.replace(/:([A-Za-z0-9_]+)/g, "{$1}");
+/**
+ * `createDocument` previously accepted either a `DocumentBuilder` instance or
+ * the plain config object returned by `builder.build()`. We keep both shapes
+ * working: callers wishing to opt into the new auto-discovery pipeline can pass
+ * either, and the emitter will pick up title/version/etc. transparently.
+ */
+type BuilderOrConfig = DocumentBuilder | SwaggerDocumentOptions | undefined;
+
+function toBuilder(input: BuilderOrConfig): DocumentBuilder | undefined {
+  if (!input) return undefined;
+  if (input instanceof DocumentBuilder) return input;
+
+  // Rehydrate a builder from a plain config so the emitter sees the same
+  // metadata it would from a chained instance.
+  const builder = new DocumentBuilder();
+  if (input.title) builder.setTitle(input.title);
+  if (input.description) builder.setDescription(input.description);
+  if (input.version) builder.setVersion(input.version);
+  for (const server of input.servers ?? []) builder.addServer(server.url, server.description);
+  for (const tag of input.tags ?? []) builder.addTag(tag.name, tag.description);
+  for (const [path, item] of Object.entries(input.paths ?? {})) builder.addPath(path, item);
+  for (const [name, schema] of Object.entries(input.components?.schemas ?? {})) {
+    builder.addSchema(name, schema);
+  }
+  return builder;
 }
 
 export class SwaggerModule {
+  /**
+   * Build an OpenAPI 3.1 document from the application's registered routes
+   * and the supplied builder/config. Routes are discovered automatically; any
+   * paths explicitly added through the builder take precedence so callers can
+   * patch the generated spec without forking it.
+   */
   static createDocument(
     app: Pick<BnestApplication, "getRoutes">,
-    config: Record<string, any> = {},
-  ): Record<string, any> {
-    const paths: Record<string, any> = {};
+    builderOrConfig?: BuilderOrConfig,
+  ): OpenApiDocument {
+    return emitOpenApiDocument(app, toBuilder(builderOrConfig));
+  }
 
-    for (const route of app.getRoutes()) {
-      const path = transformPathParams(route.fullPath);
-      const operation = route.method.toLowerCase();
-      const entry = (paths[path] ??= {});
-      const paramsSchema =
-        route.schema?.params && typeof route.schema.params === "object"
-          ? (route.schema.params as { properties?: Record<string, unknown> })
-          : undefined;
-      const paramsProperties = paramsSchema?.properties ?? {};
-      entry[operation] = {
-        responses: {
-          200: {
-            description: "Successful response",
-            ...(route.schema?.response
-              ? { content: { "application/json": { schema: route.schema.response } } }
-              : {}),
-          },
-        },
-        ...(route.schema?.body
-          ? {
-              requestBody: {
-                required: true,
-                content: {
-                  "application/json": {
-                    schema: route.schema.body,
-                  },
-                },
-              },
-            }
-          : {}),
-        ...(paramsSchema
-          ? {
-              parameters: Object.keys(paramsProperties).map((key) => ({
-                name: key,
-                in: "path",
-                required: true,
-                schema: paramsProperties[key],
-              })),
-            }
-          : {}),
-      };
-    }
-
-    return {
-      openapi: "3.0.0",
-      info: {
-        title: config.title ?? "Bnest API",
-        description: config.description ?? "",
-        version: config.version ?? "1.0.0",
-      },
-      paths,
-    };
+  /** Alias for {@link createDocument} — emphasises the auto-discovery aspect. */
+  static createAutoDocument(
+    app: Pick<BnestApplication, "getRoutes">,
+    builderOrConfig?: BuilderOrConfig,
+  ): OpenApiDocument {
+    return emitOpenApiDocument(app, toBuilder(builderOrConfig));
   }
 
   static setup(
     path: string,
     app: Pick<BnestApplication, "getHttpAdapter">,
-    document: Record<string, any> | (() => Record<string, any>),
+    document: OpenApiDocument | (() => OpenApiDocument),
   ) {
     const adapter = app.getHttpAdapter() as any;
     const documentFactory = typeof document === "function" ? document : undefined;

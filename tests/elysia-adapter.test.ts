@@ -117,10 +117,11 @@ describe("Elysia Adapter via BnestFactory", () => {
     const res1 = await app.handle(req1);
     expect(res1.status).toBe(403);
     const body1 = await res1.json();
-    expect(body1).toEqual({
-      statusCode: 403,
-      message: "Forbidden resource",
-      error: "Forbidden",
+    expect(body1).toMatchObject({
+      type: "https://bnest.dev/errors/forbidden",
+      title: "Forbidden",
+      status: 403,
+      detail: "Forbidden resource",
     });
 
     const req2 = new Request("http://localhost/protected/data?token=secret");

@@ -499,6 +499,14 @@ export class Container {
     return String(token?.name || token);
   }
 
+  public hasContextualDeps(target: any): boolean {
+    if (typeof target !== "function") return false;
+    if (this.providers.has(target)) {
+      return this.providerHasContextualDeps(this.providers.get(target)!);
+    }
+    return this.classHasContextualDeps(target);
+  }
+
   private classHasContextualDeps(target: any, seen = new Set<any>()): boolean {
     if (typeof target !== "function" || seen.has(target)) return false;
     seen.add(target);

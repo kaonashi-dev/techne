@@ -10,6 +10,115 @@ async function writeTextFile(filePath: string, content: string) {
   console.log(`CREATE ${path.relative(process.cwd(), filePath)}`);
 }
 
+export interface DockerfileOptions {
+  outDir?: string;
+  projectName?: string;
+  port?: number;
+  bunVersion?: string;
+  outName?: string;
+  force?: boolean;
+  dryRun?: boolean;
+  writeDockerignore?: boolean;
+}
+
+function renderDockerfile(bunVersion: string, port: number): string {
+  return `# syntax=docker/dockerfile:1.7
+FROM oven/bun:${bunVersion} AS builder
+WORKDIR /app
+
+COPY package.json bun.lock* ./
+RUN bun install --frozen-lockfile
+
+COPY . .
+RUN bun build src/main.ts --target=bun --outfile=dist/app.bun --minify
+
+FROM oven/bun:${bunVersion}-slim AS runtime
+WORKDIR /app
+
+RUN addgroup --system --gid 1001 bnest && \\
+    adduser --system --uid 1001 --ingroup bnest bnest
+
+COPY --from=builder --chown=bnest:bnest /app/dist/app.bun ./app.bun
+
+USER bnest
+ENV NODE_ENV=production
+ENV PORT=${port}
+
+EXPOSE ${port}
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \\
+  CMD bun -e "fetch('http://localhost:${port}/healthz').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+
+CMD ["./app.bun"]
+`;
+}
+
+function renderDockerignore(): string {
+  return `node_modules
+dist
+.git
+.github
+.claude
+.cursor
+.vscode
+*.log
+.env*
+!.env.example
+tests
+benchmarks
+README.md
+*.md
+coverage
+`;
+}
+
+export async function generateDockerfile(
+  opts: DockerfileOptions = {},
+): Promise<{ dockerfile: string; dockerignore: string | null }> {
+  const outDir = opts.outDir ?? process.cwd();
+  const port = opts.port ?? 3000;
+  const bunVersion = opts.bunVersion ?? "1";
+  const outName = opts.outName ?? "Dockerfile";
+  const force = opts.force ?? false;
+  const dryRun = opts.dryRun ?? false;
+  const writeDockerignore = opts.writeDockerignore ?? true;
+
+  const dockerfile = renderDockerfile(bunVersion, port);
+  const dockerignore = writeDockerignore ? renderDockerignore() : null;
+
+  if (dryRun) {
+    return { dockerfile, dockerignore };
+  }
+
+  const dockerfilePath = path.join(outDir, outName);
+  if (!force) {
+    const exists = await Bun.file(dockerfilePath).exists();
+    if (exists) {
+      throw new Error(
+        `refusing to overwrite ${dockerfilePath}; pass --out or remove the existing file (use --force to override)`,
+      );
+    }
+  }
+  await Bun.write(dockerfilePath, dockerfile);
+  console.log(`CREATE ${path.relative(process.cwd(), dockerfilePath)}`);
+
+  if (dockerignore !== null) {
+    const dockerignorePath = path.join(outDir, ".dockerignore");
+    if (!force) {
+      const exists = await Bun.file(dockerignorePath).exists();
+      if (exists) {
+        throw new Error(
+          `refusing to overwrite ${dockerignorePath}; pass --out or remove the existing file (use --force to override)`,
+        );
+      }
+    }
+    await Bun.write(dockerignorePath, dockerignore);
+    console.log(`CREATE ${path.relative(process.cwd(), dockerignorePath)}`);
+  }
+
+  return { dockerfile, dockerignore };
+}
+
 async function writeJsonFile(filePath: string, value: unknown) {
   await writeTextFile(filePath, JSON.stringify(value, null, 2));
 }
@@ -71,6 +180,99 @@ export class ${className} {}
 `;
   await fs.writeFile(path.join(dir, `${name}.service.ts`), content);
   console.log(`CREATE ${name}.service.ts`);
+}
+
+export async function generateMiddleware(name: string, dir: string = ".") {
+  const fnName = `${name}Middleware`;
+  const content = `import type { ExecutionContext } from "@kaonashi-dev/bnest/common";
+
+// TODO: implement ${fnName} logic.
+export async function ${fnName}(context: ExecutionContext) {
+  // Access request via context.switchToHttp().getRequest()
+  return;
+}
+`;
+  await fs.writeFile(path.join(dir, `${name}.middleware.ts`), content);
+  console.log(`CREATE ${name}.middleware.ts`);
+}
+
+export async function generateGuard(name: string, dir: string = ".") {
+  const className = `${capitalize(name)}Guard`;
+  const content = `import { Injectable, type CanActivate, type ExecutionContext } from "@kaonashi-dev/bnest/common";
+
+@Injectable()
+export class ${className} implements CanActivate {
+  canActivate(context: ExecutionContext): boolean | Promise<boolean> {
+    // TODO: implement ${className} authorization logic.
+    return true;
+  }
+}
+`;
+  await fs.writeFile(path.join(dir, `${name}.guard.ts`), content);
+  console.log(`CREATE ${name}.guard.ts`);
+}
+
+export async function generatePipe(name: string, dir: string = ".") {
+  const className = `${capitalize(name)}Pipe`;
+  const content = `import { Injectable, type PipeTransform } from "@kaonashi-dev/bnest/common";
+
+@Injectable()
+export class ${className} implements PipeTransform {
+  transform(value: any) {
+    // TODO: implement ${className} transformation logic.
+    return value;
+  }
+}
+`;
+  await fs.writeFile(path.join(dir, `${name}.pipe.ts`), content);
+  console.log(`CREATE ${name}.pipe.ts`);
+}
+
+export async function generateFilter(name: string, dir: string = ".") {
+  const className = `${capitalize(name)}Filter`;
+  const content = `import { Catch, type ExceptionFilter, type ArgumentsHost } from "@kaonashi-dev/bnest/common";
+
+@Catch()
+export class ${className} implements ExceptionFilter {
+  catch(exception: unknown, host: ArgumentsHost) {
+    // TODO: implement ${className} exception handling.
+  }
+}
+`;
+  await fs.writeFile(path.join(dir, `${name}.filter.ts`), content);
+  console.log(`CREATE ${name}.filter.ts`);
+}
+
+export async function generateInterceptor(name: string, dir: string = ".") {
+  const className = `${capitalize(name)}Interceptor`;
+  const content = `import { Injectable, type BnestInterceptor, type ExecutionContext, type CallHandler } from "@kaonashi-dev/bnest/common";
+
+@Injectable()
+export class ${className} implements BnestInterceptor {
+  async intercept(context: ExecutionContext, next: CallHandler) {
+    // TODO: implement ${className} interception logic.
+    return next.handle();
+  }
+}
+`;
+  await fs.writeFile(path.join(dir, `${name}.interceptor.ts`), content);
+  console.log(`CREATE ${name}.interceptor.ts`);
+}
+
+export async function generateDto(name: string, dir: string = ".") {
+  const schemaName = `${capitalize(name)}Dto`;
+  const content = `import { Schema } from "@kaonashi-dev/bnest/common";
+import type { Static } from "@sinclair/typebox";
+
+export const ${schemaName} = Schema.Object({
+  // TODO: define fields for ${schemaName}
+  example: Schema.String(),
+});
+
+export type ${schemaName} = Static<typeof ${schemaName}>;
+`;
+  await fs.writeFile(path.join(dir, `${name}.dto.ts`), content);
+  console.log(`CREATE ${name}.dto.ts`);
 }
 
 export async function generateResource(name: string) {
@@ -328,22 +530,39 @@ export class AppModule {}
   );
 
   await writeTextFile(
-    path.join(srcDir, "main.ts"),
-    `import { BnestFactory } from "@kaonashi-dev/bnest/core";
-import { AppModule } from "./app.module";
+    path.join(dir, "bnest.config.ts"),
+    `import { defineBnestConfig } from "@kaonashi-dev/bnest/core";
+import { AppModule } from "./src/app.module";
 
-const app = await BnestFactory.create(AppModule);
-const port = Number(Bun.env.PORT ?? 3000);
-
-app.listen(port, () => {
-  console.log(\`Server running at http://localhost:\${port}\`);
+export default defineBnestConfig({
+  module: AppModule,
+  port: Number(Bun.env.PORT ?? 3000),
+  cors: { origin: true },
+  logger: "pretty",
 });
 `,
   );
+
+  await writeTextFile(
+    path.join(srcDir, "main.ts"),
+    `import { bootstrap } from "@kaonashi-dev/bnest/core";
+
+await bootstrap();
+`,
+  );
+
+  await generateDockerfile({
+    outDir: dir,
+    projectName: name,
+    port: 3000,
+    bunVersion: "1",
+  });
 
   console.log(`\nProject ${name} created successfully.`);
   console.log(`\nNext steps:`);
   console.log(`  cd ${name}`);
   console.log(`  bun install`);
-  console.log(`  bun run dev\n`);
+  console.log(`  bun run dev`);
+  console.log(`  docker build -t ${name} .`);
+  console.log(`  docker run -p 3000:3000 ${name}\n`);
 }

@@ -174,6 +174,53 @@ export function validateDto(value: unknown, metatype: Function): ValidationError
   return normalizeValidationErrors([...validator.Errors(value)]);
 }
 
+/**
+ * Fast yes/no validity check. Skips the per-key error normalization in
+ * `validateDto` — useful for the validation-pipe happy path where we only
+ * care whether the value is valid.
+ *
+ * Returns `true` when the DTO has no validation metadata (parity with
+ * `validateDto`, which returns `[]`).
+ */
+export function isValidDto(value: unknown, metatype: Function): boolean {
+  const validator = getOrCreateDtoValidator(metatype);
+  if (!validator) return true;
+  return validator.Check(value);
+}
+
+/**
+ * Materialize just the first validation error. The TypeBox `Errors` iterator
+ * stops as soon as we pull one entry, so this avoids walking the entire
+ * schema when we only need to surface the first failure (the rest can be
+ * computed on-demand via {@link computeAllValidationErrors}).
+ */
+export function firstValidationError(
+  value: unknown,
+  metatype: Function,
+): ValidationError | undefined {
+  const validator = getOrCreateDtoValidator(metatype);
+  if (!validator) return undefined;
+  const iterator = validator.Errors(value)[Symbol.iterator]();
+  const next = iterator.next();
+  if (next.done || !next.value) return undefined;
+  const errors = normalizeValidationErrors([next.value as Record<string, any>]);
+  return errors[0];
+}
+
+/**
+ * Full, eager error enumeration. Used by {@link LazyValidationException} to
+ * materialize the complete error list on demand (e.g. when a problem+json
+ * filter formats the 4xx response body).
+ */
+export function computeAllValidationErrors(
+  value: unknown,
+  metatype: Function,
+): ValidationError[] {
+  const validator = getOrCreateDtoValidator(metatype);
+  if (!validator) return [];
+  return normalizeValidationErrors([...validator.Errors(value)]);
+}
+
 export async function validate(value: object): Promise<ValidationError[]> {
   return validateSync(value);
 }

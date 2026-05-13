@@ -1,9 +1,14 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { Inject } from "../decorators/inject.decorator";
 import { Module } from "../decorators/module.decorator";
+import type { AppConfig } from "./define-config";
 import type { ConfigFactory } from "./register-as";
 import { ConfigService } from "./config.service";
-import { CONFIG_OPTIONS, CONFIG_STORE } from "./tokens";
+import { APP_CONFIG, CONFIG_OPTIONS, CONFIG_STORE } from "./tokens";
+
+/** Inject the active `AppConfig` instance produced by `ConfigModule.forApp()`. */
+export const InjectConfig = (): ParameterDecorator => Inject(APP_CONFIG);
 
 export interface ConfigModuleOptions {
   envFilePath?: string | string[];
@@ -152,6 +157,14 @@ export class ConfigModule {
         ConfigService,
       ],
       exports: [CONFIG_OPTIONS, CONFIG_STORE, ConfigService],
+    });
+  }
+
+  static forApp<C extends AppConfig<any>>(config: C): any {
+    return createDynamicModule({
+      global: true,
+      providers: [{ provide: APP_CONFIG, useValue: config }],
+      exports: [APP_CONFIG],
     });
   }
 

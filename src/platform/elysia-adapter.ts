@@ -1,8 +1,17 @@
 import { Elysia } from "elysia";
-import { Logger } from "../services/logger.service";
+import { Logger, createRequestLogger } from "../services/logger.service";
 import { Container, globalContainer } from "../core/container";
 import type { CompiledRouteDefinition } from "../core/router/router-execution-context";
 import type { CorsOptions } from "../core/http-options";
+
+// Resolve `Bun.randomUUIDv7` once at module load. Bun has shipped it since
+// 1.1, so the cross-runtime fallback isn't worth the per-request lookup &
+// try/catch cost. Falls back to `crypto.randomUUID` only if Bun isn't
+// present (e.g. someone bundles this module into Node for type-checking).
+const randomUUIDv7: () => string =
+  typeof Bun !== "undefined" && typeof (Bun as any).randomUUIDv7 === "function"
+    ? (Bun as any).randomUUIDv7.bind(Bun)
+    : () => crypto.randomUUID();
 
 interface ElysiaAdapterOptions {
   logger?: boolean;
@@ -16,12 +25,18 @@ interface CompiledCorsOptions {
   staticHeaders: Record<string, string>;
 }
 
+// Per-context-store flag used to dedupe inflight counter increment/decrement
+// without the cost of WeakSet add/has/delete on the `Request` object.
+const INFLIGHT_COUNTED_KEY = "__bnestInflightCounted";
+
 export class ElysiaAdapter {
   private app: Elysia;
   private logger: Logger;
   private container: Container;
   private requestStartTimes = new WeakMap<Request, number>();
   private compiledCorsOptions?: CompiledCorsOptions;
+  private inflight = 0;
+  private isDraining = false;
 
   constructor(private options?: ElysiaAdapterOptions) {
     this.container = options?.container || globalContainer;
@@ -37,42 +52,149 @@ export class ElysiaAdapter {
     this.compiledCorsOptions = this.compileCorsOptions(options);
   }
 
+  public getInflightCount(): number {
+    return this.inflight;
+  }
+
+  public setDraining(value: boolean): void {
+    this.isDraining = value;
+  }
+
+  public isDrainingRequests(): boolean {
+    return this.isDraining;
+  }
+
+  public async waitForDrain(timeoutMs: number): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs;
+    while (this.inflight > 0) {
+      if (Date.now() >= deadline) {
+        return this.inflight === 0;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    return true;
+  }
+
   private createApp() {
     const app = new Elysia();
+    this.setupInflightTracking(app);
     this.setupRequestLogging(app);
     this.setupCors(app);
     return app;
   }
 
+  private setupInflightTracking(app: Elysia) {
+    app.onRequest((ctx: any) => {
+      if (this.isDraining) {
+        return new Response(null, {
+          status: 503,
+          headers: { connection: "close" },
+        });
+      }
+      const store = ctx.store ?? (ctx.store = {});
+      if (!store[INFLIGHT_COUNTED_KEY]) {
+        store[INFLIGHT_COUNTED_KEY] = true;
+        this.inflight++;
+      }
+    });
+
+    const release = (ctx: any) => {
+      const store = ctx.store;
+      if (store && store[INFLIGHT_COUNTED_KEY]) {
+        store[INFLIGHT_COUNTED_KEY] = false;
+        if (this.inflight > 0) this.inflight--;
+      }
+    };
+
+    app.onAfterHandle((ctx: any) => {
+      release(ctx);
+    });
+
+    app.onError((ctx: any) => {
+      release(ctx);
+    });
+  }
+
   private setupRequestLogging(app: Elysia) {
-    if (this.options?.logger === false) {
+    const loggingEnabled = this.options?.logger !== false;
+
+    // The request-id hook must run even when request logging is disabled,
+    // because downstream code (mapException, the RFC 7807 problem document,
+    // controllers reading `store.requestId`) relies on the id being present.
+    // The `error-contract` test suite asserts this behavior with
+    // `logger: false`, so we cannot skip the block entirely.
+    //
+    // We do, however, skip the `requestStartTimes` bookkeeping when logging
+    // is off: the start time is only consumed inside the logging callbacks.
+    app.onRequest((ctx: any) => {
+      const request = ctx.request;
+      const inbound = request.headers.get("x-request-id");
+      const requestId =
+        typeof inbound === "string" && inbound.length > 0 ? inbound : randomUUIDv7();
+      const store = ctx.store ?? (ctx.store = {});
+      store.requestId = requestId;
+      if (loggingEnabled) {
+        this.requestStartTimes.set(request, performance.now());
+      }
+    });
+
+    if (!loggingEnabled) {
+      // Logging suppressed — but we still echo `x-request-id` so clients can
+      // correlate requests. No `requestStartTimes` to clean up.
+      app.onAfterHandle((ctx: any) => {
+        this.echoRequestId(ctx);
+      });
+      app.onError((ctx: any) => {
+        this.echoRequestId(ctx);
+      });
       return;
     }
 
-    app.onRequest(({ request }) => {
-      this.requestStartTimes.set(request, performance.now());
-    });
-
-    app.onAfterHandle(({ request, set }) => {
+    app.onAfterHandle((ctx: any) => {
+      const { request, set } = ctx;
       const start = this.requestStartTimes.get(request) || performance.now();
       const duration = Math.round(performance.now() - start);
       const path = this.getRequestPath(request.url);
-      this.logger.log(`${request.method} ${path} ${set.status || 200} +${duration}ms`, "HTTP");
+      const requestId = ctx.store?.requestId as string | undefined;
+      const requestLogger = requestId ? createRequestLogger(requestId, "HTTP") : this.logger;
+      requestLogger.log(`${request.method} ${path} ${set.status || 200} +${duration}ms`, "HTTP");
+      this.echoRequestId(ctx);
       this.requestStartTimes.delete(request);
     });
 
-    app.onError(({ request, code, error, set }) => {
+    app.onError((ctx: any) => {
+      const { request, code, error, set } = ctx;
       const start = this.requestStartTimes.get(request) || performance.now();
       const duration = Math.round(performance.now() - start);
       const path = this.getRequestPath(request.url);
       const stack = error instanceof Error ? error.stack : undefined;
-      this.logger.error(
+      const requestId = ctx.store?.requestId as string | undefined;
+      const requestLogger = requestId ? createRequestLogger(requestId, "HTTP") : this.logger;
+      requestLogger.error(
         `${request.method} ${path} ${set.status || 500} +${duration}ms (${code})`,
         stack,
         "HTTP",
       );
+      this.echoRequestId(ctx);
       this.requestStartTimes.delete(request);
     });
+  }
+
+  private echoRequestId(ctx: any): void {
+    const requestId = ctx?.store?.requestId;
+    if (typeof requestId !== "string" || requestId.length === 0) return;
+    const set = ctx.set;
+    if (!set) return;
+    const existing = set.headers ?? {};
+    if (existing instanceof Headers) {
+      existing.set("x-request-id", requestId);
+      set.headers = existing;
+    } else {
+      set.headers = {
+        ...(existing as Record<string, string>),
+        "x-request-id": requestId,
+      };
+    }
   }
 
   private setupCors(app: Elysia) {

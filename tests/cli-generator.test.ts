@@ -36,6 +36,7 @@ describe("CLI project generator", () => {
     );
     const appService = await fs.readFile(path.join(projectDir, "src", "app.service.ts"), "utf8");
     const mainFile = await fs.readFile(path.join(projectDir, "src", "main.ts"), "utf8");
+    const bnestConfig = await fs.readFile(path.join(projectDir, "bnest.config.ts"), "utf8");
     const gitignore = await fs.readFile(path.join(projectDir, ".gitignore"), "utf8");
 
     expect(packageJson.dependencies["@kaonashi-dev/bnest"]).toBe("latest");
@@ -54,7 +55,10 @@ describe("CLI project generator", () => {
     expect(appService).toContain("Hello from Bnest!");
     expect(appService).toContain("@kaonashi-dev/bnest/common");
     expect(mainFile).toContain("@kaonashi-dev/bnest/core");
-    expect(mainFile).toContain("const port = Number(Bun.env.PORT ?? 3000);");
+    expect(mainFile).toContain("bootstrap");
+    expect(bnestConfig).toContain("defineBnestConfig");
+    expect(bnestConfig).toContain("module: AppModule");
+    expect(bnestConfig).toContain("Number(Bun.env.PORT ?? 3000)");
     expect(gitignore).toContain("node_modules");
     expect(gitignore).toContain("dist");
   });
