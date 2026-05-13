@@ -35,12 +35,12 @@ RUN bun build src/main.ts --target=bun --outfile=dist/app.bun --minify
 FROM oven/bun:${bunVersion}-slim AS runtime
 WORKDIR /app
 
-RUN addgroup --system --gid 1001 bnest && \\
-    adduser --system --uid 1001 --ingroup bnest bnest
+RUN addgroup --system --gid 1001 techne && \\
+    adduser --system --uid 1001 --ingroup techne techne
 
-COPY --from=builder --chown=bnest:bnest /app/dist/app.bun ./app.bun
+COPY --from=builder --chown=techne:techne /app/dist/app.bun ./app.bun
 
-USER bnest
+USER techne
 ENV NODE_ENV=production
 ENV PORT=${port}
 
@@ -143,7 +143,7 @@ async function ensureProjectDirectory(projectDir: string, projectName: string) {
 
 export async function generateModule(name: string, dir: string = ".") {
   const className = `${capitalize(name)}Module`;
-  const content = `import { Module } from "@kaonashi-dev/bnest/common";
+  const content = `import { Module } from "@kaonashi-dev/techne/common";
 
 @Module({
   controllers: [],
@@ -157,7 +157,7 @@ export class ${className} {}
 
 export async function generateController(name: string, dir: string = ".") {
   const className = `${capitalize(name)}Controller`;
-  const content = `import { Controller, Get } from "@kaonashi-dev/bnest/common";
+  const content = `import { Controller, Get } from "@kaonashi-dev/techne/common";
 
 @Controller('${name}')
 export class ${className} {
@@ -173,7 +173,7 @@ export class ${className} {
 
 export async function generateService(name: string, dir: string = ".") {
   const className = `${capitalize(name)}Service`;
-  const content = `import { Injectable } from "@kaonashi-dev/bnest/common";
+  const content = `import { Injectable } from "@kaonashi-dev/techne/common";
 
 @Injectable()
 export class ${className} {}
@@ -184,7 +184,7 @@ export class ${className} {}
 
 export async function generateMiddleware(name: string, dir: string = ".") {
   const fnName = `${name}Middleware`;
-  const content = `import type { ExecutionContext } from "@kaonashi-dev/bnest/common";
+  const content = `import type { ExecutionContext } from "@kaonashi-dev/techne/common";
 
 // TODO: implement ${fnName} logic.
 export async function ${fnName}(context: ExecutionContext) {
@@ -198,7 +198,7 @@ export async function ${fnName}(context: ExecutionContext) {
 
 export async function generateGuard(name: string, dir: string = ".") {
   const className = `${capitalize(name)}Guard`;
-  const content = `import { Injectable, type CanActivate, type ExecutionContext } from "@kaonashi-dev/bnest/common";
+  const content = `import { Injectable, type CanActivate, type ExecutionContext } from "@kaonashi-dev/techne/common";
 
 @Injectable()
 export class ${className} implements CanActivate {
@@ -214,7 +214,7 @@ export class ${className} implements CanActivate {
 
 export async function generatePipe(name: string, dir: string = ".") {
   const className = `${capitalize(name)}Pipe`;
-  const content = `import { Injectable, type PipeTransform } from "@kaonashi-dev/bnest/common";
+  const content = `import { Injectable, type PipeTransform } from "@kaonashi-dev/techne/common";
 
 @Injectable()
 export class ${className} implements PipeTransform {
@@ -230,7 +230,7 @@ export class ${className} implements PipeTransform {
 
 export async function generateFilter(name: string, dir: string = ".") {
   const className = `${capitalize(name)}Filter`;
-  const content = `import { Catch, type ExceptionFilter, type ArgumentsHost } from "@kaonashi-dev/bnest/common";
+  const content = `import { Catch, type ExceptionFilter, type ArgumentsHost } from "@kaonashi-dev/techne/common";
 
 @Catch()
 export class ${className} implements ExceptionFilter {
@@ -245,10 +245,10 @@ export class ${className} implements ExceptionFilter {
 
 export async function generateInterceptor(name: string, dir: string = ".") {
   const className = `${capitalize(name)}Interceptor`;
-  const content = `import { Injectable, type BnestInterceptor, type ExecutionContext, type CallHandler } from "@kaonashi-dev/bnest/common";
+  const content = `import { Injectable, type TechneInterceptor, type ExecutionContext, type CallHandler } from "@kaonashi-dev/techne/common";
 
 @Injectable()
-export class ${className} implements BnestInterceptor {
+export class ${className} implements TechneInterceptor {
   async intercept(context: ExecutionContext, next: CallHandler) {
     // TODO: implement ${className} interception logic.
     return next.handle();
@@ -261,7 +261,7 @@ export class ${className} implements BnestInterceptor {
 
 export async function generateDto(name: string, dir: string = ".") {
   const schemaName = `${capitalize(name)}Dto`;
-  const content = `import { Schema } from "@kaonashi-dev/bnest/common";
+  const content = `import { Schema } from "@kaonashi-dev/techne/common";
 import type { Static } from "@sinclair/typebox";
 
 export const ${schemaName} = Schema.Object({
@@ -286,7 +286,7 @@ export async function generateResource(name: string) {
   // Write Service
   await fs.writeFile(
     path.join(dir, `${name}.service.ts`),
-    `import { Injectable } from "@kaonashi-dev/bnest/common";
+    `import { Injectable } from "@kaonashi-dev/techne/common";
 
 @Injectable()
 export class ${serviceName} {
@@ -317,7 +317,7 @@ export class ${serviceName} {
   // Write Controller
   await fs.writeFile(
     path.join(dir, `${name}.controller.ts`),
-    `import { Body, Controller, Delete, Get, Param, Post, Put } from "@kaonashi-dev/bnest/common";
+    `import { Body, Controller, Delete, Get, Param, Post, Put } from "@kaonashi-dev/techne/common";
 import { ${serviceName} } from './${name}.service';
 
 @Controller('${name}')
@@ -356,7 +356,7 @@ export class ${controllerName} {
   // Write Module
   await fs.writeFile(
     path.join(dir, `${name}.module.ts`),
-    `import { Module } from "@kaonashi-dev/bnest/common";
+    `import { Module } from "@kaonashi-dev/techne/common";
 import { ${controllerName} } from './${name}.controller';
 import { ${serviceName} } from './${name}.service';
 
@@ -395,7 +395,7 @@ export async function createProject(name: string) {
       "check:fix": "bun run lint:fix && bun run format",
     },
     dependencies: {
-      "@kaonashi-dev/bnest": "latest",
+      "@kaonashi-dev/techne": "latest",
     },
     devDependencies: {
       "@types/bun": "latest",
@@ -464,7 +464,7 @@ coverage
     path.join(dir, "README.md"),
     `# ${capitalize(name)}
 
-Starter project generated with Bnest.
+Starter project generated with Techne.
 
 ## Scripts
 
@@ -485,13 +485,13 @@ bun run dev
 
   await writeTextFile(
     path.join(srcDir, "app.service.ts"),
-    `import { Injectable } from "@kaonashi-dev/bnest/common";
+    `import { Injectable } from "@kaonashi-dev/techne/common";
 
 @Injectable()
 export class AppService {
   getHello() {
     return {
-      message: "Hello from Bnest!",
+      message: "Hello from Techne!",
     };
   }
 }
@@ -500,7 +500,7 @@ export class AppService {
 
   await writeTextFile(
     path.join(srcDir, "app.controller.ts"),
-    `import { Controller, Get } from "@kaonashi-dev/bnest/common";
+    `import { Controller, Get } from "@kaonashi-dev/techne/common";
 import { AppService } from "./app.service";
 
 @Controller("/")
@@ -517,7 +517,7 @@ export class AppController {
 
   await writeTextFile(
     path.join(srcDir, "app.module.ts"),
-    `import { Module } from "@kaonashi-dev/bnest/common";
+    `import { Module } from "@kaonashi-dev/techne/common";
 import { AppController } from "./app.controller";
 import { AppService } from "./app.service";
 
@@ -530,11 +530,11 @@ export class AppModule {}
   );
 
   await writeTextFile(
-    path.join(dir, "bnest.config.ts"),
-    `import { defineBnestConfig } from "@kaonashi-dev/bnest/core";
+    path.join(dir, "techne.config.ts"),
+    `import { defineTechneConfig } from "@kaonashi-dev/techne/core";
 import { AppModule } from "./src/app.module";
 
-export default defineBnestConfig({
+export default defineTechneConfig({
   module: AppModule,
   port: Number(Bun.env.PORT ?? 3000),
   cors: { origin: true },
@@ -545,7 +545,7 @@ export default defineBnestConfig({
 
   await writeTextFile(
     path.join(srcDir, "main.ts"),
-    `import { bootstrap } from "@kaonashi-dev/bnest/core";
+    `import { bootstrap } from "@kaonashi-dev/techne/core";
 
 await bootstrap();
 `,

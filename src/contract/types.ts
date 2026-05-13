@@ -1,8 +1,8 @@
-// ─── Public types for the @bnest/contract RPC client ────────────────────────
+// ─── Public types for the @kaonashi-dev/techne/contract RPC client ────────────────────────
 //
 // Stage-2 decorators don't yet flow controller signatures into a `Routes` type
 // at compile time, so we model the client around an explicit `RouteMap` shape
-// that either (a) the user hand-writes, or (b) `bnest generate client`
+// that either (a) the user hand-writes, or (b) `techne generate client`
 // produces from TypeBox schemas.
 //
 // The runtime client (`createClient`) is fully untyped under the hood — the

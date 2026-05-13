@@ -3,8 +3,9 @@ import type { Scanner } from "./scanner";
 import { Logger } from "../services/logger.service";
 import type { MqRegistry } from "../mq/registry";
 
-export class BnestApplicationContext {
-  private readonly logger = new Logger("BnestApplicationContext");
+/** Canonical name. `TechneApplicationContext` is kept as a deprecated alias below. */
+export class TechneApplicationContext {
+  private readonly logger = new Logger("TechneApplicationContext");
   private isClosing = false;
 
   constructor(
@@ -43,3 +44,6 @@ export class BnestApplicationContext {
     await this.scanner.callLifecycleHook("onModuleDestroy");
   }
 }
+
+/** @deprecated use TechneApplicationContext */
+export { TechneApplicationContext as BnestApplicationContext };

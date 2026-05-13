@@ -1,4 +1,4 @@
-import type { BnestApplication } from "../bnest-application";
+import type { TechneApplication } from "../techne-application";
 import type { Logger } from "../../services/logger.service";
 
 /**
@@ -8,9 +8,9 @@ import type { Logger } from "../../services/logger.service";
  */
 export interface PluginContext {
   /** The hosting application. Prefer the helpers below over reaching in. */
-  app: BnestApplication;
+  app: TechneApplication;
   /**
-   * Read-only view of the options passed to `BnestFactory.create`. Plugins
+   * Read-only view of the options passed to `TechneFactory.create`. Plugins
    * should treat this as informational; mutating it is unsupported.
    */
   options: Readonly<Record<string, unknown>>;
@@ -47,7 +47,7 @@ export interface PluginDefinition<TOptions = void> {
 /**
  * Typing helper that returns the input plugin unchanged. Useful only for
  * inferring `TOptions` at the call site. The actual registration happens in
- * `BnestApplication.register()`.
+ * `TechneApplication.register()`.
  */
 export function definePlugin<TOptions = void>(
   def: PluginDefinition<TOptions>,

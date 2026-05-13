@@ -7,13 +7,13 @@
  * handler arity ≤3. These are the routes that should sit closest to raw
  * Elysia throughput.
  *
- * Pairs the same two endpoints under both Raw Elysia and Bnest so the
+ * Pairs the same two endpoints under both Raw Elysia and Techne so the
  * overhead column in the table is meaningful.
  */
 
 import { Elysia } from "elysia";
 import { Controller, Get, Injectable, Module, Param } from "../src/common";
-import { BnestFactory } from "../src/core";
+import { TechneFactory } from "../src/core";
 import { emitResults, getDefaults, isQuick, runScenario, type ScenarioResult } from "./scenarios";
 
 @Injectable()
@@ -48,7 +48,7 @@ const elysiaApp = new Elysia()
   .get("/users", () => [{ id: 1, name: "Alice" }])
   .get("/users/:id", ({ params }) => ({ id: params.id, name: "Alice" }));
 
-const bnestApp = await BnestFactory.create(FastModule, { logger: false });
+const bnestApp = await TechneFactory.create(FastModule, { logger: false });
 
 export async function runFastPathBench(): Promise<ScenarioResult[]> {
   const opts = getDefaults(isQuick());
@@ -62,7 +62,7 @@ export async function runFastPathBench(): Promise<ScenarioResult[]> {
     out.push(await runScenario("Elysia (fast)", (r) => elysiaApp.handle(r), req, opts));
   }
   for (const req of requests) {
-    out.push(await runScenario("Bnest (fast)", (r) => bnestApp.handle(r), req, opts));
+    out.push(await runScenario("Techne (fast)", (r) => bnestApp.handle(r), req, opts));
   }
   return out;
 }

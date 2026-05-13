@@ -1,7 +1,7 @@
-import { BnestFactory } from "@kaonashi-dev/bnest/core";
+import { TechneFactory } from "@kaonashi-dev/techne/core";
 import { AppModule } from "./app.module";
 
-const app = await BnestFactory.create(AppModule);
+const app = await TechneFactory.create(AppModule);
 const port = Number(Bun.env.PORT ?? 3000);
 
 app.listen(port, () => {

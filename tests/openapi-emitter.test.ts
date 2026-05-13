@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { Controller } from "../src/decorators/controller.decorator";
 import { Get, Post } from "../src/decorators/routes.decorator";
 import { Module } from "../src/decorators/module.decorator";
-import { BnestFactory } from "../src/factory/bnest-factory";
+import { TechneFactory } from "../src/factory/techne-factory";
 import { Schema } from "../src/schema";
 import {
   DocumentBuilder,
@@ -25,7 +25,7 @@ describe("openapi auto-emitter", () => {
     @Module({ controllers: [UsersController] })
     class AppModule {}
 
-    const app = await BnestFactory.create(AppModule, { logger: false });
+    const app = await TechneFactory.create(AppModule, { logger: false });
     const doc = emitOpenApiDocument(app);
 
     expect(doc.openapi).toBe("3.1.0");
@@ -61,7 +61,7 @@ describe("openapi auto-emitter", () => {
     }
     @Module({ controllers: [SearchController] })
     class AppModule {}
-    const app = await BnestFactory.create(AppModule, { logger: false });
+    const app = await TechneFactory.create(AppModule, { logger: false });
     const doc = emitOpenApiDocument(app);
 
     const op = doc.paths["/search"].get as OpenApiOperation;
@@ -90,7 +90,7 @@ describe("openapi auto-emitter", () => {
     }
     @Module({ controllers: [PostsController] })
     class AppModule {}
-    const app = await BnestFactory.create(AppModule, { logger: false });
+    const app = await TechneFactory.create(AppModule, { logger: false });
     const doc = emitOpenApiDocument(app);
     const op = doc.paths["/posts"].post as OpenApiOperation;
     const schema = op.requestBody!.content["application/json"].schema;
@@ -138,7 +138,7 @@ describe("openapi auto-emitter", () => {
     }
     @Module({ controllers: [ItemsController] })
     class AppModule {}
-    const app = await BnestFactory.create(AppModule, { logger: false });
+    const app = await TechneFactory.create(AppModule, { logger: false });
 
     const builder = new DocumentBuilder()
       .setTitle("My API")
@@ -169,7 +169,7 @@ describe("openapi auto-emitter", () => {
     }
     @Module({ controllers: [CollisionsController] })
     class AppModule {}
-    const app = await BnestFactory.create(AppModule, { logger: false });
+    const app = await TechneFactory.create(AppModule, { logger: false });
 
     const override = {
       get: {

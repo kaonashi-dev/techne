@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { Controller } from "../src/decorators/controller.decorator";
 import { Get } from "../src/decorators/routes.decorator";
 import { Module } from "../src/decorators/module.decorator";
-import { BnestFactory } from "../src/factory/bnest-factory";
+import { TechneFactory } from "../src/factory/techne-factory";
 
 describe("Health endpoints", () => {
   test("/healthz returns 200 immediately after boot", async () => {
@@ -17,7 +17,7 @@ describe("Health endpoints", () => {
     @Module({ controllers: [NoopController] })
     class AppModule {}
 
-    const app = await BnestFactory.create(AppModule, {
+    const app = await TechneFactory.create(AppModule, {
       logger: false,
       shutdown: { signals: [] },
     });
@@ -39,7 +39,7 @@ describe("Health endpoints", () => {
     @Module({ controllers: [NoopController] })
     class AppModule {}
 
-    const app = await BnestFactory.create(AppModule, {
+    const app = await TechneFactory.create(AppModule, {
       logger: false,
       shutdown: { signals: [] },
     });
@@ -72,7 +72,7 @@ describe("Health endpoints", () => {
     @Module({ controllers: [NoopController] })
     class AppModule {}
 
-    const app = await BnestFactory.create(AppModule, {
+    const app = await TechneFactory.create(AppModule, {
       logger: false,
       shutdown: { signals: [] },
       health: {
@@ -110,7 +110,7 @@ describe("Health endpoints", () => {
     @Module({ controllers: [NoopController] })
     class AppModule {}
 
-    const app = await BnestFactory.create(AppModule, {
+    const app = await TechneFactory.create(AppModule, {
       logger: false,
       shutdown: { signals: [] },
       health: {
@@ -138,7 +138,7 @@ describe("Health endpoints", () => {
     @Module({ controllers: [NoopController] })
     class AppModule {}
 
-    const app = await BnestFactory.create(AppModule, {
+    const app = await TechneFactory.create(AppModule, {
       logger: false,
       shutdown: { signals: [] },
       health: { enabled: false },

@@ -1,5 +1,5 @@
 import { test, expect, describe } from "bun:test";
-import { BnestFactory } from "../src/factory/bnest-factory";
+import { TechneFactory } from "../src/factory/techne-factory";
 import { Container } from "../src/core/container";
 import { Module } from "../src/decorators/module.decorator";
 import { Controller } from "../src/decorators/controller.decorator";
@@ -7,7 +7,7 @@ import { Get, Post } from "../src/decorators/routes.decorator";
 import { Body, Param, Query } from "../src/decorators/params.decorator";
 import { UseGuards } from "../src/decorators/use-guards.decorator";
 
-describe("Elysia Adapter via BnestFactory", () => {
+describe("Elysia Adapter via TechneFactory", () => {
   test("should handle GET requests", async () => {
     @Controller("test")
     class TestController {
@@ -20,7 +20,7 @@ describe("Elysia Adapter via BnestFactory", () => {
     @Module({ controllers: [TestController] })
     class AppModule {}
 
-    const app = await BnestFactory.create(AppModule);
+    const app = await TechneFactory.create(AppModule);
 
     const response = await app
       .handle(new Request("http://localhost/test/hello"))
@@ -40,7 +40,7 @@ describe("Elysia Adapter via BnestFactory", () => {
     @Module({ controllers: [UserController] })
     class AppModule {}
 
-    const app = await BnestFactory.create(AppModule);
+    const app = await TechneFactory.create(AppModule);
 
     const response = await app
       .handle(new Request("http://localhost/users/123"))
@@ -60,7 +60,7 @@ describe("Elysia Adapter via BnestFactory", () => {
     @Module({ controllers: [UserController] })
     class AppModule {}
 
-    const app = await BnestFactory.create(AppModule);
+    const app = await TechneFactory.create(AppModule);
 
     const req = new Request("http://localhost/users/create", {
       method: "POST",
@@ -84,7 +84,7 @@ describe("Elysia Adapter via BnestFactory", () => {
     @Module({ controllers: [SearchController] })
     class AppModule {}
 
-    const app = await BnestFactory.create(AppModule);
+    const app = await TechneFactory.create(AppModule);
 
     const response = await app
       .handle(new Request("http://localhost/search?q=bun"))
@@ -111,14 +111,14 @@ describe("Elysia Adapter via BnestFactory", () => {
     @Module({ controllers: [ProtectedController], providers: [AuthGuard] })
     class AppModule {}
 
-    const app = await BnestFactory.create(AppModule);
+    const app = await TechneFactory.create(AppModule);
 
     const req1 = new Request("http://localhost/protected/data");
     const res1 = await app.handle(req1);
     expect(res1.status).toBe(403);
     const body1 = await res1.json();
     expect(body1).toMatchObject({
-      type: "https://bnest.dev/errors/forbidden",
+      type: "https://github.com/kaonashi-dev/techne/blob/main/docs/errors/forbidden.md",
       title: "Forbidden",
       status: 403,
       detail: "Forbidden resource",
@@ -143,7 +143,7 @@ describe("Elysia Adapter via BnestFactory", () => {
     @Module({ controllers: [ValidatedController] })
     class AppModule {}
 
-    const app = await BnestFactory.create(AppModule);
+    const app = await TechneFactory.create(AppModule);
 
     const req = new Request("http://localhost/validated", {
       method: "POST",
@@ -177,7 +177,7 @@ describe("Elysia Adapter via BnestFactory", () => {
     const container = new Container();
     container.addProvider({ provide: AuthGuard, useValue: new AuthGuard() });
 
-    const app = await BnestFactory.create(AppModule, { logger: false, container });
+    const app = await TechneFactory.create(AppModule, { logger: false, container });
     const response = await app.handle(new Request("http://localhost/protected/data?token=secret"));
 
     expect(response.status).toBe(200);

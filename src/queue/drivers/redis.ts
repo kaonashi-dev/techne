@@ -19,7 +19,7 @@ export class RedisQueueDriver implements QueueDriver {
   private prefix: string;
 
   constructor(connection: QueueConnectionOptions = {}) {
-    this.prefix = connection.prefix ?? "bnest:queue";
+    this.prefix = connection.prefix ?? "techne:queue";
     this.client =
       connection.client ??
       connection.clientFactory?.() ??

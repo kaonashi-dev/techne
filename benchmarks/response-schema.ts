@@ -8,15 +8,15 @@
  * beat — a route returning the same payload without a schema.
  *
  * Validation strategy:
- *  - "with response schema": Bnest stringifies via the compiled stringifier.
- *  - "no response schema":   Bnest stringifies via Elysia's default path
+ *  - "with response schema": Techne stringifies via the compiled stringifier.
+ *  - "no response schema":   Techne stringifies via Elysia's default path
  *                            (which delegates to `JSON.stringify`).
  *
  * The first should be ≥ the second.
  */
 
 import { Controller, Get, Injectable, Module, Schema } from "../src/common";
-import { BnestFactory } from "../src/core";
+import { TechneFactory } from "../src/core";
 import {
   emitResults,
   getDefaults,
@@ -67,7 +67,7 @@ class WithSchemaController {
 @Module({ controllers: [WithSchemaController], providers: [UserService] })
 class RespModule {}
 
-const bnestApp = await BnestFactory.create(RespModule, { logger: false });
+const bnestApp = await TechneFactory.create(RespModule, { logger: false });
 
 export async function runResponseSchemaBench(): Promise<ScenarioResult[]> {
   const opts = getDefaults(isQuick());
@@ -84,7 +84,7 @@ export async function runResponseSchemaBench(): Promise<ScenarioResult[]> {
 
   const out: ScenarioResult[] = [];
   for (const req of requests) {
-    out.push(await runScenario("Bnest (response)", (r) => bnestApp.handle(r), req, opts));
+    out.push(await runScenario("Techne (response)", (r) => bnestApp.handle(r), req, opts));
   }
   return out;
 }

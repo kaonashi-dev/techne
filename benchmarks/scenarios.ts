@@ -88,10 +88,10 @@ export function isJson(argv: string[] = process.argv): boolean {
 }
 
 /**
- * Run one HTTP scenario through a Bnest or raw-Elysia adapter.
+ * Run one HTTP scenario through a Techne or raw-Elysia adapter.
  *
  * `handler` must be the underlying `(req) => Promise<Response>` callable —
- * for Bnest use `app.handle.bind(app)` and for Elysia use
+ * for Techne use `app.handle.bind(app)` and for Elysia use
  * `elysiaApp.handle.bind(elysiaApp)`. We avoid passing the app itself so the
  * benchmark stays type-agnostic.
  */

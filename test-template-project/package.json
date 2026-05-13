@@ -16,7 +16,7 @@
     "check:fix": "bun run lint:fix && bun run format"
   },
   "dependencies": {
-    "@kaonashi-dev/bnest": "latest"
+    "@kaonashi-dev/techne": "latest"
   },
   "devDependencies": {
     "@types/bun": "latest",

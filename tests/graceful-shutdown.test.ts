@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { Controller } from "../src/decorators/controller.decorator";
 import { Get } from "../src/decorators/routes.decorator";
 import { Module } from "../src/decorators/module.decorator";
-import { BnestFactory } from "../src/factory/bnest-factory";
+import { TechneFactory } from "../src/factory/techne-factory";
 
 describe("Graceful shutdown", () => {
   test("drains in-flight requests before shutting down", async () => {
@@ -18,7 +18,7 @@ describe("Graceful shutdown", () => {
     @Module({ controllers: [SlowController] })
     class AppModule {}
 
-    const app = await BnestFactory.create(AppModule, {
+    const app = await TechneFactory.create(AppModule, {
       logger: false,
       shutdown: { gracePeriod: 1000, signals: [] },
     });
@@ -55,7 +55,7 @@ describe("Graceful shutdown", () => {
     @Module({ controllers: [SlowController] })
     class AppModule {}
 
-    const app = await BnestFactory.create(AppModule, {
+    const app = await TechneFactory.create(AppModule, {
       logger: false,
       shutdown: { gracePeriod: 1000, signals: [] },
     });
@@ -85,7 +85,7 @@ describe("Graceful shutdown", () => {
     @Module({ controllers: [NoopController] })
     class AppModule {}
 
-    const app = await BnestFactory.create(AppModule, {
+    const app = await TechneFactory.create(AppModule, {
       logger: false,
       shutdown: { gracePeriod: 500, signals: [] },
     });
@@ -112,7 +112,7 @@ describe("Graceful shutdown", () => {
     @Module({ controllers: [BlockingController] })
     class AppModule {}
 
-    const app = await BnestFactory.create(AppModule, {
+    const app = await TechneFactory.create(AppModule, {
       logger: false,
       shutdown: { gracePeriod: 50, signals: [] },
     });

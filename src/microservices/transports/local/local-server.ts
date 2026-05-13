@@ -1,6 +1,6 @@
-import { BnestMicroservice } from "../../abstract-server";
+import { TechneMicroservice } from "../../abstract-server";
 
-export class LocalServer extends BnestMicroservice {
+export class LocalServer extends TechneMicroservice {
   async listen(): Promise<void> {}
 
   async close(): Promise<void> {

@@ -3,7 +3,7 @@ import { APP_GUARD, Public, Req, Roles, RolesGuard } from "../src/common";
 import { Controller } from "../src/decorators/controller.decorator";
 import { Get } from "../src/decorators/routes.decorator";
 import { Module } from "../src/decorators/module.decorator";
-import { BnestFactory } from "../src/factory/bnest-factory";
+import { TechneFactory } from "../src/factory/techne-factory";
 import { JwtAuthGuard, JwtModule, JwtService } from "../src/jwt";
 import { Reflector } from "../src/core/reflector";
 
@@ -45,7 +45,7 @@ describe("JWT auth", () => {
     })
     class AppModule {}
 
-    const app = await BnestFactory.create(AppModule, { logger: false });
+    const app = await TechneFactory.create(AppModule, { logger: false });
     const jwt = app.get<JwtService>(JwtService);
     const adminToken = await jwt.signAsync({ sub: "123", roles: ["admin"] });
     const userToken = await jwt.signAsync({ sub: "456", roles: ["user"] });

@@ -36,7 +36,7 @@ export class RedisQueueDriver implements QueueDriver {
 
   constructor(connection: MqConnectionOptions = {}) {
     this.connection = connection;
-    this.prefix = connection.prefix ?? "bnest:mq";
+    this.prefix = connection.prefix ?? "techne:mq";
     this.client = createRedisClientAdapter(connection, "client");
   }
 

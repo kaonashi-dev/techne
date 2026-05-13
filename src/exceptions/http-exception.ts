@@ -49,7 +49,7 @@ export const REASON_PHRASES: Record<number, string> = {
  * - `code`: stable machine-readable error code (e.g. `"user.not_found"`).
  *   Surfaced as the `code` field of the RFC 7807 problem document.
  * - `type`: a URI reference identifying the problem type. When omitted, the
- *   response controller derives one from the status (`https://bnest.dev/errors/<slug>`).
+ *   response controller derives one from the status (`https://github.com/kaonashi-dev/techne/blob/main/docs/errors/<slug>.md`).
  */
 export interface HttpExceptionOptions {
   code?: string;

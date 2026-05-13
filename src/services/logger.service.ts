@@ -98,7 +98,7 @@ export class Logger {
     const reqTag = this.requestId
       ? ` ${colors.gray}[req=${this.requestId}]${colors.reset}`
       : "";
-    const prefix = `${colors.green}[Bnest] ${pid}  -${colors.reset} ${timestamp}     ${coloredLevel} ${coloredContext}${reqTag}`;
+    const prefix = `${colors.green}[Techne] ${pid}  -${colors.reset} ${timestamp}     ${coloredLevel} ${coloredContext}${reqTag}`;
 
     if (typeof message === "object") {
       return `${prefix}\n${JSON.stringify(message, null, 2)}`;
@@ -110,7 +110,7 @@ export class Logger {
     const record: Record<string, unknown> = {
       level,
       time: new Date().toISOString(),
-      name: "Bnest",
+      name: "Techne",
       msg: typeof message === "string" ? message : safeToMessage(message),
       ctx: this.resolveContext(context),
     };

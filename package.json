@@ -1,7 +1,7 @@
 {
-  "name": "@kaonashi-dev/bnest",
-  "version": "0.2.2",
-  "description": "Framework for Bun, powered by Elysia.js",
+  "name": "@kaonashi-dev/techne",
+  "version": "0.4.0",
+  "description": "Techne — a Bun-native, NestJS-style framework built on Elysia. (Renamed from Bnest in v0.4.0.)",
   "module": "src/index.ts",
   "main": "src/index.ts",
   "types": "dist/types/index.d.ts",
@@ -74,7 +74,7 @@
     }
   },
   "bin": {
-    "bnest": "src/cli/index.ts"
+    "techne": "src/cli/index.ts"
   },
   "files": [
     "src",

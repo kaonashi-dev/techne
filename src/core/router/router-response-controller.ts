@@ -13,7 +13,7 @@ export interface ProblemDocument {
   [key: string]: unknown;
 }
 
-const PROBLEM_TYPE_BASE = "https://bnest.dev/errors/";
+const PROBLEM_TYPE_BASE = "https://github.com/kaonashi-dev/techne/blob/main/docs/errors/";
 const ABOUT_BLANK = "about:blank";
 
 /**
@@ -23,7 +23,7 @@ const ABOUT_BLANK = "about:blank";
  * Output format is RFC 7807 (`application/problem+json`):
  *
  *   {
- *     "type":      "https://bnest.dev/errors/not-found" | "about:blank",
+ *     "type":      "https://github.com/kaonashi-dev/techne/blob/main/docs/errors/not-found.md" | "about:blank",
  *     "title":     "Not Found",
  *     "status":    404,
  *     "detail":    "User #99 not found",
@@ -130,7 +130,7 @@ export class RouterResponseController {
     instance?: string;
     requestId?: string;
   }): ProblemDocument {
-    const type = args.type ?? (args.slug ? `${PROBLEM_TYPE_BASE}${args.slug}` : ABOUT_BLANK);
+    const type = args.type ?? (args.slug ? `${PROBLEM_TYPE_BASE}${args.slug}.md` : ABOUT_BLANK);
     const body: ProblemDocument = {
       type,
       title: args.title,

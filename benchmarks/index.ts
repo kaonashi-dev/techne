@@ -9,7 +9,7 @@
  *   bun run benchmarks/index.ts --quick    # CI-smoke (~60s budget)
  *   bun run benchmarks/index.ts --json     # machine-readable for graphing
  *
- * Note: each scenario boots its own Bnest application. Modules are
+ * Note: each scenario boots its own Techne application. Modules are
  * intentionally isolated so a cache or singleton in one scenario can't
  * affect another. The runner is therefore I/O-light but allocation-heavy
  * — the `stabilize()` step inside each `runScenario` keeps GC out of the
@@ -49,7 +49,7 @@ async function main() {
   }
 
   // Combined matrix table (one big table is easier to copy-paste into a PR).
-  console.log("\n# Bnest benchmark matrix\n");
+  console.log("\n# Techne benchmark matrix\n");
   for (const section of sections) {
     console.log(`\n## ${section.title}\n`);
     console.log(renderTable(section.results));

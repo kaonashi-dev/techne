@@ -6,4 +6,4 @@ export type {
   HealthOptions,
   HealthCheckFn,
   ReadinessReport,
-} from "../core/bnest-application";
+} from "../core/techne-application";

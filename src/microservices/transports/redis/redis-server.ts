@@ -1,7 +1,7 @@
-import { BnestMicroservice } from "../../abstract-server";
+import { TechneMicroservice } from "../../abstract-server";
 import type { MessagePayload, MicroserviceResponse } from "../../types";
 
-export class RedisServer extends BnestMicroservice {
+export class RedisServer extends TechneMicroservice {
   private pub: any;
   private sub: any;
   private readonly prefix: string;
@@ -9,7 +9,7 @@ export class RedisServer extends BnestMicroservice {
 
   constructor(private readonly options: Record<string, any> = {}) {
     super();
-    this.prefix = options.prefix || "bnest";
+    this.prefix = options.prefix || "techne";
     this.timeout = options.timeout || 5000;
     this.pub = options.publisher || this.createClient();
     this.sub = options.subscriber || this.createClient();
