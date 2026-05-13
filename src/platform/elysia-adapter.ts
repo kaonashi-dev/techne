@@ -22,6 +22,9 @@ export class ElysiaAdapter {
   private container: Container;
   private requestStartTimes = new WeakMap<Request, number>();
   private compiledCorsOptions?: CompiledCorsOptions;
+  private inflight = 0;
+  private isDraining = false;
+  private inflightTracked = new WeakSet<Request>();
 
   constructor(private options?: ElysiaAdapterOptions) {
     this.container = options?.container || globalContainer;
@@ -37,11 +40,65 @@ export class ElysiaAdapter {
     this.compiledCorsOptions = this.compileCorsOptions(options);
   }
 
+  public getInflightCount(): number {
+    return this.inflight;
+  }
+
+  public setDraining(value: boolean): void {
+    this.isDraining = value;
+  }
+
+  public isDrainingRequests(): boolean {
+    return this.isDraining;
+  }
+
+  public async waitForDrain(timeoutMs: number): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs;
+    while (this.inflight > 0) {
+      if (Date.now() >= deadline) {
+        return this.inflight === 0;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    return true;
+  }
+
   private createApp() {
     const app = new Elysia();
+    this.setupInflightTracking(app);
     this.setupRequestLogging(app);
     this.setupCors(app);
     return app;
+  }
+
+  private setupInflightTracking(app: Elysia) {
+    app.onRequest(({ request }) => {
+      if (this.isDraining) {
+        return new Response(null, {
+          status: 503,
+          headers: { connection: "close" },
+        });
+      }
+      if (!this.inflightTracked.has(request)) {
+        this.inflightTracked.add(request);
+        this.inflight++;
+      }
+    });
+
+    const release = (request: Request) => {
+      if (this.inflightTracked.has(request)) {
+        this.inflightTracked.delete(request);
+        if (this.inflight > 0) this.inflight--;
+      }
+    };
+
+    app.onAfterHandle(({ request }) => {
+      release(request);
+    });
+
+    app.onError(({ request }) => {
+      release(request);
+    });
   }
 
   private setupRequestLogging(app: Elysia) {

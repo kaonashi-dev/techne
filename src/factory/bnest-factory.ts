@@ -14,6 +14,24 @@ import { MqRegistry } from "../mq/registry";
 import { MQ_DRIVER } from "../mq/tokens";
 import type { CanActivate } from "../interfaces/can-activate.interface";
 
+export interface BnestShutdownOptions {
+  /** ms to wait for in-flight requests before forcing shutdown. Default: 10_000 */
+  gracePeriod?: number;
+  /** Signals that should trigger graceful shutdown. Default: ["SIGTERM", "SIGINT"] */
+  signals?: ("SIGTERM" | "SIGINT" | "SIGHUP")[];
+}
+
+export interface BnestHealthOptions {
+  /** Enable auto-registered health endpoints. Default: true */
+  enabled?: boolean;
+  /** Path for liveness probe (always 200 once the process is up). Default: "/healthz" */
+  livenessPath?: string;
+  /** Path for readiness probe. Default: "/readyz" */
+  readinessPath?: string;
+  /** Custom checks to evaluate when serving the readiness endpoint. */
+  checks?: Array<() => Promise<{ healthy: boolean; name: string; detail?: any }>>;
+}
+
 export interface BnestApplicationOptions {
   logger?: boolean | string[];
   container?: Container;
@@ -29,6 +47,19 @@ export interface BnestApplicationOptions {
   globalPrefixOptions?: GlobalPrefixOptions;
   versioning?: VersioningOptions;
   cors?: CorsOptions;
+  /**
+   * Graceful shutdown configuration. When the configured signals fire, the
+   * adapter begins refusing new requests with HTTP 503 and waits up to
+   * `gracePeriod` ms for in-flight work to settle before stopping.
+   */
+  shutdown?: BnestShutdownOptions;
+  /**
+   * Auto-registered health endpoints. Disable by setting `enabled: false`.
+   * Liveness returns 200 once the process is up; readiness returns 200 only
+   * after `onApplicationBootstrap` completes and every configured check
+   * reports `healthy: true`.
+   */
+  health?: BnestHealthOptions;
 }
 
 export class BnestFactory {
@@ -65,6 +96,7 @@ export class BnestFactory {
       routesResolver,
       routesResolver.executionContext,
       mqRegistry,
+      { shutdown: options?.shutdown, health: options?.health },
     );
 
     const globalGuards = [
