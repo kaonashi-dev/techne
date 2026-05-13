@@ -217,7 +217,7 @@ describe("contract / generateRoutesType", () => {
     const source = generateRoutesType(app);
 
     // File preamble and re-export hook.
-    expect(source).toContain(`import type { RouteHandler } from "@kaonashi-dev/bnest/contract"`);
+    expect(source).toContain(`import type { RouteHandler } from "@kaonashi-dev/techne/contract"`);
     expect(source).toContain("export type Routes = {");
 
     // Both routes are present, keyed by their full path.

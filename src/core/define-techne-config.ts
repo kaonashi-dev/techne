@@ -1,10 +1,10 @@
 import type { TechneApplicationOptions } from "../factory/techne-factory";
 
 /**
- * Declarative Bnest configuration. Extends {@link TechneApplicationOptions}
+ * Declarative Techne configuration. Extends {@link TechneApplicationOptions}
  * with bootstrap-only fields (`module`, `port`, `host`) consumed by the
  * `bootstrap()` helper and `TechneFactory.create()` when loading
- * `bnest.config.ts` from `process.cwd()`.
+ * `techne.config.ts` from `process.cwd()`.
  */
 export type TechneConfig = TechneApplicationOptions & {
   /** Root module class. Required when calling `TechneFactory.create()` / `bootstrap()` with zero args. */
@@ -17,7 +17,7 @@ export type TechneConfig = TechneApplicationOptions & {
 
 /**
  * Identity helper that gives users autocomplete on every `TechneConfig` field
- * when authoring a `bnest.config.ts` default export. The runtime returns the
+ * when authoring a `techne.config.ts` default export. The runtime returns the
  * input unchanged — all merging happens in `TechneFactory.create()`.
  */
 export function defineTechneConfig(config: TechneConfig): TechneConfig {

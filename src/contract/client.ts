@@ -83,7 +83,7 @@ async function parseProblem(response: Response): Promise<ProblemDocument | undef
 
 /**
  * Create a typed RPC client. `R` is a {@link RouteMap}, typically produced by
- * `bnest generate client` from the running app or hand-written by the user.
+ * `techne generate client` from the running app or hand-written by the user.
  *
  * ```ts
  * const api = createClient<Routes>("http://localhost:3000");
