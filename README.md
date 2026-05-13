@@ -27,9 +27,31 @@ bunx @kaonashi-dev/bnest --help
 
 ## Quick Start
 
+The recommended setup is declarative: a `bnest.config.ts` at the project root
+holds every framework option, and `main.ts` becomes a one-liner.
+
 ```ts
+// bnest.config.ts
+import { defineBnestConfig } from "@kaonashi-dev/bnest/core";
+import { AppModule } from "./src/app.module";
+
+export default defineBnestConfig({
+  module: AppModule,
+  port: 3000,
+  cors: { origin: true },
+});
+```
+
+```ts
+// src/main.ts
+import { bootstrap } from "@kaonashi-dev/bnest/core";
+
+await bootstrap();
+```
+
+```ts
+// src/app.module.ts
 import { Controller, Get, Injectable, Module } from "@kaonashi-dev/bnest/common";
-import { BnestFactory } from "@kaonashi-dev/bnest/core";
 
 @Injectable()
 class AppService {
@@ -52,10 +74,24 @@ class AppController {
   controllers: [AppController],
   providers: [AppService],
 })
-class AppModule {}
+export class AppModule {}
+```
+
+`bootstrap()` reads `bnest.config.ts` from `process.cwd()`, calls
+`BnestFactory.create()`, and starts listening. Port resolution is
+`options.port` → config `port` → `Bun.env.PORT` → `3000`. `host` defaults to
+`"0.0.0.0"`. The shorthand `bnest()` returns the application without starting
+the server.
+
+### Lower-level API
+
+`BnestFactory.create()` is still available and is the right call when you need
+full control over the lifecycle (e.g. tests, in-process invocations):
+
+```ts
+import { BnestFactory } from "@kaonashi-dev/bnest/core";
 
 const app = await BnestFactory.create(AppModule);
-
 app.listen(3000, () => {
   console.log("Server running at http://localhost:3000");
 });
@@ -210,6 +246,50 @@ Decorator-style DTO metadata is also available through exports such as `Dto`, `I
 
 ## Configuration
 
+The preferred entry point is `defineConfig`, which validates env values against
+a TypeBox schema at startup and produces a typed `AppConfig` object. It pairs
+with `ConfigModule.forApp(config)` so handlers can pull the same object out of
+DI via `@InjectConfig()`.
+
+```ts
+import { ConfigModule, defineConfig, InjectConfig, t } from "@kaonashi-dev/bnest/config";
+import { Controller, Get, Module } from "@kaonashi-dev/bnest/common";
+
+const appConfig = defineConfig({
+  schema: t.Object({
+    PORT: t.Integer({ minimum: 1, maximum: 65535 }),
+    DATABASE_URL: t.String({ minLength: 1 }),
+    LOG_LEVEL: t.Optional(t.Union([t.Literal("debug"), t.Literal("info")])),
+  }),
+});
+
+type Config = typeof appConfig;
+
+@Controller("status")
+class StatusController {
+  constructor(@InjectConfig() private readonly config: Config) {}
+
+  @Get("/")
+  status() {
+    return { port: this.config.get("PORT") };
+  }
+}
+
+@Module({
+  imports: [ConfigModule.forApp(appConfig)],
+  controllers: [StatusController],
+})
+export class AppModule {}
+```
+
+Invalid or missing env values throw `ConfigValidationError` before the HTTP
+server starts. `t` is a re-export of TypeBox's `Type` for ergonomic schema
+authoring, and `APP_CONFIG` is the DI token `@InjectConfig()` resolves.
+
+The legacy `ConfigModule.forRoot()`, `forRootAsync()`, `forFeature()`, `ConfigService`,
+and `registerAs()` are still exported from `@kaonashi-dev/bnest/config` for
+incremental migration.
+
 ```ts
 import { ConfigModule, ConfigService, registerAs } from "@kaonashi-dev/bnest/config";
 
@@ -219,30 +299,45 @@ const databaseConfig = registerAs("database", () => ({
 
 @Module({
   imports: [
-    ConfigModule.forRoot({
-      isGlobal: true,
-      expandVariables: true,
-    }),
+    ConfigModule.forRoot({ isGlobal: true, expandVariables: true }),
     ConfigModule.forFeature(databaseConfig),
   ],
 })
-class AppModule {}
+class LegacyAppModule {}
 
 // later
 const config = app.get<ConfigService>(ConfigService);
 config.getOrThrow("DATABASE_URL");
 ```
 
-`ConfigModule.forRoot()`, `forRootAsync()`, `forFeature()`, `ConfigService`, and `registerAs()` are available from `@kaonashi-dev/bnest/config`.
-
 ## Runtime Features
+
+Prefer declaring runtime options in `bnest.config.ts`. The setters below are
+still supported but emit a one-time deprecation warning per process and will
+be removed in v1.0:
 
 ```ts
 const app = await BnestFactory.create(AppModule);
 
+// Deprecated — declare these in bnest.config.ts instead.
 app.setGlobalPrefix("api");
 app.enableVersioning({ type: "uri" });
 app.enableCors({ origin: true, credentials: true });
+app.useGlobalGuards(new AuthGuard());
+```
+
+The declarative equivalent:
+
+```ts
+// bnest.config.ts
+import { defineBnestConfig } from "@kaonashi-dev/bnest/core";
+
+export default defineBnestConfig({
+  module: AppModule,
+  globalPrefix: "api",
+  versioning: { type: "uri" },
+  cors: { origin: true, credentials: true },
+});
 ```
 
 `BnestFactory.createApplicationContext()` is also available for standalone module graphs without HTTP.
@@ -252,6 +347,69 @@ providers stay private, `global: true` modules expose only their exported
 tokens, and request-scoped providers share a stable context across guards,
 interceptors, and handlers within the same request through `ContextIdFactory`
 from `@kaonashi-dev/bnest/core`.
+
+## Plugins
+
+Plugins are the sanctioned extension point. A plugin is a named, optionally
+dependency-ordered unit with a single `setup()` function that receives a
+`PluginContext` — the only surface allowed to mutate framework state, register
+DI tokens, hook into lifecycle, or reach the raw Elysia instance.
+
+```ts
+import { definePlugin } from "@kaonashi-dev/bnest/core";
+
+interface MetricsOptions {
+  prefix?: string;
+}
+
+const MetricsPlugin = definePlugin<MetricsOptions>({
+  name: "metrics",
+  version: "0.1.0",
+  dependencies: [],
+  setup(ctx, options) {
+    const prefix = options?.prefix ?? "bnest_";
+    ctx.logger.log(`registering metrics with prefix "${prefix}"`);
+
+    ctx.provide("METRICS_PREFIX", prefix);
+
+    ctx.http().get("/metrics", () => `# metrics for ${prefix}\n`);
+
+    ctx.onReady(async () => {
+      ctx.logger.log("ready: metrics endpoint live");
+    });
+
+    ctx.onShutdown(async () => {
+      ctx.logger.log("flushing metrics before exit");
+    });
+  },
+});
+
+const app = await BnestFactory.create(AppModule);
+await app.register(MetricsPlugin, { prefix: "myapp_" });
+```
+
+- `ctx.provide(token, value)` registers a token in the root DI scope.
+- `ctx.resolve(token)` reads from the root scope.
+- `ctx.onReady(handler)` fires after `onApplicationBootstrap` and before the
+  HTTP server starts listening.
+- `ctx.onShutdown(handler)` fires in LIFO order during graceful shutdown,
+  before the MQ registry closes and before `onModuleDestroy`.
+- `ctx.http()` returns the raw Elysia instance for low-level integrations.
+
+Re-registering the same `name` + `setup` function is a no-op (handy for HMR);
+a different `setup` for the same `name` throws. Missing `dependencies` throw
+at registration time.
+
+Native Elysia plugins can be attached through `app.use()`:
+
+```ts
+import { cors } from "@elysiajs/cors";
+
+app.use(cors());
+```
+
+`app.getRegisteredPlugins()` returns the list of registered plugin names in
+registration order — useful for diagnostics.
 
 ## Auth and JWT
 
@@ -279,19 +437,32 @@ Use `@Public()` to skip auth and `@Roles(...)` for role metadata consumed by `Ro
 
 ## Swagger and Health
 
+`SwaggerModule.createAutoDocument(app, builder?)` walks every registered route
+(including their TypeBox `params`, `query`, `body`, and `response` schemas) and
+emits an OpenAPI 3.1 document — no manual `addPath()` calls required. Anything
+the builder adds explicitly takes precedence, so the auto-generated spec can
+still be patched without forking.
+
 ```ts
 import { SwaggerModule, DocumentBuilder } from "@kaonashi-dev/bnest/swagger";
-import { HealthCheck, HealthCheckService } from "@kaonashi-dev/bnest/health";
 
-const document = SwaggerModule.createDocument(
+const document = SwaggerModule.createAutoDocument(
   app,
-  new DocumentBuilder().setTitle("My API").setVersion("1.0.0").build(),
+  new DocumentBuilder().setTitle("My API").setVersion("1.0.0"),
 );
 
 SwaggerModule.setup("/api-docs", app, document);
 ```
 
-`HealthCheckService` provides basic `pingCheck()` and `memoryCheck()` helpers.
+The lower-level pieces are also exported for callers that want to integrate
+the emitter directly: `emitOpenApiDocument(app, builder?)` and
+`typeboxToOpenApi(schema)` from `@kaonashi-dev/bnest/swagger`.
+
+`HealthCheckService` from `@kaonashi-dev/bnest/health` still provides
+`pingCheck()` and `memoryCheck()` helpers for callers that want to expose a
+custom Nest-style indicator. The auto-registered `/healthz` and `/readyz`
+endpoints described in [Health & Graceful Shutdown](#health--graceful-shutdown)
+are independent and are wired up by `BnestFactory.create()`.
 
 ## File Uploads
 
@@ -307,11 +478,38 @@ upload(@UploadedFile("file") file: any) {
 
 ## Exceptions
 
+Bnest serializes exceptions as RFC 7807 problem documents with
+`Content-Type: application/problem+json`. Subclasses of `HttpException` accept
+an optional second argument that attaches a machine-readable `code` and an
+explicit problem `type` URI:
+
 ```ts
 import { NotFoundException } from "@kaonashi-dev/bnest/common";
 
-throw new NotFoundException("User not found");
+throw new NotFoundException("User #99 not found", { code: "user.not_found" });
 ```
+
+The serialized response looks like:
+
+```json
+{
+  "type": "https://bnest.dev/errors/not-found",
+  "title": "Not Found",
+  "status": 404,
+  "detail": "User #99 not found",
+  "code": "user.not_found",
+  "instance": "/users/99",
+  "requestId": "<uuid>"
+}
+```
+
+`instance` is the request path and `requestId` is propagated from the
+`x-request-id` header (or generated on the fly when absent) and echoed back on
+the response. `errors` is added on 422 validation failures as a
+`ValidationError[]` extension field. In production, `detail` is omitted for
+non-`HttpException` throws so server-side error messages never leak to
+clients. `REASON_PHRASES` is exported from `@kaonashi-dev/bnest/common` for
+callers that need the standard HTTP reason-phrase table.
 
 ## Testing
 
@@ -444,24 +642,104 @@ await worker.run();
 Framework integration is available through `MqModule.register()` and
 `MqModule.registerQueue({ name: "emails" })`.
 
+## Health & Graceful Shutdown
+
+`BnestFactory.create()` auto-registers two health endpoints:
+
+- `GET /healthz` — liveness. Always returns 200 once the process is up.
+- `GET /readyz` — readiness. Returns 200 only after `onApplicationBootstrap`
+  has completed AND every configured health check resolves to
+  `healthy: true`. During shutdown, readiness flips to `false` immediately so
+  load balancers can stop routing traffic before in-flight requests drain.
+
+Paths and checks are configurable through the `health` option, and graceful
+shutdown is configured through `shutdown`:
+
+```ts
+// bnest.config.ts
+import { defineBnestConfig } from "@kaonashi-dev/bnest/core";
+import { AppModule } from "./src/app.module";
+import { db } from "./src/db";
+
+export default defineBnestConfig({
+  module: AppModule,
+  health: {
+    livenessPath: "/healthz",
+    readinessPath: "/readyz",
+    checks: [
+      async () => ({
+        name: "database",
+        healthy: await db.ping(),
+      }),
+    ],
+  },
+  shutdown: {
+    gracePeriod: 15_000,
+    signals: ["SIGTERM", "SIGINT"],
+  },
+});
+```
+
+When a configured signal fires, the adapter starts refusing new requests with
+HTTP 503 and waits up to `gracePeriod` ms (default `10_000`) for in-flight
+work to settle before stopping. Plugin `onShutdown` handlers fire in LIFO
+order, then the MQ registry closes, then `onModuleDestroy` runs.
+
+Set `health: { enabled: false }` to opt out of the auto-registered endpoints
+entirely.
+
 ## CLI
 
 ```bash
 # Create a new project
 bunx @kaonashi-dev/bnest new my-project
 
+# Run with hot reload and an optional inspector
+bunx @kaonashi-dev/bnest dev --port 3000 --inspect
+
+# Run without hot reload (production-style)
+bunx @kaonashi-dev/bnest start --port 3000
+
+# Run the test suite
+bunx @kaonashi-dev/bnest test tests/ --watch --coverage
+
+# Diagnose tsconfig / project layout
+bunx @kaonashi-dev/bnest doctor
+
 # Generate framework files
 bunx @kaonashi-dev/bnest g module users
 bunx @kaonashi-dev/bnest g controller users
 bunx @kaonashi-dev/bnest g service users
 bunx @kaonashi-dev/bnest g resource users
+bunx @kaonashi-dev/bnest g middleware logger
+bunx @kaonashi-dev/bnest g guard auth
+bunx @kaonashi-dev/bnest g pipe trim
+bunx @kaonashi-dev/bnest g filter http-exception
+bunx @kaonashi-dev/bnest g interceptor logging
+bunx @kaonashi-dev/bnest g dto create-user
+
+# Scaffold a multi-stage Bun Dockerfile (+ .dockerignore)
+bunx @kaonashi-dev/bnest g docker --port 3000
+bunx @kaonashi-dev/bnest deploy --target docker --port 3000
 
 # Build an entrypoint with bun build
 bunx @kaonashi-dev/bnest build src/main.ts --out dist/app.bun --minify
 bunx @kaonashi-dev/bnest build src/main.ts --target node --out dist/app.js
 ```
 
-Generated starters now use `@kaonashi-dev/bnest/common` and `@kaonashi-dev/bnest/core` by default.
+Commands: `new`, `create`, `dev`, `start`, `build`, `test`, `deploy`,
+`doctor`, `generate|g`.
+
+Generator types: `module`, `controller`, `service`, `resource`, `middleware`,
+`guard`, `pipe`, `filter`, `interceptor`, `dto`, `docker`, `client`.
+
+`bnest deploy --target docker` currently writes the same multi-stage
+Dockerfile as the `g docker` generator. Other deploy targets (`fly`, `railway`,
+`cloudflare`, `bun-vm`) are planned but not implemented yet.
+
+Generated starters use `@kaonashi-dev/bnest/common` and
+`@kaonashi-dev/bnest/core` and emit a `bootstrap()` + `bnest.config.ts`
+project skeleton.
 
 ## Package Exports
 
@@ -495,6 +773,7 @@ src/
   common/         Nest-style public common API barrel
   config/         ConfigModule, ConfigService, and registerAs helpers
   core/           Application core, DI container, and bootstrap APIs
+    plugins/      Plugin protocol (`definePlugin`, `PluginContext`)
   cqrs/           Command, query, event buses and event store
   decorators/     Routing, DI, and metadata decorators
   exceptions/     HTTP exception classes
@@ -510,9 +789,38 @@ src/
   testing/        Testing module utilities
 ```
 
+## Performance
+
+A benchmark matrix lives under [`benchmarks/`](./benchmarks/README.md) covering
+the code paths that actually matter — raw Elysia vs Bnest, the arity-specialized
+**fast path** for routes with no enhancers, the cost-tagged **slow path** for
+routes with guards/interceptors/pipes, validation (valid + invalid bodies),
+response schemas (exercising the compiled TypeBox stringifier), container
+resolution, and cold start with `Bun.spawn`.
+
+```bash
+bun run benchmarks/index.ts            # full matrix
+bun run benchmarks/index.ts --quick    # CI smoke
+bun run benchmarks/index.ts --json     # machine-readable
+```
+
+Notable optimizations on the hot path:
+
+- Arity-specialized compiled handlers for routes without enhancers.
+- Cost-tagged slow path that hoists static `@Injectable()` guards/interceptors
+  out at route registration time.
+- Compiled TypeBox stringifiers (`compileStringifier(schema)` from
+  `@kaonashi-dev/bnest/schema`) used automatically for routes with a
+  `response` schema, with a per-schema `WeakMap` cache.
+- Cheaper validation error path and lighter request-id / in-flight tracking.
+
 ## Status
 
 Bnest is still experimental. APIs may change quickly, some areas are incomplete, and documentation will continue to evolve with the framework.
+
+v0.3 (in progress) introduces declarative config, plugin protocol, RFC 7807
+errors, `/healthz` + `/readyz`, graceful shutdown, expanded CLI, and auto
+OpenAPI.
 
 ## License
 
