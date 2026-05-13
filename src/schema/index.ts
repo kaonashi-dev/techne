@@ -207,3 +207,4 @@ export {
   validateOrReject,
   validateSync,
 };
+export { compileStringifier } from "./fast-stringify";
