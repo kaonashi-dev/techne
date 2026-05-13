@@ -67,7 +67,7 @@ class WithSchemaController {
 @Module({ controllers: [WithSchemaController], providers: [UserService] })
 class RespModule {}
 
-const bnestApp = await TechneFactory.create(RespModule, { logger: false });
+const techneApp = await TechneFactory.create(RespModule, { logger: false });
 
 export async function runResponseSchemaBench(): Promise<ScenarioResult[]> {
   const opts = getDefaults(isQuick());
@@ -84,7 +84,7 @@ export async function runResponseSchemaBench(): Promise<ScenarioResult[]> {
 
   const out: ScenarioResult[] = [];
   for (const req of requests) {
-    out.push(await runScenario("Techne (response)", (r) => bnestApp.handle(r), req, opts));
+    out.push(await runScenario("Techne (response)", (r) => techneApp.handle(r), req, opts));
   }
   return out;
 }

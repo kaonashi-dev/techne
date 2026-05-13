@@ -54,12 +54,7 @@ if (!container) {
  * latency stats. We use the application-level `get()` since the private
  * container reference is not part of the public API.
  */
-function measureLookups(
-  name: string,
-  request: string,
-  token: any,
-  iters: number,
-): ScenarioResult {
+function measureLookups(name: string, request: string, token: any, iters: number): ScenarioResult {
   const latencies = new Float64Array(iters);
   const lookup = (t: any) => (app as any).get(t);
 
@@ -76,8 +71,7 @@ function measureLookups(
   sorted.sort();
   let sum = 0;
   for (let i = 0; i < iters; i++) sum += sorted[i]!;
-  const pct = (q: number) =>
-    sorted[Math.min(iters - 1, Math.max(0, Math.floor(q * iters)))] ?? 0;
+  const pct = (q: number) => sorted[Math.min(iters - 1, Math.max(0, Math.floor(q * iters)))] ?? 0;
 
   return {
     name,

@@ -36,7 +36,7 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 > - `BnestFactory` / `BnestApplication` / `BnestApplicationContext` /
 >   `BnestMicroservice` / `BnestInterceptor`.
 > - `BnestApplicationOptions` / `BnestHealthOptions` / `BnestShutdownOptions` /
->   `BnestApplicationInternalOptions` / `BnestConfig`.
+>   `BnestConfig`.
 > - `defineBnestConfig` / `loadBnestConfigFile` / `__resetBnestConfigCache`.
 > - `bnest()` shorthand (use `techne()`).
 > - `bnest.config.ts` filename (use `techne.config.ts`).
@@ -51,7 +51,7 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `definePlugin({ name, version?, dependencies?, setup })` plugin protocol; `app.register(plugin, options)`, `app.use(elysiaPlugin)`, and `app.getRegisteredPlugins()` on `TechneApplication`.
 - `PluginContext` exposes `provide`, `resolve`, `onReady`, `onShutdown`, `http()`, and a scoped `logger`.
 - RFC 7807 error responses with `type`, `title`, `status`, `detail`, `code`, `instance`, `requestId`, and a `Content-Type: application/problem+json` header.
-- `HttpException` accepts a NestJS-style `(response, status, options?)` signature plus a `{ code, type }` options object on every subclass.
+- `HttpException` accepts a structured `(response, status, options?)` signature plus a `{ code, type }` options object on every subclass.
 - `REASON_PHRASES` exported from `@kaonashi-dev/techne/common` for the standard HTTP reason-phrase table.
 - Auto-registered `GET /healthz` (liveness) and `GET /readyz` (readiness) endpoints, configurable via `TechneApplicationOptions.health` (`enabled`, `livenessPath`, `readinessPath`, `checks`).
 - Graceful shutdown with `TechneApplicationOptions.shutdown` (`gracePeriod`, `signals`); HTTP 503 on new requests while in-flight work drains.

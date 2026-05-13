@@ -182,9 +182,9 @@ describe("Plugin protocol", () => {
   test("registering the same plugin name with a different setup throws", async () => {
     const app = await TechneFactory.create(EmptyModule, { logger: false });
     await app.register(definePlugin({ name: "dup", setup: () => {} }));
-    await expect(
-      app.register(definePlugin({ name: "dup", setup: () => {} })),
-    ).rejects.toThrow(/already registered/);
+    await expect(app.register(definePlugin({ name: "dup", setup: () => {} }))).rejects.toThrow(
+      /already registered/,
+    );
     await app.close();
   });
 
@@ -224,7 +224,7 @@ describe("Plugin protocol", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ from: "plugin" });
 
-    // Bnest-registered routes should still work after `use()`.
+    // Previously registered routes should still work after `use()`.
     const rootRes = await app.handle(new Request("http://localhost/root"));
     expect(rootRes.status).toBe(200);
 

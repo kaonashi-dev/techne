@@ -66,7 +66,7 @@ class UserController {
 @Module({ controllers: [UserController], providers: [UserService] })
 class AppModule {}
 
-const bnestApp = await TechneFactory.create(AppModule, { logger: false });
+const techneApp = await TechneFactory.create(AppModule, { logger: false });
 
 // ─── Run ───────────────────────────────────────────────────────────────────
 
@@ -82,7 +82,7 @@ export async function runHttpBench(): Promise<ScenarioResult[]> {
     results.push(await runScenario("Raw Elysia", (r) => elysiaApp.handle(r), req, opts));
   }
   for (const req of requests) {
-    results.push(await runScenario("Techne", (r) => bnestApp.handle(r), req, opts));
+    results.push(await runScenario("Techne", (r) => techneApp.handle(r), req, opts));
   }
   return results;
 }

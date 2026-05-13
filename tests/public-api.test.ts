@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 describe("public API", () => {
-  test("exposes Nest-style common and core subpaths", async () => {
+  test("exposes Techne common and core subpaths", async () => {
     const common = await import("@kaonashi-dev/techne/common");
     const core = await import("@kaonashi-dev/techne/core");
     const config = await import("@kaonashi-dev/techne/config");

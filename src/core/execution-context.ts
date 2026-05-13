@@ -1,5 +1,5 @@
 /**
- * NestJS-compatible ExecutionContext / ArgumentsHost abstractions.
+ * Techne ExecutionContext / ArgumentsHost abstractions.
  *
  * ExecutionContext is the object that Guards, Interceptors, and Exception
  * Filters receive. It exposes the underlying transport arguments (HTTP today,
@@ -55,7 +55,7 @@ export interface ExecutionContext extends ArgumentsHost {
  * For backward compatibility with legacy Bnest guards/interceptors/filters
  * that read from the raw Elysia context directly (`ctx.query`, `ctx.body`,
  * etc.), the common fields are exposed as getters that delegate to the
- * underlying context. New code should prefer the NestJS-style
+ * underlying context. New code should prefer the Techne
  * `ctx.switchToHttp().getRequest()` API.
  */
 export class ExecutionContextHost implements ExecutionContext {

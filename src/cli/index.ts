@@ -201,14 +201,14 @@ function printHelp() {
 Techne CLI
 
 Usage:
-  technenew <project-name>
-  technedev [--port N] [--inspect]
-  technestart [--port N]
-  technetest [pattern] [--watch] [--coverage]
-  technebuild|b [entry] [--out <file>] [--target <bun|node|browser>] [--minify]
-  technedeploy --target docker [--out Dockerfile] [--port N] [--bun-version V] [--dry-run] [--force]
-  technedoctor
-  technegenerate|g <type> <name>
+  techne new <project-name>
+  techne dev [--port N] [--inspect]
+  techne start [--port N]
+  techne test [pattern] [--watch] [--coverage]
+  techne build|b [entry] [--out <file>] [--target <bun|node|browser>] [--minify]
+  techne deploy --target docker [--out Dockerfile] [--port N] [--bun-version V] [--dry-run] [--force]
+  techne doctor
+  techne generate|g <type> <name>
 
 Available generators:
   module

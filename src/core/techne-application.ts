@@ -311,10 +311,7 @@ export class TechneApplication {
    * different plugin with the same `name` is already registered, and lets
    * an idempotent re-registration of the same `setup` function no-op.
    */
-  async register<TOptions>(
-    plugin: PluginDefinition<TOptions>,
-    options?: TOptions,
-  ): Promise<this> {
+  async register<TOptions>(plugin: PluginDefinition<TOptions>, options?: TOptions): Promise<this> {
     if (!plugin || typeof plugin.name !== "string" || plugin.name.length === 0) {
       throw new Error("Plugin must have a non-empty `name`.");
     }

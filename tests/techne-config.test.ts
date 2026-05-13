@@ -98,10 +98,7 @@ describe("TechneFactory.create + techne.config.ts", () => {
   });
 
   test("factory options override file values (shallow per-key)", async () => {
-    await writeConfig(
-      tempRoot,
-      `export default { globalPrefix: "fromfile" };\n`,
-    );
+    await writeConfig(tempRoot, `export default { globalPrefix: "fromfile" };\n`);
 
     const app = await TechneFactory.create(AppModule, {
       logger: false,
@@ -197,10 +194,7 @@ export default { module: AppModule, logger: false };\n`,
     // Regression net: through v0.4.x users can keep the old filename. The
     // loader prefers techne.config.ts when both exist; this test only writes
     // the legacy name and verifies the values still flow through.
-    await writeLegacyBnestConfig(
-      tempRoot,
-      `export default { globalPrefix: "legacy" };\n`,
-    );
+    await writeLegacyBnestConfig(tempRoot, `export default { globalPrefix: "legacy" };\n`);
     const app = await TechneFactory.create(AppModule, { logger: false });
     const res = await app.handle(new Request("http://localhost/legacy/users"));
     expect(res.status).toBe(200);
@@ -217,10 +211,7 @@ export default { module: AppModule, logger: false };\n`,
   });
 
   test("bootstrap() listens on the configured port and respects Bun.env.PORT", async () => {
-    await writeConfig(
-      tempRoot,
-      `export default { port: 0, logger: false };\n`,
-    );
+    await writeConfig(tempRoot, `export default { port: 0, logger: false };\n`);
 
     // Port 0 lets the OS assign a free port — we just need a listening server.
     const app = await bootstrap(AppModule);

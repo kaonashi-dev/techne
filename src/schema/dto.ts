@@ -212,10 +212,7 @@ export function firstValidationError(
  * materialize the complete error list on demand (e.g. when a problem+json
  * filter formats the 4xx response body).
  */
-export function computeAllValidationErrors(
-  value: unknown,
-  metatype: Function,
-): ValidationError[] {
+export function computeAllValidationErrors(value: unknown, metatype: Function): ValidationError[] {
   const validator = getOrCreateDtoValidator(metatype);
   if (!validator) return [];
   return normalizeValidationErrors([...validator.Errors(value)]);

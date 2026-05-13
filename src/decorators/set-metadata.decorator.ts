@@ -1,7 +1,7 @@
 import "../reflect-setup";
 
 /**
- * NestJS-compatible `SetMetadata`. Attaches arbitrary metadata to a handler
+ * Techne `SetMetadata` helper. Attaches arbitrary metadata to a handler
  * method or controller class that can later be read with `Reflector`.
  *
  * ```ts

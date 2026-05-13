@@ -235,10 +235,7 @@ function transformPathParams(path: string): string {
   return path.replace(/:([A-Za-z0-9_]+)/g, "{$1}");
 }
 
-function paramsFromObjectSchema(
-  schema: unknown,
-  location: "path" | "query",
-): OpenApiParameter[] {
+function paramsFromObjectSchema(schema: unknown, location: "path" | "query"): OpenApiParameter[] {
   if (!schema || typeof schema !== "object") return [];
   const node = schema as AnyTypeBox;
   if (kindOf(node) !== "Object") return [];

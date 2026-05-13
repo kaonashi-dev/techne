@@ -727,9 +727,7 @@ export class RouterExecutionContext {
       }
 
       if (container.isStatic(item)) {
-        staticInstances.push(
-          container.get<T>(item, module !== undefined ? { module } : undefined),
-        );
+        staticInstances.push(container.get<T>(item, module !== undefined ? { module } : undefined));
         continue;
       }
 
@@ -907,9 +905,7 @@ export class RouterExecutionContext {
                     return this.responseController.mapException(context, new ForbiddenException());
                   }
                 })
-                .catch((error: unknown) =>
-                  this.responseController.mapException(context, error),
-                );
+                .catch((error: unknown) => this.responseController.mapException(context, error));
             }
 
             if (!result) {
