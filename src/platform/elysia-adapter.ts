@@ -1,8 +1,21 @@
 import { Elysia } from "elysia";
-import { Logger } from "../services/logger.service";
+import { Logger, createRequestLogger } from "../services/logger.service";
 import { Container, globalContainer } from "../core/container";
 import type { CompiledRouteDefinition } from "../core/router/router-execution-context";
 import type { CorsOptions } from "../core/http-options";
+
+/** Generates a request id, preferring Bun's UUIDv7 when available. */
+function generateRequestId(): string {
+  const bun: any = typeof Bun !== "undefined" ? (Bun as any) : undefined;
+  if (bun && typeof bun.randomUUIDv7 === "function") {
+    try {
+      return bun.randomUUIDv7();
+    } catch {
+      // fall through to crypto.randomUUID
+    }
+  }
+  return crypto.randomUUID();
+}
 
 interface ElysiaAdapterOptions {
   logger?: boolean;
@@ -102,34 +115,78 @@ export class ElysiaAdapter {
   }
 
   private setupRequestLogging(app: Elysia) {
-    if (this.options?.logger === false) {
-      return;
-    }
-
-    app.onRequest(({ request }) => {
+    // The request-id hook must run even when request logging is disabled, so
+    // that downstream code (mapException, controllers reading `store.requestId`)
+    // can rely on the id being present.
+    app.onRequest((ctx: any) => {
+      const { request } = ctx;
+      const inbound = request.headers.get("x-request-id");
+      const requestId =
+        typeof inbound === "string" && inbound.length > 0 ? inbound : generateRequestId();
+      ctx.store = ctx.store ?? {};
+      ctx.store.requestId = requestId;
       this.requestStartTimes.set(request, performance.now());
     });
 
-    app.onAfterHandle(({ request, set }) => {
+    if (this.options?.logger === false) {
+      // Logging suppressed — but we still echo `x-request-id` so clients can
+      // correlate requests.
+      app.onAfterHandle((ctx: any) => {
+        this.echoRequestId(ctx);
+        this.requestStartTimes.delete(ctx.request);
+      });
+      app.onError((ctx: any) => {
+        this.echoRequestId(ctx);
+        this.requestStartTimes.delete(ctx.request);
+      });
+      return;
+    }
+
+    app.onAfterHandle((ctx: any) => {
+      const { request, set } = ctx;
       const start = this.requestStartTimes.get(request) || performance.now();
       const duration = Math.round(performance.now() - start);
       const path = this.getRequestPath(request.url);
-      this.logger.log(`${request.method} ${path} ${set.status || 200} +${duration}ms`, "HTTP");
+      const requestId = ctx.store?.requestId as string | undefined;
+      const requestLogger = requestId ? createRequestLogger(requestId, "HTTP") : this.logger;
+      requestLogger.log(`${request.method} ${path} ${set.status || 200} +${duration}ms`, "HTTP");
+      this.echoRequestId(ctx);
       this.requestStartTimes.delete(request);
     });
 
-    app.onError(({ request, code, error, set }) => {
+    app.onError((ctx: any) => {
+      const { request, code, error, set } = ctx;
       const start = this.requestStartTimes.get(request) || performance.now();
       const duration = Math.round(performance.now() - start);
       const path = this.getRequestPath(request.url);
       const stack = error instanceof Error ? error.stack : undefined;
-      this.logger.error(
+      const requestId = ctx.store?.requestId as string | undefined;
+      const requestLogger = requestId ? createRequestLogger(requestId, "HTTP") : this.logger;
+      requestLogger.error(
         `${request.method} ${path} ${set.status || 500} +${duration}ms (${code})`,
         stack,
         "HTTP",
       );
+      this.echoRequestId(ctx);
       this.requestStartTimes.delete(request);
     });
+  }
+
+  private echoRequestId(ctx: any): void {
+    const requestId = ctx?.store?.requestId;
+    if (typeof requestId !== "string" || requestId.length === 0) return;
+    const set = ctx.set;
+    if (!set) return;
+    const existing = set.headers ?? {};
+    if (existing instanceof Headers) {
+      existing.set("x-request-id", requestId);
+      set.headers = existing;
+    } else {
+      set.headers = {
+        ...(existing as Record<string, string>),
+        "x-request-id": requestId,
+      };
+    }
   }
 
   private setupCors(app: Elysia) {
