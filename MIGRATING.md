@@ -8,7 +8,8 @@ called out below with explicit recipes.
 
 Plan to upgrade in this order: install the new package, rename your
 config file, update Redis prefixes (if you use the Redis adapters),
-then mop up the optional cosmetic renames at your leisure.
+move module classes to flat feature config, then mop up the optional
+cosmetic renames at your leisure.
 
 ## 1. Install the new package
 
@@ -31,8 +32,8 @@ Search-replace at your leisure — the legacy paths keep working through
 -import { BnestFactory } from "@kaonashi-dev/bnest/core";
 +import { TechneFactory } from "@kaonashi-dev/techne/core";
 
--import { Controller, Module } from "@kaonashi-dev/bnest/common";
-+import { Controller, Module } from "@kaonashi-dev/techne/common";
+-import { Controller } from "@kaonashi-dev/bnest/common";
++import { Controller } from "@kaonashi-dev/techne/common";
 ```
 
 Renames at a glance:
@@ -46,7 +47,6 @@ Renames at a glance:
 | `BnestHealthOptions`            | `TechneHealthOptions`              |
 | `BnestShutdownOptions`          | `TechneShutdownOptions`            |
 | `BnestInterceptor`              | `TechneInterceptor`                |
-| `BnestMicroservice`             | `TechneMicroservice`               |
 | `BnestConfig`                   | `TechneConfig`                     |
 | `defineBnestConfig`             | `defineTechneConfig`               |
 | `loadBnestConfigFile`           | `loadTechneConfigFile`             |
@@ -71,7 +71,7 @@ Inside the file, rename the helper:
 
 -export default defineBnestConfig({
 +export default defineTechneConfig({
-   module: AppModule,
+   features: [AppFeature],
    port: 3000,
  });
 ```
@@ -99,13 +99,12 @@ deprecation banner.
 
 ## 5. Redis prefix migration **(breaking, read carefully)**
 
-The three Redis-backed adapters changed their default key prefixes:
+The Redis-backed MQ and queue adapters changed their default key prefixes:
 
 | Adapter            | Old default | New default  |
 | ------------------ | ----------- | ------------ |
 | MQ                 | `bnest:mq`  | `techne:mq`  |
 | Queue              | `bnest:queue` | `techne:queue` |
-| Microservices (pub/sub) | `bnest` | `techne`  |
 
 **If you have running services with in-flight jobs or messages stored
 under the old prefixes, you must rename those keys before upgrading.**
@@ -128,10 +127,6 @@ redis-cli --scan --pattern 'bnest:mq:*' | while read k; do
   redis-cli RENAME "$k" "$(echo $k | sed 's/^bnest:/techne:/')"
 done
 
-# Microservices pub/sub keys
-redis-cli --scan --pattern 'bnest:*' | grep -v '^bnest:queue:' | grep -v '^bnest:mq:' | while read k; do
-  redis-cli RENAME "$k" "$(echo $k | sed 's/^bnest:/techne:/')"
-done
 ```
 
 ### Or pin the old prefix explicitly
