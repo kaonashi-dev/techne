@@ -2,6 +2,7 @@ export * from "./application-context";
 export * from "./techne-application";
 export * from "./container";
 export * from "./context-id-factory";
+export * from "./define-feature";
 export * from "./define-techne-config";
 export * from "./http-options";
 export * from "./module-ref";
@@ -14,24 +15,22 @@ import {
   TechneFactory,
   loadTechneConfigFile,
   type TechneApplicationOptions,
+  type AppBootstrapConfig,
 } from "../factory/techne-factory";
 import type { TechneApplication } from "./techne-application";
 import { Logger } from "../services/logger.service";
 
 /**
  * Shorthand for {@link TechneFactory.create}. Mirrors the declarative API:
- * `await techne()` reads the root module and options from `techne.config.ts`.
+ * `await techne()` reads the flat app config from `techne.config.ts`.
  */
 export function techne(): Promise<TechneApplication>;
-export function techne(module: any): Promise<TechneApplication>;
-export function techne(module: any, options: TechneApplicationOptions): Promise<TechneApplication>;
+export function techne(config: AppBootstrapConfig): Promise<TechneApplication>;
 export function techne(
-  module?: any,
-  options?: TechneApplicationOptions,
+  config?: AppBootstrapConfig,
 ): Promise<TechneApplication> {
-  if (module === undefined) return TechneFactory.create();
-  if (options === undefined) return TechneFactory.create(module);
-  return TechneFactory.create(module, options);
+  if (config === undefined) return TechneFactory.create();
+  return TechneFactory.create(config);
 }
 
 /** @deprecated use `techne()` */
@@ -50,14 +49,13 @@ export interface BootstrapOverrides extends TechneApplicationOptions {
  * `Bun.env.PORT` → 3000. `host` defaults to "0.0.0.0".
  */
 export async function bootstrap(
-  module?: any,
-  options?: BootstrapOverrides,
+  config?: AppBootstrapConfig & BootstrapOverrides,
 ): Promise<TechneApplication> {
-  const { port: optPort, host: optHost, ...factoryOptions } = options ?? {};
+  const { port: optPort, host: optHost, ...factoryOptions } = config ?? {};
   const app =
-    module === undefined
+    config === undefined
       ? await TechneFactory.create()
-      : await TechneFactory.create(module, factoryOptions as TechneApplicationOptions);
+      : await TechneFactory.create(factoryOptions as AppBootstrapConfig);
 
   // Re-read the config to discover port/host the user declared there. This is
   // cheap because TechneFactory.create() caches the file load by cwd.

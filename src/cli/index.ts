@@ -259,7 +259,7 @@ async function runGenerateClient() {
   }
   if (!configPath) {
     fail(
-      `techne.config.ts not found in ${cwd}. Create one with \`export default defineTechneConfig({ module: AppModule })\` and re-run.`,
+      `techne.config.ts not found in ${cwd}. Create one with \`export default defineTechneConfig({ controllers: [...] })\` and re-run.`,
     );
     process.exit(1);
   }
@@ -267,8 +267,8 @@ async function runGenerateClient() {
   try {
     const cfgMod = await import(configPath);
     const config = cfgMod?.default;
-    if (!config || !config.module) {
-      fail(`techne.config.ts must export a default config with a \`module\` field.`);
+    if (!config) {
+      fail(`techne.config.ts must export a default flat app config.`);
       process.exit(1);
     }
 
@@ -276,7 +276,7 @@ async function runGenerateClient() {
     const { TechneFactory } = await import("../factory/techne-factory");
     const { generateRoutesType } = await import("../contract/codegen");
 
-    const app = await TechneFactory.create(config.module, { ...config, logger: false });
+    const app = await TechneFactory.create({ ...config, logger: false });
     const source = generateRoutesType(app);
 
     const outPath = path.isAbsolute(out) ? out : path.join(cwd, out);

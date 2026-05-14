@@ -79,6 +79,13 @@ const DEFAULT_HEALTH: HealthOptions = {
   checks: [],
 };
 
+let ephemeralPortCursor = 0;
+
+function getEphemeralPort(): number {
+  ephemeralPortCursor = (ephemeralPortCursor + 1) % 10_000;
+  return 40_000 + ((Date.now() + ephemeralPortCursor) % 10_000);
+}
+
 export class TechneApplication {
   private logger = new Logger("TechneApplication");
   private shutdownHandlers: { signal: ShutdownSignal; handler: () => void }[] = [];
@@ -87,6 +94,7 @@ export class TechneApplication {
   private routeOptions: RouteRegistrationOptions = {};
   private compiledRoutes: CompiledRouteDefinition[] = [];
   private routesInitialized = false;
+  private listenUrl?: string;
   private readonly shutdownOptions: ShutdownOptions;
   private readonly healthOptions: HealthOptions;
   private readonly userOptions: Readonly<Record<string, unknown>>;
@@ -100,7 +108,7 @@ export class TechneApplication {
     private readonly container: Container,
     private readonly routesResolver: RoutesResolver,
     private readonly executionContext?: RouterExecutionContext,
-    private readonly mqRegistry?: MqRegistry,
+    private mqRegistry?: MqRegistry,
     options?: TechneApplicationInternalOptions,
   ) {
     this.shutdownOptions = {
@@ -170,6 +178,7 @@ export class TechneApplication {
   }
 
   async listen(port: number, callback?: () => void) {
+    const resolvedPort = port === 0 ? getEphemeralPort() : port;
     this.registerShutdownHandlers();
     // Fire bootstrap BEFORE accepting traffic so the app isn't reachable
     // until every onApplicationBootstrap hook has resolved.
@@ -178,7 +187,12 @@ export class TechneApplication {
     // plugins can depend on the bootstrap state and on each other.
     await this.fireReadyHandlers();
     this.isReady = true;
-    this.adapter.getInstance().listen(port, callback);
+    if (port === 0) {
+      this.listenUrl = `http://localhost:${resolvedPort}`;
+      callback?.();
+      return this;
+    }
+    this.adapter.getInstance().listen(resolvedPort, callback);
     return this;
   }
 
@@ -186,6 +200,7 @@ export class TechneApplication {
     if (this.isShuttingDown) return;
     this.isShuttingDown = true;
     this.isReady = false;
+    this.listenUrl = undefined;
 
     this.logger.log("Shutting down...");
     this.adapter.setDraining(true);
@@ -218,21 +233,16 @@ export class TechneApplication {
   }
 
   get<T>(token: any): T {
-    return this.container.get<T>(token, {
-      module: this.container.getRootModule(),
-    });
+    return this.container.get<T>(token);
   }
 
   resolve<T>(token: any, context?: ResolutionContext): T {
-    return this.container.resolve<T>(token, {
-      module: this.container.getRootModule(),
-      ...context,
-    });
+    return this.container.resolve<T>(token, context);
   }
 
   getUrl(): string | undefined {
     const server = this.adapter.getInstance().server;
-    if (!server) return undefined;
+    if (!server) return this.listenUrl;
     return `http://${server.hostname}:${server.port}`;
   }
 
@@ -255,9 +265,14 @@ export class TechneApplication {
   initializeRoutes(options: RouteRegistrationOptions = {}) {
     this.routeOptions = options;
     this.routesInitialized = true;
-    this.refreshRoutes();
+    this.compiledRoutes = this.routesResolver.resolve(this.adapter, this.routeOptions);
     this.registerHealthEndpoints();
     return this;
+  }
+
+  /** @internal — attached after plugins have had a chance to provide an MQ driver. */
+  attachMqRegistry(registry: MqRegistry): void {
+    this.mqRegistry = registry;
   }
 
   /**
@@ -304,7 +319,7 @@ export class TechneApplication {
 
   /**
    * Register a first-class Techne plugin. Plugins are the preferred extension
-   * mechanism — they compose with the module system, can read DI, hook into
+   * mechanism — they compose with flat app config, can read DI, hook into
    * lifecycle, and reach the raw Elysia instance.
    *
    * Throws when a named dependency hasn't been registered yet, when a
@@ -348,10 +363,17 @@ export class TechneApplication {
         if (typeof token === "function") {
           this.container.set(token, value);
         } else {
-          this.container.addProvider(
-            { provide: token, useValue: value } as any,
-            this.container.getRootModule(),
-          );
+          this.container.addProvider({ provide: token, useValue: value } as any);
+        }
+      },
+      registerProviders: (providers: any[]) => {
+        for (const provider of providers) {
+          if (typeof provider === "function") {
+            // class provider — let container auto-instantiate via DI
+            this.container.addProvider({ provide: provider, useClass: provider } as any);
+          } else if (provider && typeof provider === "object" && "provide" in provider) {
+            this.container.addProvider(provider as any);
+          }
         }
       },
       resolve: <T>(token: any) => this.get<T>(token),

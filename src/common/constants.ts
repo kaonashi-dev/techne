@@ -1,11 +1,3 @@
-export const MODULE_METADATA = {
-  IMPORTS: "imports",
-  PROVIDERS: "providers",
-  CONTROLLERS: "controllers",
-  EXPORTS: "exports",
-  GLOBAL: "global",
-};
-
 export const INJECTABLE_METADATA = "injectable";
 export const CONTROLLER_METADATA = "controller_prefix";
 export const SCOPE_OPTIONS_METADATA = "scope_options";
@@ -16,8 +8,6 @@ export const GUARDS_METADATA = "guards";
 export const COMMAND_HANDLER_METADATA = "command_handler";
 export const QUERY_HANDLER_METADATA = "query_handler";
 export const EVENT_HANDLER_METADATA = "event_handler";
-export const MESSAGE_PATTERN_METADATA = "message_pattern";
-export const EVENT_PATTERN_METADATA = "event_pattern";
 export const INJECT_METADATA = "inject_metadata";
 export const EXCEPTION_FILTERS_METADATA = "exception_filters";
 export const INTERCEPTORS_METADATA = "interceptors";
