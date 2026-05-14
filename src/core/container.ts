@@ -33,16 +33,7 @@ export type Provider = ClassProvider | ValueProvider | FactoryProvider | Existin
 export interface ResolutionContext {
   contextId?: symbol;
   inquirer?: any;
-  module?: any;
   request?: any;
-}
-
-export interface ModuleRegistration {
-  controllers?: any[];
-  exports?: any[];
-  global?: boolean;
-  imports?: any[];
-  providers?: any[];
 }
 
 export function getScopeOptions(target: any): ScopeOptions {
@@ -86,7 +77,6 @@ export function isCustomProvider(provider: any): boolean {
   );
 }
 
-const BUILT_IN_TOKENS = new Set<any>([Reflector, ModuleRef]);
 const paramTypesCache = new Map<Function, any[]>();
 const injectTokensCache = new Map<Function, Record<number, any>>();
 
@@ -96,13 +86,6 @@ export class Container {
   private resolutionStack = new Set<any>();
   private staticCache = new Map<any, boolean>();
   private providers = new Map<any, Provider>();
-  private moduleImports = new Map<any, any[]>();
-  private moduleOwnTokens = new Map<any, Set<any>>();
-  private moduleRawExports = new Map<any, any[]>();
-  private moduleVisibleTokens = new Map<any, Set<any>>();
-  private moduleOwners = new Map<any, any>();
-  private globalModules = new Set<any>();
-  private rootModule?: any;
 
   constructor() {
     this.instances.set(Reflector, new Reflector());
@@ -121,63 +104,17 @@ export class Container {
     return this.providers.get(token);
   }
 
-  public addProvider(provider: Provider, module?: any): void {
+  public addProvider(provider: Provider): void {
     this.providers.set(provider.provide, provider);
     this.staticCache.delete(provider.provide);
-    if (module) {
-      this.addOwnedToken(module, provider.provide);
-      this.moduleOwners.set(provider.provide, module);
-    }
   }
 
-  public registerController(controller: any, module: any): void {
+  public registerController(controller: any): void {
     this.staticCache.delete(controller);
-    this.addOwnedToken(module, controller);
-    this.moduleOwners.set(controller, module);
   }
 
-  public registerModule(module: any, metadata: ModuleRegistration): void {
-    this.staticCache.clear();
-    this.moduleImports.set(module, metadata.imports ?? []);
-    this.moduleRawExports.set(module, metadata.exports ?? []);
-    this.moduleOwnTokens.set(module, this.moduleOwnTokens.get(module) ?? new Set());
-
-    for (const provider of metadata.providers ?? []) {
-      const token = isCustomProvider(provider) ? provider.provide : provider;
-      this.addOwnedToken(module, token);
-      this.moduleOwners.set(token, module);
-    }
-
-    for (const controller of metadata.controllers ?? []) {
-      this.addOwnedToken(module, controller);
-      this.moduleOwners.set(controller, module);
-    }
-
-    if (metadata.global) {
-      this.globalModules.add(module);
-    }
-  }
-
-  public finalizeModules(rootModule: any): void {
-    this.rootModule = rootModule;
-    this.moduleVisibleTokens.clear();
-    this.staticCache.clear();
-
-    for (const module of this.moduleImports.keys()) {
-      this.computeVisibleTokens(module, new Set());
-    }
-  }
-
-  public getRootModule(): any {
-    return this.rootModule;
-  }
-
-  public getModuleFor(token: any): any {
-    return this.moduleOwners.get(token);
-  }
-
-  public get<T>(target: any, context?: ResolutionContext): T {
-    return this.resolve<T>(target, context);
+  public get<T>(target: any): T {
+    return this.resolve<T>(target);
   }
 
   public createContextId(): symbol {
@@ -208,11 +145,6 @@ export class Container {
   }
 
   public resolve<T>(target: any, context: ResolutionContext = {}): T {
-    const moduleContext = this.resolveModuleContext(target, context);
-    if (moduleContext !== undefined) {
-      context.module = moduleContext;
-    }
-
     if (target === REQUEST) {
       return context.request as T;
     }
@@ -222,11 +154,10 @@ export class Container {
     }
 
     if (target === ModuleRef) {
-      return new ModuleRef(this, context.module) as T;
+      return new ModuleRef(this) as T;
     }
 
     if (this.providers.has(target)) {
-      this.assertAccessible(target, context.module);
       return this.resolveProvider<T>(target, context);
     }
 
@@ -235,8 +166,6 @@ export class Container {
         `Cannot resolve token: ${String(target)}. No provider registered and it's not a class.`,
       );
     }
-
-    this.assertAccessible(target, context.module);
 
     if (this.instances.has(target)) {
       return this.instances.get(target);
@@ -305,14 +234,9 @@ export class Container {
         injectTokensCache.set(target, injectTokens!);
       }
 
-      const resolvedModule = context.module ?? this.moduleOwners.get(target) ?? this.rootModule;
       const injections = tokens!.map((token: any, index: number) => {
         const resolvedToken = injectTokens![index] !== undefined ? injectTokens![index] : token;
-        return this.resolve(resolvedToken, {
-          ...context,
-          inquirer: target,
-          module: resolvedModule,
-        });
+        return this.resolve(resolvedToken, { contextId: context.contextId, request: context.request, inquirer: target });
       });
 
       return new target(...injections);
@@ -378,6 +302,9 @@ export class Container {
     }
 
     if (isClassProvider(provider)) {
+      if (provider.useClass === provider.provide) {
+        return this.instantiateClass<T>(provider.useClass, context);
+      }
       return this.resolve(provider.useClass, context) as T;
     }
 
@@ -405,97 +332,6 @@ export class Container {
       this.requestInstances.set(contextId, scopedInstances);
     }
     return scopedInstances;
-  }
-
-  private resolveModuleContext(target: any, context: ResolutionContext): any {
-    if (context.module !== undefined) {
-      return context.module;
-    }
-
-    if (context.inquirer && this.moduleOwners.has(context.inquirer)) {
-      return this.moduleOwners.get(context.inquirer);
-    }
-
-    if (this.moduleOwners.has(target)) {
-      return this.moduleOwners.get(target);
-    }
-
-    return this.rootModule;
-  }
-
-  private assertAccessible(token: any, module?: any): void {
-    if (module === undefined || BUILT_IN_TOKENS.has(token)) {
-      return;
-    }
-
-    const owner = this.moduleOwners.get(token);
-    if (owner === undefined || owner === module) {
-      return;
-    }
-
-    const visibleTokens = this.moduleVisibleTokens.get(module);
-    if (visibleTokens?.has(token)) {
-      return;
-    }
-
-    throw new Error(
-      `Provider ${this.describeToken(token)} is not visible inside module ${this.describeToken(module)}.`,
-    );
-  }
-
-  private computeVisibleTokens(module: any, seen: Set<any>): Set<any> {
-    const cached = this.moduleVisibleTokens.get(module);
-    if (cached) {
-      return cached;
-    }
-
-    if (seen.has(module)) {
-      return new Set();
-    }
-    seen.add(module);
-
-    const visible = new Set<any>(this.moduleOwnTokens.get(module) ?? []);
-    for (const importedModule of this.moduleImports.get(module) ?? []) {
-      for (const token of this.getExportedTokens(importedModule, seen)) {
-        visible.add(token);
-      }
-    }
-
-    for (const globalModule of this.globalModules) {
-      if (globalModule === module) continue;
-      for (const token of this.getExportedTokens(globalModule, seen)) {
-        visible.add(token);
-      }
-    }
-
-    this.moduleVisibleTokens.set(module, visible);
-    seen.delete(module);
-    return visible;
-  }
-
-  private getExportedTokens(module: any, seen: Set<any>): Set<any> {
-    const exported = new Set<any>();
-    for (const item of this.moduleRawExports.get(module) ?? []) {
-      if (this.moduleImports.has(item)) {
-        for (const token of this.getExportedTokens(item, seen)) {
-          exported.add(token);
-        }
-        continue;
-      }
-
-      exported.add(isCustomProvider(item) ? item.provide : item);
-    }
-    return exported;
-  }
-
-  private addOwnedToken(module: any, token: any): void {
-    const tokens = this.moduleOwnTokens.get(module) ?? new Set<any>();
-    tokens.add(token);
-    this.moduleOwnTokens.set(module, tokens);
-  }
-
-  private describeToken(token: any): string {
-    return String(token?.name || token);
   }
 
   public hasContextualDeps(target: any): boolean {
@@ -568,13 +404,6 @@ export class Container {
     this.resolutionStack.clear();
     this.staticCache.clear();
     this.providers.clear();
-    this.moduleImports.clear();
-    this.moduleOwnTokens.clear();
-    this.moduleRawExports.clear();
-    this.moduleVisibleTokens.clear();
-    this.moduleOwners.clear();
-    this.globalModules.clear();
-    this.rootModule = undefined;
     this.instances.set(Reflector, new Reflector());
     this.instances.set(ModuleRef, new ModuleRef(this));
   }

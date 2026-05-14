@@ -1,57 +1,46 @@
-import { Body, Controller, Get, Injectable, Module, Param, Post, Schema } from "./common";
+import { Body, Controller, Get, Injectable, Param, Post, Schema } from "./common";
 import { TechneFactory } from "./core";
-
 @Injectable()
 class UserService {
-  private users = [{ id: 1, name: "Alice" }];
-
-  getAll() {
-    return this.users;
-  }
-
-  getOne(id: number) {
-    return this.users.find((u) => u.id === id);
-  }
-
-  create(user: any) {
-    const newUser = { id: this.users.length + 1, ...user };
-    this.users.push(newUser);
-    return newUser;
-  }
+    private users = [{ id: 1, name: "Alice" }];
+    getAll() {
+        return this.users;
+    }
+    getOne(id: number) {
+        return this.users.find((u) => u.id === id);
+    }
+    create(user: any) {
+        const newUser = { id: this.users.length + 1, ...user };
+        this.users.push(newUser);
+        return newUser;
+    }
 }
-
 const CreateUserSchema = Schema.Object({
-  name: Schema.String(),
+    name: Schema.String(),
 });
-
 @Controller("users")
 class UserController {
-  constructor(private userService: UserService) {}
-
-  @Get("/")
-  findAll() {
-    return this.userService.getAll();
-  }
-
-  @Get("/:id")
-  findOne(@Param("id") id: string) {
-    return this.userService.getOne(parseInt(id));
-  }
-
-  @Post("/", { body: CreateUserSchema })
-  create(@Body() body: any) {
-    return this.userService.create(body);
-  }
+    constructor(private userService: UserService) { }
+    @Get("/")
+    findAll() {
+        return this.userService.getAll();
+    }
+    @Get("/:id")
+    findOne(
+    @Param("id")
+    id: string) {
+        return this.userService.getOne(parseInt(id));
+    }
+    @Post("/", { body: CreateUserSchema })
+    create(
+    @Body()
+    body: any) {
+        return this.userService.create(body);
+    }
 }
-
-@Module({
-  controllers: [UserController],
-  providers: [UserService],
-})
-class AppModule {}
-
-const app = await TechneFactory.create(AppModule);
-
-app.listen(3000, () => {
-  console.log(`🦊 Techne is running at ${app.getUrl()}`);
+const app = await TechneFactory.create({
+    controllers: [UserController], providers: [UserService],
+});
+app.listen(Number(Bun.env.PORT ?? 3000), () => {
+    console.log(`🦊 Techne is running at ${app.getUrl()}`);
 });

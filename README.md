@@ -7,10 +7,10 @@ Techne is a personal project focused on a decorator-first developer experience, 
 ## Why Techne
 
 - Bun-first runtime
-- Decorator-based modules, controllers, and providers
+- Decorator-based controllers and providers with flat feature config
 - Built-in dependency injection
 - TypeBox-powered request schemas
-- CQRS, microservices, queues, and testing utilities in one package
+- CQRS, queues, and testing utilities in one package
 - CLI for scaffolding, code generation, and Bun builds
 
 ## Installation
@@ -33,10 +33,10 @@ holds every framework option, and `main.ts` becomes a one-liner.
 ```ts
 // techne.config.ts
 import { defineTechneConfig } from "@kaonashi-dev/techne/core";
-import { AppModule } from "./src/app.module";
+import { AppFeature } from "./src/app.module";
 
 export default defineTechneConfig({
-  module: AppModule,
+  features: [AppFeature],
   port: 3000,
   cors: { origin: true },
 });
@@ -51,7 +51,8 @@ await bootstrap();
 
 ```ts
 // src/app.module.ts
-import { Controller, Get, Injectable, Module } from "@kaonashi-dev/techne/common";
+import { defineFeature } from "@kaonashi-dev/techne/core";
+import { Controller, Get, Injectable } from "@kaonashi-dev/techne/common";
 
 @Injectable()
 class AppService {
@@ -70,11 +71,10 @@ class AppController {
   }
 }
 
-@Module({
+export const AppFeature = defineFeature({
   controllers: [AppController],
   providers: [AppService],
-})
-export class AppModule {}
+});
 ```
 
 `bootstrap()` reads `techne.config.ts` from `process.cwd()`, calls
@@ -90,8 +90,9 @@ full control over the lifecycle (e.g. tests, in-process invocations):
 
 ```ts
 import { TechneFactory } from "@kaonashi-dev/techne/core";
+import { AppFeature } from "./src/app.module";
 
-const app = await TechneFactory.create(AppModule);
+const app = await TechneFactory.create({ features: [AppFeature] });
 app.listen(3000, () => {
   console.log("Server running at http://localhost:3000");
 });
@@ -101,9 +102,9 @@ app.listen(3000, () => {
 
 The recommended mental model is:
 
-- `@kaonashi-dev/techne/common` for decorators, exceptions, pipes, DTO/schema helpers, and request lifecycle interfaces.
+- `@kaonashi-dev/techne/common` for decorators, exceptions, DTO/schema helpers, custom pipes, and request lifecycle interfaces.
 - `@kaonashi-dev/techne/core` for bootstrap and infrastructure APIs.
-- `@kaonashi-dev/techne/config`, `/jwt`, `/swagger`, `/health`, `/testing`, `/cqrs`, `/microservices`, and `/mq` for specialized features.
+- `@kaonashi-dev/techne/config`, `/jwt`, `/swagger`, `/health`, `/testing`, `/cqrs`, and `/mq` for specialized features.
 
 ### Import Map
 
@@ -113,14 +114,14 @@ The recommended mental model is:
 | Bootstrap, DI container, reflector, config loader | `@kaonashi-dev/techne/core` |
 | Testing utilities | `@kaonashi-dev/techne/testing` |
 | CQRS buses and event store | `@kaonashi-dev/techne/cqrs` |
-| Microservice transports | `@kaonashi-dev/techne/microservices` |
+| Queue and worker primitives | `@kaonashi-dev/techne/mq` |
 
 ### Migration
 
 | Before | After |
 | --- | --- |
-| `import { Controller, Module } from "@kaonashi-dev/techne";` | `import { Controller, Module } from "@kaonashi-dev/techne/common";` |
-| `import { ValidationPipe, NotFoundException } from "@kaonashi-dev/techne";` | `import { ValidationPipe, NotFoundException } from "@kaonashi-dev/techne/common";` |
+| `import { Controller } from "@kaonashi-dev/techne";` | `import { Controller } from "@kaonashi-dev/techne/common";` |
+| `import { NotFoundException } from "@kaonashi-dev/techne";` | `import { NotFoundException } from "@kaonashi-dev/techne/common";` |
 | `import { TechneFactory, Reflector } from "@kaonashi-dev/techne";` | `import { TechneFactory, Reflector } from "@kaonashi-dev/techne/core";` |
 | `import { Test } from "@kaonashi-dev/techne";` | `import { Test } from "@kaonashi-dev/techne/testing";` |
 | `import { CommandBus } from "@kaonashi-dev/techne";` | `import { CommandBus } from "@kaonashi-dev/techne/cqrs";` |
@@ -130,18 +131,15 @@ The recommended mental model is:
 
 ## Core Concepts
 
-### Modules
+### Features
 
 ```ts
-import { Module } from "@kaonashi-dev/techne/common";
+import { defineFeature } from "@kaonashi-dev/techne/core";
 
-@Module({
-  imports: [DatabaseModule],
+export const UsersFeature = defineFeature({
   controllers: [UsersController],
   providers: [UsersService],
-  exports: [UsersService],
-})
-class UsersModule {}
+});
 ```
 
 ### Controllers and Routes
@@ -173,7 +171,7 @@ class UsersController {
 ### Dependency Injection
 
 ```ts
-import { Inject, Injectable, Module } from "@kaonashi-dev/techne/common";
+import { Inject, Injectable } from "@kaonashi-dev/techne/common";
 
 const API_KEY = Symbol("API_KEY");
 
@@ -182,13 +180,12 @@ class AuthService {
   constructor(@Inject(API_KEY) private readonly apiKey: string) {}
 }
 
-@Module({
+const app = await TechneFactory.create({
   providers: [
     AuthService,
     { provide: API_KEY, useValue: process.env.API_KEY },
   ],
-})
-class AuthModule {}
+});
 ```
 
 ### Guards and Middleware
@@ -242,20 +239,21 @@ class UsersController {
 }
 ```
 
-Decorator-style DTO metadata is also available through exports such as `Dto`, `IsString`, `IsNumber`, `IsInteger`, `IsBoolean`, `IsEnum`, and `ValidationPipe`.
+Decorator-style DTO metadata is also available through exports such as `Dto`, `IsString`, `IsNumber`, `IsInteger`, `IsBoolean`, and `IsEnum`. DTO schemas are passed to Elysia directly, so request validation is a single native Elysia pass. DTOs reject unknown properties by default; use `@Dto({ allowAdditional: true })` to opt out.
 
 ## Configuration
 
 The preferred entry point is `defineConfig`, which validates env values against
 a TypeBox schema at startup and produces a typed `AppConfig` object. It pairs
-with `ConfigModule.forApp(config)` so handlers can pull the same object out of
+with `appConfig(config)` so handlers can pull the same object out of
 DI via `@InjectConfig()`.
 
 ```ts
-import { ConfigModule, defineConfig, InjectConfig, t } from "@kaonashi-dev/techne/config";
-import { Controller, Get, Module } from "@kaonashi-dev/techne/common";
+import { appConfig as appConfigPlugin, defineConfig, InjectConfig, t } from "@kaonashi-dev/techne/config";
+import { Controller, Get } from "@kaonashi-dev/techne/common";
+import { TechneFactory } from "@kaonashi-dev/techne/core";
 
-const appConfig = defineConfig({
+const typedConfig = defineConfig({
   schema: t.Object({
     PORT: t.Integer({ minimum: 1, maximum: 65535 }),
     DATABASE_URL: t.String({ minLength: 1 }),
@@ -263,7 +261,7 @@ const appConfig = defineConfig({
   }),
 });
 
-type Config = typeof appConfig;
+type Config = typeof typedConfig;
 
 @Controller("status")
 class StatusController {
@@ -275,37 +273,25 @@ class StatusController {
   }
 }
 
-@Module({
-  imports: [ConfigModule.forApp(appConfig)],
+const app = await TechneFactory.create({
+  plugins: [appConfigPlugin(typedConfig)],
   controllers: [StatusController],
-})
-export class AppModule {}
+});
 ```
 
 Invalid or missing env values throw `ConfigValidationError` before the HTTP
 server starts. `t` is a re-export of TypeBox's `Type` for ergonomic schema
 authoring, and `APP_CONFIG` is the DI token `@InjectConfig()` resolves.
 
-The legacy `ConfigModule.forRoot()`, `forRootAsync()`, `forFeature()`, `ConfigService`,
-and `registerAs()` are still exported from `@kaonashi-dev/techne/config` for
-incremental migration.
+`config()` registers `ConfigService` from env files, runtime env, and optional
+load factories:
 
 ```ts
-import { ConfigModule, ConfigService, registerAs } from "@kaonashi-dev/techne/config";
+import { ConfigService, config } from "@kaonashi-dev/techne/config";
 
-const databaseConfig = registerAs("database", () => ({
-  url: process.env.DATABASE_URL ?? "memory://local",
-}));
-
-@Module({
-  imports: [
-    ConfigModule.forRoot({ isGlobal: true, expandVariables: true }),
-    ConfigModule.forFeature(databaseConfig),
-  ],
-})
-class LegacyAppModule {}
-
-// later
+const app = await TechneFactory.create({
+  plugins: [config({ expandVariables: true })],
+});
 const config = app.get<ConfigService>(ConfigService);
 config.getOrThrow("DATABASE_URL");
 ```
@@ -317,7 +303,7 @@ still supported but emit a one-time deprecation warning per process and will
 be removed in v1.0:
 
 ```ts
-const app = await TechneFactory.create(AppModule);
+const app = await TechneFactory.create({ controllers: [UsersController] });
 
 // Deprecated — declare these in techne.config.ts instead.
 app.setGlobalPrefix("api");
@@ -333,20 +319,17 @@ The declarative equivalent:
 import { defineTechneConfig } from "@kaonashi-dev/techne/core";
 
 export default defineTechneConfig({
-  module: AppModule,
+  features: [UsersFeature],
   globalPrefix: "api",
   versioning: { type: "uri" },
   cors: { origin: true, credentials: true },
 });
 ```
 
-`TechneFactory.createApplicationContext()` is also available for standalone module graphs without HTTP.
-
-Modules now respect `imports`/`exports` boundaries during resolution. Private
-providers stay private, `global: true` modules expose only their exported
-tokens, and request-scoped providers share a stable context across guards,
-interceptors, and handlers within the same request through `ContextIdFactory`
-from `@kaonashi-dev/techne/core`.
+`TechneFactory.createApplicationContext()` is also available for standalone flat
+provider graphs without HTTP. Request-scoped providers share a stable context
+across guards, interceptors, and handlers within the same request through
+`ContextIdFactory` from `@kaonashi-dev/techne/core`.
 
 ## Plugins
 
@@ -384,7 +367,7 @@ const MetricsPlugin = definePlugin<MetricsOptions>({
   },
 });
 
-const app = await TechneFactory.create(AppModule);
+const app = await TechneFactory.create({ controllers: [], providers: [] });
 await app.register(MetricsPlugin, { prefix: "myapp_" });
 ```
 
@@ -415,10 +398,11 @@ registration order — useful for diagnostics.
 
 ```ts
 import { APP_GUARD, Public, Roles, RolesGuard } from "@kaonashi-dev/techne/common";
-import { JwtAuthGuard, JwtModule, JwtService } from "@kaonashi-dev/techne/jwt";
+import { Reflector, TechneFactory } from "@kaonashi-dev/techne/core";
+import { jwt, JwtAuthGuard, JwtService } from "@kaonashi-dev/techne/jwt";
 
-@Module({
-  imports: [JwtModule.register({ secret: "top-secret" })],
+const app = await TechneFactory.create({
+  plugins: [jwt({ secret: "top-secret" })],
   providers: [
     {
       provide: APP_GUARD,
@@ -429,8 +413,7 @@ import { JwtAuthGuard, JwtModule, JwtService } from "@kaonashi-dev/techne/jwt";
       inject: [JwtService, Reflector],
     },
   ],
-})
-class AuthModule {}
+});
 ```
 
 Use `@Public()` to skip auth and `@Roles(...)` for role metadata consumed by `RolesGuard`.
@@ -569,38 +552,6 @@ class UserCreatedLogger {
 
 `TechneFactory.create()` registers the command, query, and event buses automatically.
 
-## Microservices
-
-Microservice utilities live under `./microservices`.
-
-```ts
-import { Injectable } from "@kaonashi-dev/techne/common";
-import { TechneFactory } from "@kaonashi-dev/techne/core";
-import { EventPattern, MessagePattern } from "@kaonashi-dev/techne/microservices";
-
-@Injectable()
-class UserMessages {
-  @MessagePattern("users.count")
-  count() {
-    return 42;
-  }
-
-  @EventPattern("users.created")
-  onCreated(data: { name: string }) {
-    console.log("New user:", data.name);
-  }
-}
-
-const { server, client } = await TechneFactory.createMicroservice(AppModule, {
-  transport: "local",
-});
-
-await server.listen();
-await client.send("users.count", {});
-```
-
-Supported transports: `local`, `redis`.
-
 ## MQ
 
 Queue utilities now live under `./mq`. The legacy `./queue` subpath remains as a temporary
@@ -610,7 +561,7 @@ core-only compatibility layer that reexports `Queue`, `Worker`, `Job`, and `Queu
 import {
   InjectMq,
   Job,
-  MqModule,
+  mq,
   MqProcess,
   MqProcessor,
   Queue,
@@ -639,8 +590,14 @@ const worker = new Worker(queue, async (job) => {
 await worker.run();
 ```
 
-Framework integration is available through `MqModule.register()` and
-`MqModule.registerQueue({ name: "emails" })`.
+Framework integration is available through the `mq()` plugin:
+
+```ts
+const app = await TechneFactory.create({
+  plugins: [mq({ queues: [{ name: "emails" }] })],
+  providers: [EmailProcessor],
+});
+```
 
 ## Health & Graceful Shutdown
 
@@ -658,11 +615,11 @@ shutdown is configured through `shutdown`:
 ```ts
 // techne.config.ts
 import { defineTechneConfig } from "@kaonashi-dev/techne/core";
-import { AppModule } from "./src/app.module";
+import { AppFeature } from "./src/app.module";
 import { db } from "./src/db";
 
 export default defineTechneConfig({
-  module: AppModule,
+  features: [AppFeature],
   health: {
     livenessPath: "/healthz",
     readinessPath: "/readyz",
@@ -745,15 +702,14 @@ project skeleton.
 
 ```ts
 import { TechneFactory } from "@kaonashi-dev/techne/core";
-import { Controller, Module, ValidationPipe } from "@kaonashi-dev/techne/common";
-import { ConfigModule } from "@kaonashi-dev/techne/config";
-import { JwtModule } from "@kaonashi-dev/techne/jwt";
+import { Controller, Dto, IsString } from "@kaonashi-dev/techne/common";
+import { appConfig, config, ConfigService } from "@kaonashi-dev/techne/config";
+import { jwt, JwtAuthGuard, JwtService } from "@kaonashi-dev/techne/jwt";
 import { SwaggerModule } from "@kaonashi-dev/techne/swagger";
 import { HealthCheckService } from "@kaonashi-dev/techne/health";
 import { Test } from "@kaonashi-dev/techne/testing";
 import { CommandBus } from "@kaonashi-dev/techne/cqrs";
-import { MessagePattern } from "@kaonashi-dev/techne/microservices";
-import { Queue } from "@kaonashi-dev/techne/mq";
+import { mq, Queue } from "@kaonashi-dev/techne/mq";
 ```
 
 ## Scripts
@@ -770,8 +726,8 @@ bun run bench
 ```text
 src/
   cli/            CLI scaffolding and generators
-  common/         Public decorators, exceptions, pipes, and schema helpers
-  config/         ConfigModule, ConfigService, and registerAs helpers
+  common/         Public decorators, exceptions, custom pipes, and schema helpers
+  config/         ConfigService, config plugins, and registerAs helpers
   core/           Application core, DI container, and bootstrap APIs
     plugins/      Plugin protocol (`definePlugin`, `PluginContext`)
   cqrs/           Command, query, event buses and event store
@@ -779,9 +735,8 @@ src/
   exceptions/     HTTP exception classes
   factory/        TechneFactory bootstrap implementation
   health/         Basic health check service and decorator
-  jwt/            JWT module, service, and auth guard
+  jwt/            JWT plugin, service, and auth guard
   mq/             BullMQ-style queue core and framework integration
-  microservices/  Local and Redis transports
   platform/       Elysia adapter
   queue/          Legacy core-only queue compatibility barrel
   schema/         TypeBox-backed schema helpers and DTO metadata

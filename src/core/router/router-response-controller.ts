@@ -16,8 +16,24 @@ export interface ProblemDocument {
 const PROBLEM_TYPE_BASE = "https://github.com/kaonashi-dev/techne/blob/main/docs/errors/";
 const ABOUT_BLANK = "about:blank";
 
+const STATUS_SLUG: Record<number, string> = {
+  400: "bad-request",
+  401: "unauthorized",
+  403: "forbidden",
+  404: "not-found",
+  405: "method-not-allowed",
+  409: "conflict",
+  410: "gone",
+  422: "unprocessable-entity",
+  429: "too-many-requests",
+  500: "internal-server-error",
+  501: "not-implemented",
+  502: "bad-gateway",
+  503: "service-unavailable",
+};
+
 /**
- * Maps thrown values from controller / pipe / guard / interceptor pipelines
+ * Maps thrown values from controller / guard / pipe / interceptor pipelines
  * into HTTP responses.
  *
  * Output format is RFC 7807 (`application/problem+json`):
@@ -42,11 +58,9 @@ export class RouterResponseController {
     const instance = this.getInstance(context);
     const requestId = this.getRequestId(context);
 
-    // Validation errors from src/schema/dto.ts come through as an array of
-    // ValidationError objects (or as a JSON-stringified array wrapped in a
-    // BadRequestException by ValidationPipe). The pipe path is already
-    // covered by the HttpException branch below; this branch handles the
-    // case where raw ValidationError[] is thrown.
+    // Compatibility branch for callers that throw raw ValidationError[] from
+    // custom pipes or filters. Route DTO validation itself is handled by
+    // Elysia before handlers run.
     if (Array.isArray(error) && this.isValidationErrorArray(error)) {
       const body = this.buildProblem({
         status: 422,
@@ -66,7 +80,7 @@ export class RouterResponseController {
       const title = REASON_PHRASES[status] ?? error.error ?? "Error";
       const detail = error.message || undefined;
       const explicitType = error.options?.type;
-      const slug = explicitType ? undefined : this.slugify(title);
+      const slug = explicitType ? undefined : (STATUS_SLUG[status] ?? this.slugify(title));
       const body = this.buildProblem({
         status,
         title,
@@ -77,9 +91,8 @@ export class RouterResponseController {
         instance,
         requestId,
       });
-      // 422 extension: ValidationPipe stringifies ValidationError[] into the
-      // BadRequestException message. If callers throw an HttpException with
-      // an object payload that includes `errors`, surface them.
+      // 422 extension: if callers throw an HttpException with an object
+      // payload that includes `errors`, surface them.
       const response = error.getResponse();
       if (
         status === 422 &&
@@ -161,12 +174,19 @@ export class RouterResponseController {
   private getInstance(context: any): string | undefined {
     const url: string | undefined = context?.request?.url ?? context?.url;
     if (!url) return undefined;
-    try {
-      return new URL(url).pathname;
-    } catch {
-      // Fall back to raw URL; mapException must never throw.
-      return url;
-    }
+    const protocolEnd = url.indexOf("://");
+    if (protocolEnd === -1) return url;
+    const pathStart = url.indexOf("/", protocolEnd + 3);
+    if (pathStart === -1) return "/";
+    const queryStart = url.indexOf("?", pathStart);
+    const hashStart = url.indexOf("#", pathStart);
+    const end =
+      queryStart !== -1 && (hashStart === -1 || queryStart < hashStart)
+        ? queryStart
+        : hashStart !== -1
+          ? hashStart
+          : url.length;
+    return url.slice(pathStart, end) || "/";
   }
 
   private getRequestId(context: any): string | undefined {

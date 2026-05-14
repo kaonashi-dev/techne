@@ -16,6 +16,8 @@ export interface PluginContext {
   options: Readonly<Record<string, unknown>>;
   /** Register a token in the DI container so other plugins/providers can inject it. */
   provide<T>(token: any, value: T): void;
+  /** Register one or more providers into the DI container (class, value, factory, or existing). */
+  registerProviders(providers: any[]): void;
   /** Resolve a token from the root module's DI scope. */
   resolve<T>(token: any): T;
   /**
