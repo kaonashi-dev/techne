@@ -1,5 +1,5 @@
-import type { ExecutionContext } from "../core/execution-context";
+import type { ResponseHookContext } from "./response-hook.interface";
 
 export interface CanActivate {
-  canActivate(context: ExecutionContext): boolean | Promise<boolean>;
+  canActivate(context: ResponseHookContext): boolean | Promise<boolean>;
 }

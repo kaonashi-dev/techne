@@ -15,7 +15,7 @@
  * The first should be ≥ the second.
  */
 
-import { Controller, Get, Injectable, Module, Schema } from "../src/common";
+import { Controller, Get, Injectable, Schema } from "../src/common";
 import { TechneFactory } from "../src/core";
 import {
   emitResults,
@@ -64,10 +64,11 @@ class WithSchemaController {
   }
 }
 
-@Module({ controllers: [WithSchemaController], providers: [UserService] })
-class RespModule {}
-
-const techneApp = await TechneFactory.create(RespModule, { logger: false });
+const techneApp = await TechneFactory.create({
+  controllers: [WithSchemaController],
+  providers: [UserService],
+  logger: false,
+});
 
 export async function runResponseSchemaBench(): Promise<ScenarioResult[]> {
   const opts = getDefaults(isQuick());

@@ -1,13 +1,8 @@
-import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from "../common/constants";
+import { APP_FILTER, APP_GUARD } from "../common/constants";
 import { TechneApplicationContext } from "../core/application-context";
 import type { CorsOptions, GlobalPrefixOptions, VersioningOptions } from "../core/http-options";
 import { Scanner } from "../core/scanner";
-import {
-  Container,
-  getClassScope,
-  getProviderScope,
-  isCustomProvider,
-} from "../core/container";
+import { Container, getClassScope, getProviderScope, isCustomProvider } from "../core/container";
 import { Scope } from "../core/scope";
 import { RoutesResolver } from "../core/router/routes-resolver";
 import { ElysiaAdapter } from "../platform/elysia-adapter";
@@ -99,7 +94,7 @@ function mergeConfig(
   overrides?: AppBootstrapConfig,
 ): AppBootstrapConfig & { port?: number; host?: string } {
   if (!base && !overrides) return {};
-  if (!base) return { ...(overrides ?? {}) };
+  if (!base) return { ...overrides };
   if (!overrides) return { ...base };
   // Shallow merge per top-level key. `globalGuards` is the only field that
   // concatenates so config-declared guards stay attached when callers add more.
@@ -133,6 +128,7 @@ export interface TechneHealthOptions {
 export interface TechneApplicationOptions {
   logger?: boolean | string[];
   container?: Container;
+  validateResponses?: boolean;
   /**
    * Guards to apply globally to every route. Because guards are wired into
    * Elysia's `beforeHandle` at registration time, providing them here is the
@@ -170,9 +166,7 @@ export interface AppBootstrapConfig extends TechneApplicationOptions {
 export class TechneFactory {
   public static async create(config: AppBootstrapConfig): Promise<TechneApplication>;
   public static async create(): Promise<TechneApplication>;
-  public static async create(
-    config?: AppBootstrapConfig,
-  ): Promise<TechneApplication> {
+  public static async create(config?: AppBootstrapConfig): Promise<TechneApplication> {
     const fileConfig = await loadTechneConfigFile();
     if (!config && !fileConfig) {
       throw new Error(
@@ -202,8 +196,15 @@ export class TechneFactory {
 
     scanner.scanFlat(this.flattenBootstrapConfig(merged));
 
-    const adapter = new ElysiaAdapter({ logger: loggerEnabled, container });
+    const adapter = new ElysiaAdapter({
+      logger: loggerEnabled,
+      container,
+      shutdown: effectiveOptions?.shutdown,
+    });
     const routesResolver = new RoutesResolver(scanner);
+    routesResolver.executionContext.setValidateResponses(
+      effectiveOptions?.validateResponses === true,
+    );
     const app = new TechneApplication(
       adapter,
       scanner,
@@ -241,20 +242,12 @@ export class TechneFactory {
       ...(effectiveOptions?.globalGuards ?? []),
     ];
     const globalFilters = this.normalizeGlobalProvider(container, APP_FILTER);
-    const globalInterceptors = this.normalizeGlobalProvider(container, APP_INTERCEPTOR);
-    const globalPipes = this.normalizeGlobalProvider(container, APP_PIPE);
 
     if (globalGuards.length > 0) {
       routesResolver.executionContext.setGlobalGuards(globalGuards);
     }
     if (globalFilters.length > 0) {
       routesResolver.executionContext.setGlobalFilters(globalFilters as any);
-    }
-    if (globalInterceptors.length > 0) {
-      routesResolver.executionContext.setGlobalInterceptors(globalInterceptors as any);
-    }
-    if (globalPipes.length > 0) {
-      routesResolver.executionContext.setGlobalPipes(globalPipes as any);
     }
 
     if (effectiveOptions?.cors) {

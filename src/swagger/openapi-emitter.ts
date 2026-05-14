@@ -345,14 +345,14 @@ export function emitOpenApiDocument(
   // Manually-added paths from the builder win over auto-discovered ones.
   if (config.paths) {
     for (const [path, item] of Object.entries(config.paths)) {
-      paths[path] = { ...(paths[path] ?? {}), ...item };
+      paths[path] = { ...paths[path], ...item };
     }
   }
 
   const components: OpenApiDocument["components"] = {
     schemas: {
       Problem: PROBLEM_SCHEMA,
-      ...(config.components?.schemas ?? {}),
+      ...config.components?.schemas,
     },
   };
 

@@ -102,7 +102,7 @@ app.listen(3000, () => {
 
 The recommended mental model is:
 
-- `@kaonashi-dev/techne/common` for decorators, exceptions, DTO/schema helpers, custom pipes, and request lifecycle interfaces.
+- `@kaonashi-dev/techne/common` for decorators, exceptions, DTO/schema helpers, and request lifecycle interfaces.
 - `@kaonashi-dev/techne/core` for bootstrap and infrastructure APIs.
 - `@kaonashi-dev/techne/config`, `/jwt`, `/swagger`, `/health`, `/testing`, `/cqrs`, and `/mq` for specialized features.
 
@@ -110,7 +110,7 @@ The recommended mental model is:
 
 | Area | Package |
 | --- | --- |
-| Decorators, exceptions, pipes, schemas | `@kaonashi-dev/techne/common` |
+| Decorators, exceptions, schemas | `@kaonashi-dev/techne/common` |
 | Bootstrap, DI container, reflector, config loader | `@kaonashi-dev/techne/core` |
 | Testing utilities | `@kaonashi-dev/techne/testing` |
 | CQRS buses and event store | `@kaonashi-dev/techne/cqrs` |
@@ -328,8 +328,8 @@ export default defineTechneConfig({
 
 `TechneFactory.createApplicationContext()` is also available for standalone flat
 provider graphs without HTTP. Request-scoped providers share a stable context
-across guards, interceptors, and handlers within the same request through
-`ContextIdFactory` from `@kaonashi-dev/techne/core`.
+across guards and handlers within the same request through `ContextIdFactory`
+from `@kaonashi-dev/techne/core`.
 
 ## Plugins
 
@@ -447,15 +447,29 @@ custom health indicator. The auto-registered `/healthz` and `/readyz`
 endpoints described in [Health & Graceful Shutdown](#health--graceful-shutdown)
 are independent and are wired up by `TechneFactory.create()`.
 
-## File Uploads
+## Response Hooks
 
 ```ts
-import { FileInterceptor, UploadedFile, UseInterceptors } from "@kaonashi-dev/techne/common";
+import { Controller, Get, OnResponse } from "@kaonashi-dev/techne/common";
+import type { ResponseHook } from "@kaonashi-dev/techne/common";
 
-@Post("/upload")
-@UseInterceptors(FileInterceptor("file"))
-upload(@UploadedFile("file") file: any) {
-  return { name: file?.name };
+const CacheHeaderHook: ResponseHook = {
+  transform(result, context) {
+    context.ctx.set.headers = {
+      ...(context.ctx.set.headers ?? {}),
+      "cache-control": "no-store",
+    };
+    return result;
+  },
+};
+
+@Controller("reports")
+@OnResponse(CacheHeaderHook)
+class ReportsController {
+  @Get("/")
+  list() {
+    return [];
+  }
 }
 ```
 
@@ -670,9 +684,7 @@ bunx @kaonashi-dev/techne g service users
 bunx @kaonashi-dev/techne g resource users
 bunx @kaonashi-dev/techne g middleware logger
 bunx @kaonashi-dev/techne g guard auth
-bunx @kaonashi-dev/techne g pipe trim
 bunx @kaonashi-dev/techne g filter http-exception
-bunx @kaonashi-dev/techne g interceptor logging
 bunx @kaonashi-dev/techne g dto create-user
 
 # Scaffold a multi-stage Bun Dockerfile (+ .dockerignore)
@@ -688,7 +700,7 @@ Commands: `new`, `create`, `dev`, `start`, `build`, `test`, `deploy`,
 `doctor`, `generate|g`.
 
 Generator types: `module`, `controller`, `service`, `resource`, `middleware`,
-`guard`, `pipe`, `filter`, `interceptor`, `dto`, `docker`, `client`.
+`guard`, `filter`, `dto`, `docker`, `client`.
 
 `techne deploy --target docker` currently writes the same multi-stage
 Dockerfile as the `g docker` generator. Other deploy targets (`fly`, `railway`,
@@ -726,7 +738,7 @@ bun run bench
 ```text
 src/
   cli/            CLI scaffolding and generators
-  common/         Public decorators, exceptions, custom pipes, and schema helpers
+  common/         Public decorators, exceptions, and schema helpers
   config/         ConfigService, config plugins, and registerAs helpers
   core/           Application core, DI container, and bootstrap APIs
     plugins/      Plugin protocol (`definePlugin`, `PluginContext`)
@@ -749,7 +761,7 @@ src/
 A benchmark matrix lives under [`benchmarks/`](./benchmarks/README.md) covering
 the code paths that actually matter — raw Elysia vs Techne, the arity-specialized
 **fast path** for routes with no enhancers, the cost-tagged **slow path** for
-routes with guards/interceptors/pipes, validation (valid + invalid bodies),
+routes with guards and filters, schema validation (valid + invalid bodies),
 response schemas (exercising the compiled TypeBox stringifier), container
 resolution, and cold start with `Bun.spawn`.
 
@@ -762,8 +774,8 @@ bun run benchmarks/index.ts --json     # machine-readable
 Notable optimizations on the hot path:
 
 - Arity-specialized compiled handlers for routes without enhancers.
-- Cost-tagged slow path that hoists static `@Injectable()` guards/interceptors
-  out at route registration time.
+- Cost-tagged slow path that hoists static `@Injectable()` guards out at route
+  registration time.
 - Compiled TypeBox stringifiers (`compileStringifier(schema)` from
   `@kaonashi-dev/techne/schema`) used automatically for routes with a
   `response` schema, with a per-schema `WeakMap` cache.

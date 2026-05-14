@@ -10,7 +10,7 @@
  * cost. A large gap between cold and warm indicates a missed cache.
  */
 
-import { Injectable, Module } from "../src/common";
+import { Injectable } from "../src/common";
 import { TechneFactory } from "../src/core";
 import { emitResults, isQuick, stabilize } from "./scenarios";
 import type { ScenarioResult } from "./scenarios";
@@ -37,10 +37,8 @@ class TopLevelService {
   ) {}
 }
 
-@Module({ providers: [DependencyA, DependencyB, TopLevelService] })
-class DiModule {}
-
-const app = await TechneFactory.create(DiModule, { logger: false });
+const providers = [DependencyA, DependencyB, TopLevelService];
+const app = await TechneFactory.create({ providers, logger: false });
 const container = (app as any).container ?? (app as any).adapter?.container;
 
 if (!container) {
@@ -102,7 +100,7 @@ export async function runDiBench(): Promise<ScenarioResult[]> {
     ["TopLevelService (cold)", TopLevelService] as const,
     ["DependencyA (cold)", DependencyA] as const,
   ]) {
-    const tmp = await TechneFactory.create(DiModule, { logger: false });
+    const tmp = await TechneFactory.create({ providers, logger: false });
     const tmpStart = Bun.nanoseconds();
     (tmp as any).get(Token);
     const firstCallUs = (Bun.nanoseconds() - tmpStart) / 1_000;

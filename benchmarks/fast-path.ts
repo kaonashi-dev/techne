@@ -12,7 +12,7 @@
  */
 
 import { Elysia } from "elysia";
-import { Controller, Get, Injectable, Module, Param } from "../src/common";
+import { Controller, Get, Injectable, Param } from "../src/common";
 import { TechneFactory } from "../src/core";
 import { emitResults, getDefaults, isQuick, runScenario, type ScenarioResult } from "./scenarios";
 
@@ -41,14 +41,15 @@ class FastController {
   }
 }
 
-@Module({ controllers: [FastController], providers: [FastService] })
-class FastModule {}
-
 const elysiaApp = new Elysia()
   .get("/users", () => [{ id: 1, name: "Alice" }])
   .get("/users/:id", ({ params }) => ({ id: params.id, name: "Alice" }));
 
-const techneApp = await TechneFactory.create(FastModule, { logger: false });
+const techneApp = await TechneFactory.create({
+  controllers: [FastController],
+  providers: [FastService],
+  logger: false,
+});
 
 export async function runFastPathBench(): Promise<ScenarioResult[]> {
   const opts = getDefaults(isQuick());

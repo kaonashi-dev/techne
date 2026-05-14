@@ -19,7 +19,7 @@
  */
 
 import { Elysia } from "elysia";
-import { Controller, Get, Injectable, Module, Param } from "../src/common";
+import { Controller, Get, Injectable, Param } from "../src/common";
 import { TechneFactory } from "../src/core";
 import {
   emitResults,
@@ -63,10 +63,11 @@ class UserController {
   }
 }
 
-@Module({ controllers: [UserController], providers: [UserService] })
-class AppModule {}
-
-const techneApp = await TechneFactory.create(AppModule, { logger: false });
+const techneApp = await TechneFactory.create({
+  controllers: [UserController],
+  providers: [UserService],
+  logger: false,
+});
 
 // ─── Run ───────────────────────────────────────────────────────────────────
 
