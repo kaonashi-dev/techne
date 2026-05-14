@@ -17,7 +17,6 @@ import type { Scanner } from "../scanner";
 export interface DiscoveredRouteDefinition extends RouteMetadata {
   controller: any;
   fullPath: string;
-  module?: any;
   middlewares: any[];
   guards: any[];
   filters: any[];
@@ -42,7 +41,6 @@ export class RouterExplorer {
         continue;
       }
 
-      const module = this.scanner.getControllerModule(controller);
       const prefix = (Reflect.getMetadata(CONTROLLER_METADATA, controller) as string) || "";
       const controllerVersions =
         (Reflect.getMetadata(VERSION_METADATA, controller) as string[]) || [];
@@ -94,7 +92,6 @@ export class RouterExplorer {
           schema,
           controller,
           fullPath: this.normalizePath(prefix, route.path),
-          module,
           middlewares: [...controllerMiddlewares, ...routeMiddlewares],
           guards: [...controllerGuards, ...routeGuards],
           filters: [...controllerFilters, ...routeFilters],
