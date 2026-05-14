@@ -30,9 +30,7 @@ export class MqRegistry {
 
       const processMetadata = (Reflect.getMetadata(MQ_PROCESS_METADATA, provider) ||
         {}) as ProcessMetadata;
-      const instance = this.container.get<any>(provider, {
-        module: this.container.getModuleFor(provider),
-      });
+      const instance = this.container.get<any>(provider);
       const queue = this.container.get<Queue>(getMqToken(processor.queueName));
 
       const worker = new Worker(

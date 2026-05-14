@@ -1,7 +1,6 @@
-import { Module } from "@kaonashi-dev/techne/common";
+import { defineFeature } from "@kaonashi-dev/techne/core";
 
-@Module({
+export const UsersFeature = defineFeature({
   controllers: [],
   providers: [],
-})
-export class UsersModule {}
+});

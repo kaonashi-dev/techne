@@ -36,9 +36,7 @@ export class BusRegistry {
       if (isCustomProvider(provider)) continue;
       if (!this.container.isStatic(provider)) continue;
 
-      const instance = this.container.get<any>(provider, {
-        module: this.container.getModuleFor(provider),
-      });
+      const instance = this.container.get<any>(provider);
 
       const command = Reflect.getMetadata(COMMAND_HANDLER_METADATA, provider) as
         | Function

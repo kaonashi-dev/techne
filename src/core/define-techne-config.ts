@@ -1,14 +1,11 @@
-import type { TechneApplicationOptions } from "../factory/techne-factory";
+import type { AppBootstrapConfig } from "../factory/techne-factory";
 
 /**
- * Declarative Techne configuration. Extends {@link TechneApplicationOptions}
- * with bootstrap-only fields (`module`, `port`, `host`) consumed by the
- * `bootstrap()` helper and `TechneFactory.create()` when loading
- * `techne.config.ts` from `process.cwd()`.
+ * Declarative Techne configuration. Extends {@link AppBootstrapConfig} with
+ * bootstrap-only fields (`port`, `host`) consumed by the `bootstrap()` helper
+ * when loading `techne.config.ts` from `process.cwd()`.
  */
-export type TechneConfig = TechneApplicationOptions & {
-  /** Root module class. Required when calling `TechneFactory.create()` / `bootstrap()` with zero args. */
-  module?: any;
+export type TechneConfig = AppBootstrapConfig & {
   /** Port to listen on. Used by `techne dev`/`start` and the `bootstrap()` helper. Default 3000. */
   port?: number;
   /** Bind host. Default "0.0.0.0". */

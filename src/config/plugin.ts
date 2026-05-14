@@ -1,13 +1,12 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { Inject } from "../decorators/inject.decorator";
-import { Module } from "../decorators/module.decorator";
+import { definePlugin } from "../core/plugins/define-plugin";
 import type { AppConfig } from "./define-config";
-import type { ConfigFactory } from "./register-as";
 import { ConfigService } from "./config.service";
 import { APP_CONFIG, CONFIG_OPTIONS, CONFIG_STORE } from "./tokens";
 
-/** Inject the active `AppConfig` instance produced by `ConfigModule.forApp()`. */
+/** Inject the active `AppConfig` instance produced by `appConfig()`. */
 export const InjectConfig = (): ParameterDecorator => Inject(APP_CONFIG);
 
 export interface ConfigModuleOptions {
@@ -17,11 +16,6 @@ export interface ConfigModuleOptions {
   load?: Array<() => Record<string, any>>;
   validate?: (config: Record<string, any>) => Record<string, any>;
   expandVariables?: boolean;
-}
-
-export interface ConfigModuleAsyncOptions {
-  inject?: any[];
-  useFactory: (...args: any[]) => ConfigModuleOptions;
 }
 
 function parseEnv(contents: string): Record<string, string> {
@@ -114,80 +108,23 @@ function buildConfig(options: ConfigModuleOptions): Record<string, any> {
   return options.validate ? options.validate(store) : store;
 }
 
-function createDynamicModule(metadata: {
-  providers: any[];
-  exports: any[];
-  global?: boolean;
-}): any {
-  class DynamicConfigModule {}
-  Module({
-    providers: metadata.providers,
-    exports: metadata.exports,
-    global: metadata.global,
-  })(DynamicConfigModule);
-  return DynamicConfigModule;
+export function config(options: ConfigModuleOptions = {}) {
+  return definePlugin({
+    name: "config",
+    setup(ctx) {
+      const store = buildConfig(options);
+      ctx.provide(CONFIG_OPTIONS, options);
+      ctx.provide(CONFIG_STORE, store);
+      ctx.registerProviders([ConfigService]);
+    },
+  });
 }
 
-export class ConfigModule {
-  static forRoot(options: ConfigModuleOptions = {}): any {
-    return createDynamicModule({
-      global: options.isGlobal,
-      providers: [
-        { provide: CONFIG_OPTIONS, useValue: options },
-        { provide: CONFIG_STORE, useFactory: () => buildConfig(options) },
-        ConfigService,
-      ],
-      exports: [CONFIG_OPTIONS, CONFIG_STORE, ConfigService],
-    });
-  }
-
-  static forRootAsync(options: ConfigModuleAsyncOptions): any {
-    return createDynamicModule({
-      providers: [
-        {
-          provide: CONFIG_OPTIONS,
-          useFactory: options.useFactory,
-          inject: options.inject,
-        },
-        {
-          provide: CONFIG_STORE,
-          useFactory: (resolvedOptions: ConfigModuleOptions) => buildConfig(resolvedOptions || {}),
-          inject: [CONFIG_OPTIONS],
-        },
-        ConfigService,
-      ],
-      exports: [CONFIG_OPTIONS, CONFIG_STORE, ConfigService],
-    });
-  }
-
-  static forApp<C extends AppConfig<any>>(config: C): any {
-    return createDynamicModule({
-      global: true,
-      providers: [{ provide: APP_CONFIG, useValue: config }],
-      exports: [APP_CONFIG],
-    });
-  }
-
-  static forFeature(factory: ConfigFactory): any {
-    const key = factory.KEY;
-    if (!key) {
-      throw new Error("ConfigModule.forFeature() requires a registerAs() factory with a KEY.");
-    }
-
-    const featureInitToken = Symbol(`CONFIG_FEATURE:${key}`);
-    return createDynamicModule({
-      providers: [
-        { provide: key, useFactory: factory },
-        {
-          provide: featureInitToken,
-          useFactory: (store: Record<string, any>, featureValue: Record<string, any>) => {
-            store[key] = featureValue;
-            return true;
-          },
-          inject: [CONFIG_STORE, key],
-        },
-      ],
-      exports: [key],
-    });
-  }
+export function appConfig<C extends AppConfig<any>>(cfg: C) {
+  return definePlugin({
+    name: "config:app",
+    setup(ctx) {
+      ctx.provide(APP_CONFIG, cfg);
+    },
+  });
 }

@@ -1,10 +1,14 @@
 import "../reflect-setup";
 import { Container, type Provider, isCustomProvider } from "../core/container";
 import { Scanner } from "../core/scanner";
-import type { ModuleMetadata } from "../decorators/module.decorator";
 import { Logger } from "../services/logger.service";
 import { MqRegistry } from "../mq/registry";
 import { MQ_DRIVER } from "../mq/tokens";
+
+export interface TestingModuleMetadata {
+  controllers?: any[];
+  providers?: any[];
+}
 
 export interface OverrideProvider {
   useValue(value: any): TestingModuleBuilder;
@@ -15,7 +19,7 @@ export interface OverrideProvider {
 export class TestingModuleBuilder {
   private overrides = new Map<any, Provider>();
 
-  constructor(private metadata: ModuleMetadata) {}
+  constructor(private metadata: TestingModuleMetadata) {}
 
   overrideProvider(token: any): OverrideProvider {
     return {
@@ -48,80 +52,39 @@ export class TestingModuleBuilder {
       container.addProvider(provider);
     }
 
-    // Register custom providers (that aren't overridden)
     const providers = this.metadata.providers || [];
-    for (const provider of providers) {
-      if (isCustomProvider(provider)) {
-        const token = provider.provide;
-        // Don't register if overridden
-        if (!this.overrides.has(token)) {
-          container.addProvider(provider);
+    const filteredProviders = providers.filter((provider: any) => {
+      const token = isCustomProvider(provider) ? provider.provide : provider;
+      return !this.overrides.has(token);
+    });
+
+    const scanner = new Scanner({ logger: false, container });
+    scanner.scanFlat({
+      controllers: this.metadata.controllers || [],
+      providers: filteredProviders,
+    });
+
+    for (const provider of scanner.getProviders()) {
+      const token = isCustomProvider(provider) ? provider.provide : provider;
+      try {
+        if (container.isStatic(token)) {
+          container.get(token);
         }
+      } catch {
+        // skip unresolvable providers so tests can override later
       }
     }
-
-    let scannedProviders: any[] = [];
-    let scannedControllers: any[] = [];
-
-    if (this.metadata.imports && this.metadata.imports.length > 0) {
-      // Create a temporary module wrapper with the metadata
-      const TempModule = class {};
-      Reflect.defineMetadata("imports", this.metadata.imports, TempModule);
-
-      // Filter out overridden providers before passing to scanner
-      const filteredProviders = providers.filter((p: any) => {
-        const token = isCustomProvider(p) ? p.provide : p;
-        return !this.overrides.has(token);
-      });
-      Reflect.defineMetadata("providers", filteredProviders, TempModule);
-      Reflect.defineMetadata("controllers", this.metadata.controllers || [], TempModule);
-      Reflect.defineMetadata("exports", this.metadata.exports || [], TempModule);
-
-      const scanner = new Scanner({ logger: false, container });
-      await scanner.scan(TempModule);
-      scannedProviders = scanner.getProviders();
-      scannedControllers = scanner.getControllers();
-    } else {
-      // Eagerly resolve class providers (that aren't overridden)
-      for (const provider of providers) {
-        if (!isCustomProvider(provider) && !this.overrides.has(provider)) {
-          container.get(provider);
-        }
-      }
-
-      // Call onModuleInit on all resolved providers
-      for (const provider of providers) {
-        const token = isCustomProvider(provider) ? provider.provide : provider;
-        try {
-          const instance = container.get(token) as any;
-          if (instance && typeof instance.onModuleInit === "function") {
-            await instance.onModuleInit();
-          }
-        } catch {
-          // skip unresolvable
-        }
-      }
-    }
+    await scanner.callLifecycleHook("onModuleInit");
 
     // Now resolve all overridden tokens to ensure they are cached
     for (const [token] of this.overrides) {
       container.get(token);
     }
 
-    // Register controllers
-    const controllers = this.metadata.controllers || [];
-    for (const controller of controllers) {
-      container.get(controller);
-    }
-
     if (container.has(MQ_DRIVER)) {
       const mqRegistry = new MqRegistry(container, container.get(MQ_DRIVER));
       mqRegistry.register();
-      mqRegistry.registerFromClasses(
-        scannedProviders.length > 0 || scannedControllers.length > 0
-          ? [...scannedProviders, ...scannedControllers]
-          : [...(this.metadata.providers || []), ...controllers],
-      );
+      mqRegistry.registerFromClasses([...scanner.getProviders(), ...scanner.getControllers()]);
     }
 
     return new TestingModule(container);
@@ -141,7 +104,7 @@ export class TestingModule {
 }
 
 export class Test {
-  static createTestingModule(metadata: ModuleMetadata): TestingModuleBuilder {
+  static createTestingModule(metadata: TestingModuleMetadata): TestingModuleBuilder {
     return new TestingModuleBuilder(metadata);
   }
 }

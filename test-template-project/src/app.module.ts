@@ -1,9 +1,8 @@
-import { Module } from "@kaonashi-dev/techne/common";
+import { defineFeature } from "@kaonashi-dev/techne/core";
 import { AppController } from "./app.controller";
 import { AppService } from "./app.service";
 
-@Module({
+export const AppFeature = defineFeature({
   controllers: [AppController],
   providers: [AppService],
-})
-export class AppModule {}
+});

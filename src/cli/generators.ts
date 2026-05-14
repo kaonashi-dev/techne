@@ -142,14 +142,13 @@ async function ensureProjectDirectory(projectDir: string, projectName: string) {
 }
 
 export async function generateModule(name: string, dir: string = ".") {
-  const className = `${capitalize(name)}Module`;
-  const content = `import { Module } from "@kaonashi-dev/techne/common";
+  const featureName = `${capitalize(name)}Feature`;
+  const content = `import { defineFeature } from "@kaonashi-dev/techne/core";
 
-@Module({
+export const ${featureName} = defineFeature({
   controllers: [],
   providers: []
-})
-export class ${className} {}
+});
 `;
   await fs.writeFile(path.join(dir, `${name}.module.ts`), content);
   console.log(`CREATE ${name}.module.ts`);
@@ -279,7 +278,7 @@ export async function generateResource(name: string) {
   const dir = path.join(process.cwd(), "src", name);
   await fs.mkdir(dir, { recursive: true });
 
-  const moduleName = `${capitalize(name)}Module`;
+  const featureName = `${capitalize(name)}Feature`;
   const controllerName = `${capitalize(name)}Controller`;
   const serviceName = `${capitalize(name)}Service`;
 
@@ -356,15 +355,14 @@ export class ${controllerName} {
   // Write Module
   await fs.writeFile(
     path.join(dir, `${name}.module.ts`),
-    `import { Module } from "@kaonashi-dev/techne/common";
+    `import { defineFeature } from "@kaonashi-dev/techne/core";
 import { ${controllerName} } from './${name}.controller';
 import { ${serviceName} } from './${name}.service';
 
-@Module({
+export const ${featureName} = defineFeature({
   controllers: [${controllerName}],
   providers: [${serviceName}]
-})
-export class ${moduleName} {}
+});
 `,
   );
   console.log(`CREATE src/${name}/${name}.module.ts`);
@@ -517,25 +515,24 @@ export class AppController {
 
   await writeTextFile(
     path.join(srcDir, "app.module.ts"),
-    `import { Module } from "@kaonashi-dev/techne/common";
+    `import { defineFeature } from "@kaonashi-dev/techne/core";
 import { AppController } from "./app.controller";
 import { AppService } from "./app.service";
 
-@Module({
+export const AppFeature = defineFeature({
   controllers: [AppController],
   providers: [AppService],
-})
-export class AppModule {}
+});
 `,
   );
 
   await writeTextFile(
     path.join(dir, "techne.config.ts"),
     `import { defineTechneConfig } from "@kaonashi-dev/techne/core";
-import { AppModule } from "./src/app.module";
+import { AppFeature } from "./src/app.module";
 
 export default defineTechneConfig({
-  module: AppModule,
+  features: [AppFeature],
   port: Number(Bun.env.PORT ?? 3000),
   cors: { origin: true },
   logger: "pretty",

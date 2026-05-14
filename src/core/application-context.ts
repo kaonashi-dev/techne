@@ -15,16 +15,11 @@ export class TechneApplicationContext {
   ) {}
 
   get<T>(token: any): T {
-    return this.container.get<T>(token, {
-      module: this.container.getRootModule(),
-    });
+    return this.container.get<T>(token);
   }
 
   resolve<T>(token: any, context?: ResolutionContext): T {
-    return this.container.resolve<T>(token, {
-      module: this.container.getRootModule(),
-      ...context,
-    });
+    return this.container.resolve<T>(token, context);
   }
 
   getContainer(): Container {

@@ -31,19 +31,20 @@ interface CachedHandlerMetadata {
 }
 
 interface ContainerLike {
-  get<T>(token: any, context?: { module?: any }): T;
+  get<T>(token: any): T;
   resolve<T>(
     token: any,
-    context?: { request?: any; contextId?: symbol; inquirer?: any; module?: any },
+    context?: { request?: any; contextId?: symbol; inquirer?: any },
   ): T;
   isStatic(token: any): boolean;
   clearContext(contextId: symbol): void;
   hasContextualDeps?(token: any): boolean;
 }
 
+type CompiledInterceptorChain = (execCtx: ExecutionContextHost, handler: () => any) => any;
+
 interface RouteRuntimeCache {
   container: ContainerLike;
-  module?: any;
   routeFilters: any[];
   routeInterceptors: any[];
   routePipes: any[];
@@ -65,6 +66,8 @@ interface RouteRuntimeCache {
   // Cached enhancer tokens for cost-tag refresh.
   controllerClass?: any;
   guards: any[];
+  // Pre-compiled static interceptor chain; avoids per-request object allocation.
+  compiledStaticInterceptorChain?: CompiledInterceptorChain;
 }
 
 const EMPTY_ARRAY: readonly never[] = Object.freeze([]);
@@ -117,13 +120,18 @@ function filterShouldCatch(filter: ExceptionFilter, error: unknown): boolean {
 type ParamExtractor = (ctx: any, execCtx: ExecutionContextHost | undefined) => unknown;
 type FastParamExtractor = (ctx: any) => unknown;
 
-function createParamExtractor(param: ParamMetadata): ParamExtractor {
+function createExtractor(param: ParamMetadata, fast: true): FastParamExtractor | null;
+function createExtractor(param: ParamMetadata, fast: false): ParamExtractor;
+function createExtractor(
+  param: ParamMetadata,
+  fast: boolean,
+): ParamExtractor | FastParamExtractor | null {
   const name = param.name;
   switch (param.type) {
     case "body":
-      return name ? (ctx) => ctx.body?.[name] : (ctx) => ctx.body;
+      return name ? (ctx: any) => ctx.body?.[name] : (ctx: any) => ctx.body;
     case "file":
-      return (ctx) => {
+      return (ctx: any) => {
         const body = ctx.body;
         if (name) {
           if (body instanceof FormData) return body.get(name);
@@ -136,61 +144,29 @@ function createParamExtractor(param: ParamMetadata): ParamExtractor {
         return body;
       };
     case "param":
-      return name ? (ctx) => ctx.params?.[name] : (ctx) => ctx.params;
+      return name ? (ctx: any) => ctx.params?.[name] : (ctx: any) => ctx.params;
     case "query":
-      return name ? (ctx) => ctx.query?.[name] : (ctx) => ctx.query;
+      return name ? (ctx: any) => ctx.query?.[name] : (ctx: any) => ctx.query;
     case "headers":
-      return name ? (ctx) => ctx.headers?.[name] : (ctx) => ctx.headers;
+      return name ? (ctx: any) => ctx.headers?.[name] : (ctx: any) => ctx.headers;
     case "request":
-      return (ctx) => ctx.request;
+      return (ctx: any) => ctx.request;
     case "custom": {
+      if (fast) return null;
       const factory = param.factory;
       const data = param.data;
       if (!factory) return () => undefined;
-      return (_ctx, execCtx) => factory(data, execCtx as any);
+      return (_ctx: any, execCtx: ExecutionContextHost | undefined) => factory(data, execCtx as any);
     }
     default:
       return () => undefined;
   }
 }
 
-function createFastParamExtractor(param: ParamMetadata): FastParamExtractor | null {
-  const name = param.name;
-  switch (param.type) {
-    case "body":
-      return name ? (ctx) => ctx.body?.[name] : (ctx) => ctx.body;
-    case "file":
-      return (ctx) => {
-        const body = ctx.body;
-        if (name) {
-          if (body instanceof FormData) return body.get(name);
-          return body?.[name];
-        }
-        if (body instanceof FormData) {
-          const first = body.entries().next();
-          return first.done ? undefined : first.value[1];
-        }
-        return body;
-      };
-    case "param":
-      return name ? (ctx) => ctx.params?.[name] : (ctx) => ctx.params;
-    case "query":
-      return name ? (ctx) => ctx.query?.[name] : (ctx) => ctx.query;
-    case "headers":
-      return name ? (ctx) => ctx.headers?.[name] : (ctx) => ctx.headers;
-    case "request":
-      return (ctx) => ctx.request;
-    case "custom":
-      return null;
-    default:
-      return () => undefined;
-  }
-}
-
 /**
- * Compile a directly-callable handler for routes with arity ≤ 3, sorted by
- * positional index. Returns `null` for shapes we don't specialize so the
- * caller can fall back to the generic args-array path.
+ * Compile a directly-callable handler for routes with any positional arity.
+ * Returns `null` for shapes we can't specialize (non-positional indexes or
+ * custom params) so the caller falls back to the generic args-array path.
  *
  * Routes with `custom` params are excluded from the fast path because they
  * need an `ExecutionContextHost` allocation — they fall through to the slow
@@ -208,31 +184,67 @@ function compileFastHandler(
   // Verify the params are positional (0..n-1) so we can pass them in order.
   for (let i = 0; i < paramsMetadata.length; i++) {
     if (paramsMetadata[i].index !== i) return null;
-    if (paramsMetadata[i].type === "custom") return null;
   }
 
   const method = instance[methodName] as (...args: any[]) => unknown;
   const call = method.bind(instance);
 
-  if (paramsMetadata.length === 1) {
-    const e0 = createFastParamExtractor(paramsMetadata[0]);
-    if (!e0) return null;
+  // Build extractors for all params; bail if any is a custom param.
+  const extractors: FastParamExtractor[] = [];
+  for (let i = 0; i < paramsMetadata.length; i++) {
+    const e = createExtractor(paramsMetadata[i], true);
+    if (!e) return null; // custom param — fall back to slow path
+    extractors.push(e);
+  }
+
+  const n = extractors.length;
+
+  // Arity-1 special case: avoids array allocation entirely.
+  if (n === 1) {
+    const e0 = extractors[0];
     return (ctx) => call(e0(ctx));
   }
-  if (paramsMetadata.length === 2) {
-    const e0 = createFastParamExtractor(paramsMetadata[0]);
-    const e1 = createFastParamExtractor(paramsMetadata[1]);
-    if (!e0 || !e1) return null;
-    return (ctx) => call(e0(ctx), e1(ctx));
+
+  // General case: loop-based extraction into a pre-sized array.
+  return (ctx) => {
+    // oxlint-disable-next-line no-new-array -- pre-sized for hot path
+    const args = new Array(n);
+    for (let i = 0; i < n; i++) args[i] = extractors[i](ctx);
+    return call(...args);
+  };
+}
+
+/**
+ * Build a pre-compiled interceptor chain for a stable (static) list of
+ * interceptors. The resulting function avoids per-request `CallHandler` object
+ * allocations for the common case where the interceptor list never changes.
+ */
+function buildStaticInterceptorChain(
+  interceptors: TechneInterceptor[],
+): CompiledInterceptorChain {
+  if (interceptors.length === 0) {
+    return (_execCtx, handler) => handler();
   }
-  if (paramsMetadata.length === 3) {
-    const e0 = createFastParamExtractor(paramsMetadata[0]);
-    const e1 = createFastParamExtractor(paramsMetadata[1]);
-    const e2 = createFastParamExtractor(paramsMetadata[2]);
-    if (!e0 || !e1 || !e2) return null;
-    return (ctx) => call(e0(ctx), e1(ctx), e2(ctx));
+
+  if (interceptors.length === 1) {
+    const only = interceptors[0];
+    return (execCtx, handler) =>
+      only.intercept(execCtx, { handle: () => Promise.resolve(handler()) });
   }
-  return null;
+
+  // General case: capture references, build chain from inside out at call time.
+  // Each call still allocates N CallHandler objects (same as the dynamic path),
+  // but the interceptors array is captured rather than passed per-call.
+  const chain = interceptors.slice();
+  return (execCtx, handler) => {
+    let next: CallHandler = { handle: async () => handler() };
+    for (let i = chain.length - 1; i >= 0; i--) {
+      const interceptor = chain[i];
+      const currentNext = next;
+      next = { handle: () => interceptor.intercept(execCtx, currentNext) };
+    }
+    return next.handle();
+  };
 }
 
 export class RouterExecutionContext {
@@ -301,7 +313,6 @@ export class RouterExecutionContext {
       container,
       controllerClass,
       handlerRef,
-      route.module,
     );
     const beforeHandle =
       guardHooks.length === 0 && route.middlewares.length === 0
@@ -310,7 +321,6 @@ export class RouterExecutionContext {
 
     const cache: RouteRuntimeCache = {
       container,
-      module: route.module,
       routeFilters: route.filters,
       routeInterceptors: route.interceptors,
       routePipes: route.pipes,
@@ -389,13 +399,12 @@ export class RouterExecutionContext {
           hasCustomParam,
           container,
           applyPipes,
-          applyInterceptors,
         );
       }
 
       const requestKey = this.getRequestContextKey(context);
       const contextId = ContextIdFactory.getByRequest(requestKey);
-      const resolutionContext = { module: route.module, request: context, contextId };
+      const resolutionContext = { request: context, contextId };
       const controllerInstance = this.resolveInstance<any>(
         controllerClass,
         container,
@@ -486,7 +495,7 @@ export class RouterExecutionContext {
     // installed via useGlobalPipes/Filters/Interceptors after registration.
     if (!cache.hasRuntimeEnhancers) {
       const fastController = container.isStatic(controllerClass)
-        ? container.get<any>(controllerClass, { module: route.module })
+        ? container.get<any>(controllerClass)
         : undefined;
       const fast = fastController
         ? compileFastHandler(fastController, handlerName, paramsMetadata)
@@ -534,17 +543,9 @@ export class RouterExecutionContext {
     hasCustomParam: boolean,
     container: ContainerLike,
     applyPipes: (args: any[], paramsMetadata: ParamMetadata[], pipes: PipeTransform[]) => void,
-    applyInterceptors: (
-      context: RequestHandlerContext,
-      interceptors: TechneInterceptor[],
-      handler: () => any,
-    ) => any,
   ): unknown {
     const responseController = this.responseController;
-    const controllerInstance = container.get<any>(
-      controllerClass,
-      cache.module !== undefined ? { module: cache.module } : undefined,
-    );
+    const controllerInstance = container.get<any>(controllerClass);
     const mergedFilters = cache.staticFilters;
     const mergedInterceptors = cache.staticInterceptors;
     const mergedPipes = cache.staticPipes;
@@ -580,7 +581,7 @@ export class RouterExecutionContext {
 
       if (mergedInterceptors.length > 0) {
         const callHandler = () => controllerInstance[handlerName](...args);
-        const result = applyInterceptors(getExecutionContext(), mergedInterceptors, callHandler);
+        const result = cache.compiledStaticInterceptorChain!(getExecutionContext(), callHandler);
         if (isPromiseLike(result)) {
           return (result as Promise<unknown>).then(
             (r) => this.maybeStringify(context, cache, r),
@@ -648,7 +649,6 @@ export class RouterExecutionContext {
     const filters = this.partitionRouteInstances<ExceptionFilter>(
       mergeArrays(this.globalFilters, cache.routeFilters),
       cache.container,
-      cache.module,
     );
     cache.staticFilters = filters.staticInstances;
     cache.contextualFilters = filters.contextualTokens;
@@ -656,7 +656,6 @@ export class RouterExecutionContext {
     const interceptors = this.partitionRouteInstances<TechneInterceptor>(
       mergeArrays(this.globalInterceptors, cache.routeInterceptors),
       cache.container,
-      cache.module,
     );
     cache.staticInterceptors = interceptors.staticInstances;
     cache.contextualInterceptors = interceptors.contextualTokens;
@@ -664,7 +663,6 @@ export class RouterExecutionContext {
     const pipes = this.partitionRouteInstances<PipeTransform>(
       mergeArrays(this.globalPipes, cache.routePipes),
       cache.container,
-      cache.module,
     );
     cache.staticPipes = pipes.staticInstances;
     cache.contextualPipes = pipes.contextualTokens;
@@ -673,6 +671,10 @@ export class RouterExecutionContext {
       cache.staticInterceptors.length > 0 || cache.contextualInterceptors.length > 0;
     cache.hasPipes = cache.staticPipes.length > 0 || cache.contextualPipes.length > 0;
     cache.hasRuntimeEnhancers = cache.hasFilters || cache.hasInterceptors || cache.hasPipes;
+
+    // Pre-compile the static interceptor chain so per-request calls don't need
+    // to pass the interceptors array (avoids closure capture on hot path).
+    cache.compiledStaticInterceptorChain = buildStaticInterceptorChain(cache.staticInterceptors);
 
     // Cost tag: does this route need request-scoped DI bookkeeping?
     cache.hasRequestScopedDeps = this.computeHasRequestScopedDeps(cache);
@@ -715,7 +717,6 @@ export class RouterExecutionContext {
   private partitionRouteInstances<T>(
     items: any[],
     container: ContainerLike,
-    module?: any,
   ): { staticInstances: T[]; contextualTokens: any[] } {
     const staticInstances: T[] = [];
     const contextualTokens: any[] = [];
@@ -727,7 +728,7 @@ export class RouterExecutionContext {
       }
 
       if (container.isStatic(item)) {
-        staticInstances.push(container.get<T>(item, module !== undefined ? { module } : undefined));
+        staticInstances.push(container.get<T>(item));
         continue;
       }
 
@@ -741,7 +742,7 @@ export class RouterExecutionContext {
     staticInstances: T[],
     contextualTokens: any[],
     container: ContainerLike,
-    context?: { request?: any; contextId?: symbol; inquirer?: any; module?: any },
+    context?: { request?: any; contextId?: symbol; inquirer?: any },
   ): T[] {
     if (contextualTokens.length === 0) {
       return staticInstances;
@@ -756,7 +757,7 @@ export class RouterExecutionContext {
   private resolveInstances<T>(
     classes: any[],
     container: ContainerLike,
-    context?: { request?: any; contextId?: symbol; inquirer?: any; module?: any },
+    context?: { request?: any; contextId?: symbol; inquirer?: any },
   ): T[] {
     return classes.map((cls) => {
       // If it's already an instance (not a class), use it directly
@@ -773,10 +774,10 @@ export class RouterExecutionContext {
   private resolveInstance<T>(
     token: any,
     container: ContainerLike,
-    context: { request?: any; contextId?: symbol; inquirer?: any; module?: any },
+    context: { request?: any; contextId?: symbol; inquirer?: any },
   ): T {
     return container.isStatic(token)
-      ? container.get<T>(token, context.module ? { module: context.module } : undefined)
+      ? container.get<T>(token)
       : container.resolve<T>(token, context);
   }
 
@@ -845,14 +846,14 @@ export class RouterExecutionContext {
     // Specialize for the common single-param case: avoid the per-request switch
     // and lift the property lookup into the boot-time closure.
     if (methodParams.length === 1 && length === 1) {
-      const extract = createParamExtractor(methodParams[0]);
+      const extract = createExtractor(methodParams[0], false);
       return (context, execCtx) => [extract(context, execCtx)];
     }
 
     const extractors: ParamExtractor[] = [];
     const indexes: number[] = [];
     for (const param of methodParams) {
-      extractors.push(createParamExtractor(param));
+      extractors.push(createExtractor(param, false));
       indexes.push(param.index);
     }
     const arity = extractors.length;
@@ -872,7 +873,6 @@ export class RouterExecutionContext {
     container: ContainerLike,
     controllerClass: any,
     handlerRef: Function,
-    module?: any,
   ) {
     return guards.map((guardClass: any) => {
       // Static-guard hoisting: when the guard's DI tree has no request-scoped
@@ -885,9 +885,7 @@ export class RouterExecutionContext {
           (!container.hasContextualDeps || !container.hasContextualDeps(guardClass)));
 
       if (isStaticGuard) {
-        const guardInstance = isClassToken
-          ? container.get<any>(guardClass, module !== undefined ? { module } : undefined)
-          : guardClass;
+        const guardInstance = isClassToken ? container.get<any>(guardClass) : guardClass;
 
         return (context: RequestHandlerContext) => {
           const executionContext = this.getOrCreateExecutionContext(
@@ -922,7 +920,6 @@ export class RouterExecutionContext {
         const requestKey = this.getRequestContextKey(context);
         const contextId = ContextIdFactory.getByRequest(requestKey);
         const guardInstance = this.resolveInstance<any>(guardClass, container, {
-          module,
           request: context,
           contextId,
         });

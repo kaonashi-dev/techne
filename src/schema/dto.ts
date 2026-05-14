@@ -36,6 +36,11 @@ type ValidationConstraint =
 /** Module-level registry: DTO class → TypeBox schema and compiled validator. */
 const dtoRegistry = new Map<Function, TSchema>();
 const dtoValidatorRegistry = new Map<Function, TypeCheck<TSchema>>();
+const dtoOptionsRegistry = new WeakMap<Function, DtoOptions>();
+
+export interface DtoOptions {
+  allowAdditional?: boolean;
+}
 
 interface DtoMetaCacheEntry {
   properties: Record<string, PropertyMetadata>;
@@ -85,8 +90,9 @@ function invalidateDtoCache(target: Function | undefined): void {
   dtoMetaCache.delete(target);
 }
 
-export function Dto(): ClassDecorator {
+export function Dto(options: DtoOptions = {}): ClassDecorator {
   return (target: Function) => {
+    dtoOptionsRegistry.set(target, options);
     const schema = buildSchemaFromClass(target as ClassConstructor);
     dtoRegistry.set(target, schema);
     dtoValidatorRegistry.set(target, TypeCompiler.Compile(schema));
@@ -154,13 +160,14 @@ export function setPropertyMetadata(
 export function buildSchemaFromClass(klass: ClassConstructor): TSchema {
   const meta = getDtoMetaCache(klass);
   const keys = meta.keys;
-  if (keys.length === 0) return Type.Object({});
+  const options = getObjectOptions(klass);
+  if (keys.length === 0) return Type.Object({}, options);
 
   const objSchema: Record<string, TSchema> = {};
   for (const key of keys) {
     objSchema[key] = inferSchema(klass, key, meta.properties[key]);
   }
-  return Type.Object(objSchema);
+  return Type.Object(objSchema, options);
 }
 
 export function validateDto(value: unknown, metatype: Function): ValidationError[] {
@@ -208,9 +215,7 @@ export function firstValidationError(
 }
 
 /**
- * Full, eager error enumeration. Used by {@link LazyValidationException} to
- * materialize the complete error list on demand (e.g. when a problem+json
- * filter formats the 4xx response body).
+ * Full, eager error enumeration for class-validator compatibility helpers.
  */
 export function computeAllValidationErrors(value: unknown, metatype: Function): ValidationError[] {
   const validator = getOrCreateDtoValidator(metatype);
@@ -446,6 +451,11 @@ function getArrayOptions(meta: PropertyMetadata): Record<string, unknown> {
     if (constraint.type === "maxItems") options.maxItems = constraint.value;
   }
   return options;
+}
+
+function getObjectOptions(klass: ClassConstructor): Record<string, unknown> {
+  const options = dtoOptionsRegistry.get(klass);
+  return { additionalProperties: options?.allowAdditional === true ? true : Type.Never() };
 }
 
 function normalizeValidationErrors(errors: Array<Record<string, any>>): ValidationError[] {

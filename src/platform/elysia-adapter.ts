@@ -35,6 +35,7 @@ export class ElysiaAdapter {
   private container: Container;
   private requestStartTimes = new WeakMap<Request, number>();
   private compiledCorsOptions?: CompiledCorsOptions;
+  private corsHooksInstalled = false;
   private inflight = 0;
   private isDraining = false;
 
@@ -50,6 +51,7 @@ export class ElysiaAdapter {
 
   public enableCors(options: CorsOptions = {}) {
     this.compiledCorsOptions = this.compileCorsOptions(options);
+    this.setupCors(this.app);
   }
 
   public getInflightCount(): number {
@@ -77,9 +79,11 @@ export class ElysiaAdapter {
 
   private createApp() {
     const app = new Elysia();
+    this.corsHooksInstalled = false;
     this.setupInflightTracking(app);
     this.setupRequestLogging(app);
     this.setupCors(app);
+    this.setupValidationErrors(app);
     return app;
   }
 
@@ -185,22 +189,21 @@ export class ElysiaAdapter {
     if (typeof requestId !== "string" || requestId.length === 0) return;
     const set = ctx.set;
     if (!set) return;
-    const existing = set.headers ?? {};
-    if (existing instanceof Headers) {
+    const existing = set.headers;
+    if (existing == null) {
+      set.headers = { "x-request-id": requestId };
+    } else if (existing instanceof Headers) {
       existing.set("x-request-id", requestId);
-      set.headers = existing;
     } else {
-      set.headers = {
-        ...(existing as Record<string, string>),
-        "x-request-id": requestId,
-      };
+      (existing as Record<string, string>)["x-request-id"] = requestId;
     }
   }
 
   private setupCors(app: Elysia) {
-    if (!this.compiledCorsOptions) {
+    if (!this.compiledCorsOptions || this.corsHooksInstalled) {
       return;
     }
+    this.corsHooksInstalled = true;
 
     app.onRequest(({ request }) => {
       if (request.method !== "OPTIONS") return;
@@ -211,10 +214,38 @@ export class ElysiaAdapter {
     });
 
     app.onAfterHandle(({ request, set }) => {
-      const headers = this.createCorsHeaders(request);
-      set.headers = {
-        ...this.normalizeHeaders(set.headers || {}),
-        ...this.normalizeHeaders(headers),
+      const cors = this.createCorsHeaders(request) as Record<string, string>;
+      const existing = set.headers;
+      if (existing == null) {
+        set.headers = cors;
+      } else if (existing instanceof Headers) {
+        for (const [k, v] of Object.entries(cors)) existing.set(k, v);
+      } else {
+        const h = existing as Record<string, string | number>;
+        for (const [k, v] of Object.entries(cors)) h[k] = v;
+      }
+    });
+  }
+
+  private setupValidationErrors(app: Elysia) {
+    app.onError(({ code, error, set }: any) => {
+      if (code !== "VALIDATION") return;
+
+      set.status = 422;
+      const existing = set.headers;
+      if (existing == null) {
+        set.headers = { "content-type": "application/problem+json" };
+      } else if (existing instanceof Headers) {
+        existing.set("content-type", "application/problem+json");
+      } else {
+        (existing as Record<string, string>)["content-type"] = "application/problem+json";
+      }
+
+      return {
+        type: "https://httpstatuses.com/422",
+        title: "Unprocessable Entity",
+        status: 422,
+        errors: error?.all ?? [],
       };
     });
   }

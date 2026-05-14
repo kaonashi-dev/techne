@@ -2,18 +2,24 @@ import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from "../common/cons
 import { TechneApplicationContext } from "../core/application-context";
 import type { CorsOptions, GlobalPrefixOptions, VersioningOptions } from "../core/http-options";
 import { Scanner } from "../core/scanner";
-import { Container } from "../core/container";
+import {
+  Container,
+  getClassScope,
+  getProviderScope,
+  isCustomProvider,
+} from "../core/container";
+import { Scope } from "../core/scope";
 import { RoutesResolver } from "../core/router/routes-resolver";
 import { ElysiaAdapter } from "../platform/elysia-adapter";
 import { Logger } from "../services/logger.service";
 import { BusRegistry } from "../cqrs/bus";
 import { TechneApplication } from "../core/techne-application";
-import { MicroservicesAdapter } from "../microservices/adapter";
-import type { MicroserviceOptions } from "../microservices/types";
 import { MqRegistry } from "../mq/registry";
 import { MQ_DRIVER } from "../mq/tokens";
 import type { CanActivate } from "../interfaces/can-activate.interface";
 import type { TechneConfig } from "../core/define-techne-config";
+import type { Feature } from "../core/define-feature";
+import type { PluginDefinition } from "../core/plugins/define-plugin";
 
 /**
  * Config file lookup order: `techne.config.{ts,js,mjs}` is canonical;
@@ -90,8 +96,8 @@ export function __resetTechneConfigCache() {
 
 function mergeConfig(
   base: TechneConfig | null,
-  overrides?: TechneApplicationOptions,
-): TechneApplicationOptions & { module?: any; port?: number; host?: string } {
+  overrides?: AppBootstrapConfig,
+): AppBootstrapConfig & { port?: number; host?: string } {
   if (!base && !overrides) return {};
   if (!base) return { ...(overrides ?? {}) };
   if (!overrides) return { ...base };
@@ -154,50 +160,47 @@ export interface TechneApplicationOptions {
   health?: TechneHealthOptions;
 }
 
+export interface AppBootstrapConfig extends TechneApplicationOptions {
+  controllers?: any[];
+  providers?: any[];
+  features?: Feature[];
+  plugins?: PluginDefinition<any>[];
+}
+
 export class TechneFactory {
+  public static async create(config: AppBootstrapConfig): Promise<TechneApplication>;
   public static async create(): Promise<TechneApplication>;
-  public static async create(module: any): Promise<TechneApplication>;
   public static async create(
-    module: any,
-    options: TechneApplicationOptions,
-  ): Promise<TechneApplication>;
-  public static async create(
-    module?: any,
-    options?: TechneApplicationOptions,
+    config?: AppBootstrapConfig,
   ): Promise<TechneApplication> {
     const fileConfig = await loadTechneConfigFile();
-    const merged = mergeConfig(fileConfig, options);
-    const resolvedModule = module ?? merged.module ?? fileConfig?.module;
-    if (!resolvedModule) {
+    if (!config && !fileConfig) {
       throw new Error(
-        "TechneFactory.create(): no module supplied and no `module` declared in techne.config.ts.",
+        "TechneFactory.create(): no config supplied and no `techne.config.ts` found.",
       );
     }
-    // Strip bootstrap-only fields from the options passed to the rest of the
-    // factory — they aren't part of `TechneApplicationOptions`.
-    const { module: _m, port: _p, host: _h, ...effectiveOptions } = merged as any;
-    options = effectiveOptions;
-    module = resolvedModule;
 
-    const loggerEnabled = options?.logger !== false;
+    const merged = mergeConfig(fileConfig, config);
+    const {
+      port: _p,
+      host: _h,
+      controllers: _c,
+      providers: _pv,
+      features: _f,
+      plugins = [],
+      ...effectiveOptions
+    } = merged as any;
+
+    const loggerEnabled = effectiveOptions?.logger !== false;
     Logger.setEnabled(loggerEnabled);
 
     const logger = new Logger("TechneFactory");
     logger.log("Starting application initialization...");
 
-    const container = options?.container || new Container();
+    const container = effectiveOptions?.container || new Container();
     const scanner = new Scanner({ logger: loggerEnabled, container });
-    await scanner.scan(module);
-    const buses = new BusRegistry(container);
-    buses.register();
-    buses.registerFromClasses([...scanner.getProviders(), ...scanner.getControllers()]);
 
-    let mqRegistry: MqRegistry | undefined;
-    if (container.has(MQ_DRIVER)) {
-      mqRegistry = new MqRegistry(container, container.get(MQ_DRIVER));
-      mqRegistry.register();
-      mqRegistry.registerFromClasses([...scanner.getProviders(), ...scanner.getControllers()]);
-    }
+    scanner.scanFlat(this.flattenBootstrapConfig(merged));
 
     const adapter = new ElysiaAdapter({ logger: loggerEnabled, container });
     const routesResolver = new RoutesResolver(scanner);
@@ -207,17 +210,35 @@ export class TechneFactory {
       container,
       routesResolver,
       routesResolver.executionContext,
-      mqRegistry,
+      undefined,
       {
-        shutdown: options?.shutdown,
-        health: options?.health,
-        userOptions: (options ?? {}) as Record<string, unknown>,
+        shutdown: effectiveOptions?.shutdown,
+        health: effectiveOptions?.health,
+        userOptions: (effectiveOptions ?? {}) as Record<string, unknown>,
       },
     );
 
+    for (const plugin of plugins) {
+      await app.register(plugin);
+    }
+
+    this.initializeStaticProviders(scanner, container, loggerEnabled);
+    await scanner.callLifecycleHook("onModuleInit");
+
+    const buses = new BusRegistry(container);
+    buses.register();
+    buses.registerFromClasses([...scanner.getProviders(), ...scanner.getControllers()]);
+
+    if (container.has(MQ_DRIVER)) {
+      const mqRegistry = new MqRegistry(container, container.get(MQ_DRIVER));
+      mqRegistry.register();
+      mqRegistry.registerFromClasses([...scanner.getProviders(), ...scanner.getControllers()]);
+      app.attachMqRegistry(mqRegistry);
+    }
+
     const globalGuards = [
       ...this.normalizeGlobalProvider<CanActivate | Function>(container, APP_GUARD),
-      ...(options?.globalGuards ?? []),
+      ...(effectiveOptions?.globalGuards ?? []),
     ];
     const globalFilters = this.normalizeGlobalProvider(container, APP_FILTER);
     const globalInterceptors = this.normalizeGlobalProvider(container, APP_INTERCEPTOR);
@@ -236,55 +257,55 @@ export class TechneFactory {
       routesResolver.executionContext.setGlobalPipes(globalPipes as any);
     }
 
-    if (options?.cors) {
-      app.applyCorsFromConfig(options.cors);
+    if (effectiveOptions?.cors) {
+      app.applyCorsFromConfig(effectiveOptions.cors);
     }
 
     app.initializeRoutes({
-      globalPrefix: options?.globalPrefix
+      globalPrefix: effectiveOptions?.globalPrefix
         ? {
-            prefix: options.globalPrefix,
-            exclude: options.globalPrefixOptions?.exclude,
+            prefix: effectiveOptions.globalPrefix,
+            exclude: effectiveOptions.globalPrefixOptions?.exclude,
           }
         : undefined,
-      versioning: options?.versioning,
+      versioning: effectiveOptions?.versioning,
     });
 
-    logger.log("Dependencies initialized");
-    logger.log(`Mapped ${app.getRoutes().length} routes`);
+    const factoryLogger = new Logger("TechneFactory");
+    factoryLogger.log("Dependencies initialized");
+    factoryLogger.log(`Mapped ${app.getRoutes().length} routes`);
 
     return app;
   }
 
-  public static async createMicroservice(module: any, options: MicroserviceOptions) {
-    const container = new Container();
-    const scanner = new Scanner({ logger: false, container });
-    await scanner.scan(module);
-
-    const buses = new BusRegistry(container);
-    buses.register();
-    buses.registerFromClasses([...scanner.getProviders(), ...scanner.getControllers()]);
-
-    if (container.has(MQ_DRIVER)) {
-      const mqRegistry = new MqRegistry(container, container.get(MQ_DRIVER));
-      mqRegistry.register();
-      mqRegistry.registerFromClasses([...scanner.getProviders(), ...scanner.getControllers()]);
-    }
-
-    const adapter = new MicroservicesAdapter(container);
-    return adapter.create([...scanner.getProviders(), ...scanner.getControllers()], options);
-  }
-
   public static async createApplicationContext(
-    module: any,
-    options?: Pick<TechneApplicationOptions, "container" | "logger">,
+    config: AppBootstrapConfig,
   ): Promise<TechneApplicationContext> {
-    const loggerEnabled = options?.logger !== false;
+    const loggerEnabled = config?.logger !== false;
     Logger.setEnabled(loggerEnabled);
 
-    const container = options?.container || new Container();
+    const container = config?.container || new Container();
     const scanner = new Scanner({ logger: loggerEnabled, container });
-    await scanner.scan(module);
+    scanner.scanFlat(this.flattenBootstrapConfig(config));
+
+    const adapter = new ElysiaAdapter({ logger: loggerEnabled, container });
+    const routesResolver = new RoutesResolver(scanner);
+    const pluginApp = new TechneApplication(
+      adapter,
+      scanner,
+      container,
+      routesResolver,
+      routesResolver.executionContext,
+      undefined,
+      { userOptions: config as Record<string, unknown> },
+    );
+
+    for (const plugin of config.plugins ?? []) {
+      await pluginApp.register(plugin);
+    }
+
+    this.initializeStaticProviders(scanner, container, loggerEnabled);
+    await scanner.callLifecycleHook("onModuleInit");
 
     const buses = new BusRegistry(container);
     buses.register();
@@ -298,6 +319,48 @@ export class TechneFactory {
     }
 
     return new TechneApplicationContext(scanner, container, mqRegistry).init();
+  }
+
+  private static flattenBootstrapConfig(config: AppBootstrapConfig): {
+    controllers?: any[];
+    providers?: any[];
+  } {
+    return {
+      controllers: [
+        ...(config.controllers ?? []),
+        ...(config.features ?? []).flatMap((feature) => feature.controllers ?? []),
+      ],
+      providers: [
+        ...(config.providers ?? []),
+        ...(config.features ?? []).flatMap((feature) => feature.providers ?? []),
+      ],
+    };
+  }
+
+  private static initializeStaticProviders(
+    scanner: Scanner,
+    container: Container,
+    loggerEnabled: boolean,
+  ): void {
+    const logger = new Logger("TechneFactory");
+    for (const provider of scanner.getProviders()) {
+      if (isCustomProvider(provider)) {
+        const token = (provider as any).provide;
+        if (loggerEnabled) {
+          logger.debug(`Initializing provider ${String(token?.name || token)}`);
+        }
+        if (getProviderScope(provider) === Scope.DEFAULT && container.isStatic(token)) {
+          container.get(token);
+        }
+      } else {
+        if (loggerEnabled) {
+          logger.debug(`Initializing provider ${provider.name || "UnknownProvider"}`);
+        }
+        if (getClassScope(provider) === Scope.DEFAULT && container.isStatic(provider)) {
+          container.get(provider);
+        }
+      }
+    }
   }
 
   private static normalizeGlobalProvider<T>(container: Container, token: any): T[] {
@@ -316,9 +379,7 @@ export class TechneFactory {
       );
     }
 
-    const resolved = container.get<T | T[]>(token, {
-      module: container.getRootModule(),
-    });
+    const resolved = container.get<T | T[]>(token);
     return Array.isArray(resolved) ? resolved : [resolved];
   }
 }
