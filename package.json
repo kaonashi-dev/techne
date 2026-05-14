@@ -52,11 +52,6 @@
       "import": "./src/cqrs/index.ts",
       "types": "./dist/types/cqrs/index.d.ts"
     },
-    "./microservices": {
-      "bun": "./src/microservices/index.ts",
-      "import": "./src/microservices/index.ts",
-      "types": "./dist/types/microservices/index.d.ts"
-    },
     "./queue": {
       "bun": "./src/queue/index.ts",
       "import": "./src/queue/index.ts",
