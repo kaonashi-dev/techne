@@ -122,8 +122,7 @@ describe("core runtime", () => {
       constructor(private readonly state: RequestStateService) {}
 
       canActivate(context: any) {
-        const request = context.switchToHttp().getRequest() as Record<string, unknown>;
-        (request.request as Record<string, unknown>).guardStateId = this.state.id;
+        (context.ctx.request as Record<string, unknown>).guardStateId = this.state.id;
         return true;
       }
     }

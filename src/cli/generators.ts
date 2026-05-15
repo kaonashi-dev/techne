@@ -183,11 +183,10 @@ export class ${className} {}
 
 export async function generateMiddleware(name: string, dir: string = ".") {
   const fnName = `${name}Middleware`;
-  const content = `import type { ExecutionContext } from "@kaonashi-dev/techne/common";
-
+  const content = `
 // TODO: implement ${fnName} logic.
-export async function ${fnName}(context: ExecutionContext) {
-  // Access request via context.switchToHttp().getRequest()
+export async function ${fnName}(context: any) {
+  // Access the request with context.request.
   return;
 }
 `;
@@ -197,11 +196,11 @@ export async function ${fnName}(context: ExecutionContext) {
 
 export async function generateGuard(name: string, dir: string = ".") {
   const className = `${capitalize(name)}Guard`;
-  const content = `import { Injectable, type CanActivate, type ExecutionContext } from "@kaonashi-dev/techne/common";
+  const content = `import { Injectable, type CanActivate, type ResponseHookContext } from "@kaonashi-dev/techne/common";
 
 @Injectable()
 export class ${className} implements CanActivate {
-  canActivate(context: ExecutionContext): boolean | Promise<boolean> {
+  canActivate(context: ResponseHookContext): boolean | Promise<boolean> {
     // TODO: implement ${className} authorization logic.
     return true;
   }
@@ -211,29 +210,13 @@ export class ${className} implements CanActivate {
   console.log(`CREATE ${name}.guard.ts`);
 }
 
-export async function generatePipe(name: string, dir: string = ".") {
-  const className = `${capitalize(name)}Pipe`;
-  const content = `import { Injectable, type PipeTransform } from "@kaonashi-dev/techne/common";
-
-@Injectable()
-export class ${className} implements PipeTransform {
-  transform(value: any) {
-    // TODO: implement ${className} transformation logic.
-    return value;
-  }
-}
-`;
-  await fs.writeFile(path.join(dir, `${name}.pipe.ts`), content);
-  console.log(`CREATE ${name}.pipe.ts`);
-}
-
 export async function generateFilter(name: string, dir: string = ".") {
   const className = `${capitalize(name)}Filter`;
-  const content = `import { Catch, type ExceptionFilter, type ArgumentsHost } from "@kaonashi-dev/techne/common";
+  const content = `import { Catch, type ExceptionFilter, type ResponseHookContext } from "@kaonashi-dev/techne/common";
 
 @Catch()
 export class ${className} implements ExceptionFilter {
-  catch(exception: unknown, host: ArgumentsHost) {
+  catch(exception: unknown, context: ResponseHookContext) {
     // TODO: implement ${className} exception handling.
   }
 }
@@ -242,20 +225,20 @@ export class ${className} implements ExceptionFilter {
   console.log(`CREATE ${name}.filter.ts`);
 }
 
-export async function generateInterceptor(name: string, dir: string = ".") {
-  const className = `${capitalize(name)}Interceptor`;
-  const content = `import { Injectable, type TechneInterceptor, type ExecutionContext, type CallHandler } from "@kaonashi-dev/techne/common";
+export async function generateHook(name: string, dir: string = ".") {
+  const className = `${capitalize(name)}ResponseHook`;
+  const content = `import { Injectable, type ResponseHook, type ResponseHookContext } from "@kaonashi-dev/techne/common";
 
 @Injectable()
-export class ${className} implements TechneInterceptor {
-  async intercept(context: ExecutionContext, next: CallHandler) {
-    // TODO: implement ${className} interception logic.
-    return next.handle();
+export class ${className} implements ResponseHook {
+  transform(result: unknown, context: ResponseHookContext): unknown | Promise<unknown> {
+    // TODO: implement ${className} response transform.
+    return result;
   }
 }
 `;
-  await fs.writeFile(path.join(dir, `${name}.interceptor.ts`), content);
-  console.log(`CREATE ${name}.interceptor.ts`);
+  await fs.writeFile(path.join(dir, `${name}.hook.ts`), content);
+  console.log(`CREATE ${name}.hook.ts`);
 }
 
 export async function generateDto(name: string, dir: string = ".") {

@@ -2,7 +2,7 @@
  * Slow-path benchmark.
  *
  * Exercises the cost-tagged enhancer execution path: routes with at least
- * one guard, pipe, interceptor, or filter (or a request-scoped dep) bypass
+ * one guard, response hook, filter, or request-scoped dep bypasses
  * the arity-specialized fast path. The guard here is the cheapest possible
  * one — a static `@Injectable()` `CanActivate` that always allows — so the
  * delta between this scenario and `fast-path` is the pure cost of the
@@ -10,15 +10,7 @@
  * static-guard optimization).
  */
 
-import {
-  Controller,
-  Get,
-  Injectable,
-  Module,
-  Param,
-  UseGuards,
-  type CanActivate,
-} from "../src/common";
+import { Controller, Get, Injectable, Param, UseGuards, type CanActivate } from "../src/common";
 import { TechneFactory } from "../src/core";
 import { emitResults, getDefaults, isQuick, runScenario, type ScenarioResult } from "./scenarios";
 
@@ -55,10 +47,11 @@ class SlowController {
   }
 }
 
-@Module({ controllers: [SlowController], providers: [SlowService, AllowAllGuard] })
-class SlowModule {}
-
-const techneApp = await TechneFactory.create(SlowModule, { logger: false });
+const techneApp = await TechneFactory.create({
+  controllers: [SlowController],
+  providers: [SlowService, AllowAllGuard],
+  logger: false,
+});
 
 export async function runSlowPathBench(): Promise<ScenarioResult[]> {
   const opts = getDefaults(isQuick());

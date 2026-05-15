@@ -9,7 +9,7 @@
  *   bun run benchmarks/index.ts --quick    # CI-smoke (~60s budget)
  *   bun run benchmarks/index.ts --json     # machine-readable for graphing
  *
- * Note: each scenario boots its own Techne application. Modules are
+ * Note: each scenario boots its own Techne application. Flat configs are
  * intentionally isolated so a cache or singleton in one scenario can't
  * affect another. The runner is therefore I/O-light but allocation-heavy
  * — the `stabilize()` step inside each `runScenario` keeps GC out of the

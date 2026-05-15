@@ -2,16 +2,16 @@ import {
   CONTROLLER_METADATA,
   EXCEPTION_FILTERS_METADATA,
   GUARDS_METADATA,
-  INTERCEPTORS_METADATA,
   MIDDLEWARE_METADATA,
+  ON_RESPONSE_METADATA,
   PARAMS_METADATA,
-  PIPES_METADATA,
   ROUTES_METADATA,
   VERSION_METADATA,
 } from "../../common/constants";
 import type { ParamMetadata } from "../../decorators/params.decorator";
 import type { RouteMetadata } from "../../decorators/routes.decorator";
 import { getOrCreateDtoSchema } from "../../schema/dto";
+import { Logger } from "../../services/logger.service";
 import type { Scanner } from "../scanner";
 
 export interface DiscoveredRouteDefinition extends RouteMetadata {
@@ -20,14 +20,14 @@ export interface DiscoveredRouteDefinition extends RouteMetadata {
   middlewares: any[];
   guards: any[];
   filters: any[];
-  interceptors: any[];
-  pipes: any[];
+  responseHooks: any[];
   paramsMetadata: ParamMetadata[];
   versions: string[];
 }
 
 export class RouterExplorer {
   private readonly discoveredRoutesCache = new WeakMap<any, DiscoveredRouteDefinition[]>();
+  private readonly logger = new Logger("RouterExplorer");
 
   constructor(private readonly scanner: Scanner) {}
 
@@ -50,9 +50,8 @@ export class RouterExplorer {
       const controllerGuards: any[] = Reflect.getMetadata(GUARDS_METADATA, controller) || [];
       const controllerFilters: any[] =
         Reflect.getMetadata(EXCEPTION_FILTERS_METADATA, controller) || [];
-      const controllerInterceptors: any[] =
-        Reflect.getMetadata(INTERCEPTORS_METADATA, controller) || [];
-      const controllerPipes: any[] = Reflect.getMetadata(PIPES_METADATA, controller) || [];
+      const controllerResponseHooks: any[] =
+        Reflect.getMetadata(ON_RESPONSE_METADATA, controller) || [];
       const paramsByHandler: Record<string, ParamMetadata[]> =
         Reflect.getMetadata(PARAMS_METADATA, controller) || {};
       const controllerRoutes: DiscoveredRouteDefinition[] = [];
@@ -71,9 +70,8 @@ export class RouterExplorer {
         const routeGuards: any[] = Reflect.getMetadata(GUARDS_METADATA, routeHandler) || [];
         const routeFilters: any[] =
           Reflect.getMetadata(EXCEPTION_FILTERS_METADATA, routeHandler) || [];
-        const routeInterceptors: any[] =
-          Reflect.getMetadata(INTERCEPTORS_METADATA, routeHandler) || [];
-        const routePipes: any[] = Reflect.getMetadata(PIPES_METADATA, routeHandler) || [];
+        const routeResponseHooks: any[] =
+          Reflect.getMetadata(ON_RESPONSE_METADATA, routeHandler) || [];
         const methodParams = paramsByHandler[route.handlerName] || [];
         const paramsMetadata =
           methodParams.length === 0
@@ -95,8 +93,7 @@ export class RouterExplorer {
           middlewares: [...controllerMiddlewares, ...routeMiddlewares],
           guards: [...controllerGuards, ...routeGuards],
           filters: [...controllerFilters, ...routeFilters],
-          interceptors: [...controllerInterceptors, ...routeInterceptors],
-          pipes: [...controllerPipes, ...routePipes],
+          responseHooks: [...controllerResponseHooks, ...routeResponseHooks],
           paramsMetadata,
           versions: routeVersions,
         });
@@ -113,8 +110,17 @@ export class RouterExplorer {
     route: RouteMetadata,
     paramsMetadata: ParamMetadata[],
   ): RouteMetadata["schema"] {
-    // If the route already declares an explicit body schema, respect it.
-    if (route.schema?.body) return route.schema;
+    const bodyDtoParam = paramsMetadata.find(
+      (param) => param.type === "body" && (param.dtoClass || param.metatype),
+    );
+    if (route.schema?.body) {
+      if (bodyDtoParam) {
+        this.logger.warn(
+          `${route.handlerName} declares both @Body(Dto) and a route body schema; using the route schema.`,
+        );
+      }
+      return route.schema;
+    }
 
     for (const param of paramsMetadata) {
       if (param.type === "body" && param.dtoClass) {
