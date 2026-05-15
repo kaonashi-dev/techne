@@ -1,0 +1,27 @@
+---
+title: "Testing"
+description: "Test.createTestingModule + overrideProvider lets tests swap out real providers for fakes."
+---
+
+Testing utilities live under `./testing`.
+
+```ts
+import { Test } from "@kaonashi-dev/techne/testing";
+
+const module = await Test.createTestingModule({
+  providers: [UserService, DatabaseService],
+})
+  .overrideProvider(DatabaseService)
+  .useValue({
+    find: () => [{ id: 1, name: "Mock User" }],
+  })
+  .compile();
+
+const userService = module.get<UserService>(UserService);
+```
+
+`createTestingModule` accepts the same `providers` / `controllers` /
+`features` you would pass to `TechneFactory.create()`, but it does not
+boot an HTTP server. `overrideProvider(token).useValue(...)` is the
+canonical way to swap out a dependency; `useClass` and `useFactory` are
+also available.

@@ -1,0 +1,25 @@
+---
+title: "Project structure"
+description: "Reference for the src/ layout used by Techne and projects scaffolded with the CLI."
+---
+
+```text
+src/
+  cli/            CLI scaffolding and generators
+  common/         Public decorators, exceptions, and schema helpers
+  config/         ConfigService, config plugins, and registerAs helpers
+  core/           Application core, DI container, and bootstrap APIs
+    plugins/      Plugin protocol (`definePlugin`, `PluginContext`)
+  cqrs/           Command, query, event buses and event store
+  decorators/     Routing, DI, and metadata decorators
+  exceptions/     HTTP exception classes
+  factory/        TechneFactory bootstrap implementation
+  health/         Basic health check service and decorator
+  jwt/            JWT plugin, service, and auth guard
+  mq/             BullMQ-style queue core and framework integration
+  platform/       Elysia adapter
+  queue/          Legacy core-only queue compatibility barrel
+  schema/         TypeBox-backed schema helpers and DTO metadata
+  swagger/        Lightweight OpenAPI document generation and setup
+  testing/        Testing module utilities
+```

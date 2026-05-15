@@ -1,0 +1,53 @@
+---
+title: "Exceptions"
+description: "HttpException subclasses serialize as RFC 7807 problem documents with code, type, instance, and requestId."
+---
+
+Techne serializes exceptions as RFC 7807 problem documents with
+`Content-Type: application/problem+json`. Subclasses of `HttpException` accept
+an optional second argument that attaches a machine-readable `code` and an
+explicit problem `type` URI:
+
+```ts
+import { NotFoundException } from "@kaonashi-dev/techne/common";
+
+throw new NotFoundException("User #99 not found", { code: "user.not_found" });
+```
+
+The serialized response looks like:
+
+```json
+{
+  "type": "https://github.com/kaonashi-dev/techne/blob/main/docs/errors/not-found",
+  "title": "Not Found",
+  "status": 404,
+  "detail": "User #99 not found",
+  "code": "user.not_found",
+  "instance": "/users/99",
+  "requestId": "<uuid>"
+}
+```
+
+`instance` is the request path and `requestId` is propagated from the
+`x-request-id` header (or generated on the fly when absent) and echoed back on
+the response. `errors` is added on 422 validation failures as a
+`ValidationError[]` extension field. In production, `detail` is omitted for
+non-`HttpException` throws so server-side error messages never leak to
+clients. `REASON_PHRASES` is exported from `@kaonashi-dev/techne/common` for
+callers that need the standard HTTP reason-phrase table.
+
+## Subclasses
+
+Per-status subclasses live in `@kaonashi-dev/techne/common`:
+
+- [`BadRequestException`](/errors/bad-request)
+- [`UnauthorizedException`](/errors/unauthorized)
+- [`ForbiddenException`](/errors/forbidden)
+- [`NotFoundException`](/errors/not-found)
+- [`ConflictException`](/errors/conflict)
+- [`UnprocessableEntityException`](/errors/unprocessable-entity)
+- [`TooManyRequestsException`](/errors/too-many-requests)
+- [`InternalServerErrorException`](/errors/internal-server-error)
+- [`BadGatewayException`](/errors/bad-gateway)
+- [`ServiceUnavailableException`](/errors/service-unavailable)
+- [`GatewayTimeoutException`](/errors/gateway-timeout)

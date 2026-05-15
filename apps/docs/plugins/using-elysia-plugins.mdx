@@ -1,0 +1,17 @@
+---
+title: "Using Elysia plugins"
+description: "Attach native Elysia plugins through app.use()."
+---
+
+Native Elysia plugins can be attached through `app.use()`:
+
+```ts
+import { cors } from "@elysiajs/cors";
+
+app.use(cors());
+```
+
+`app.use()` is the same path Techne plugins use under the hood after
+`ctx.http()` resolves. Anything that works as an Elysia `.use()` argument
+works here. For Techne-aware extension points (DI, lifecycle, named
+dependencies), prefer [`definePlugin`](/plugins/plugin-protocol).

@@ -1,0 +1,30 @@
+---
+title: "Drivers"
+description: "RedisDriver, MemoryDriver, and the RedisClient adapter shipped with @kaonashi-dev/techne/mq."
+---
+
+`@kaonashi-dev/techne/mq` ships two drivers out of the box:
+
+- **`MemoryDriver`** — an in-process queue store for tests, local
+  development, and one-off scripts.
+- **`RedisDriver`** — production-grade driver backed by Redis. Uses a
+  configurable key prefix (default `techne:mq`).
+
+```ts
+import { MemoryDriver, Queue, RedisClient, RedisDriver } from "@kaonashi-dev/techne/mq";
+
+const memoryQueue = new Queue("emails", { driver: new MemoryDriver() });
+
+const redisQueue = new Queue("emails", {
+  driver: new RedisDriver({
+    connection: { host: "127.0.0.1", port: 6379, prefix: "techne:mq" },
+  }),
+});
+```
+
+`RedisClient` is a thin wrapper over the underlying Redis driver — it is
+exported so callers can share a single connection across multiple
+queues/workers, or instrument it for tracing.
+
+If you're upgrading from Bnest, the default Redis prefix changed from
+`bnest:mq` to `techne:mq` — see the [migrating reference](/reference/migrating).

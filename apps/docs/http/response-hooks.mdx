@@ -1,0 +1,35 @@
+---
+title: "Response hooks"
+description: "@OnResponse + ResponseHook let you transform handler return values and patch headers in a flat lifecycle step."
+---
+
+`@OnResponse(...hooks)` attaches a `ResponseHook` to a controller (or
+single route). Each hook receives the handler's return value and the
+Elysia context and may patch headers, swap the body, or short-circuit.
+
+```ts
+import { Controller, Get, OnResponse } from "@kaonashi-dev/techne/common";
+import type { ResponseHook } from "@kaonashi-dev/techne/common";
+
+const CacheHeaderHook: ResponseHook = {
+  transform(result, context) {
+    context.ctx.set.headers = {
+      ...(context.ctx.set.headers ?? {}),
+      "cache-control": "no-store",
+    };
+    return result;
+  },
+};
+
+@Controller("reports")
+@OnResponse(CacheHeaderHook)
+class ReportsController {
+  @Get("/")
+  list() {
+    return [];
+  }
+}
+```
+
+Response hooks replace the v0 interceptor surface — for the migration path
+see the [migrating reference](/reference/migrating).
