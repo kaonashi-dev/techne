@@ -1,0 +1,15 @@
+---
+title: "techne test"
+description: "Run the test suite (`bun test`) with optional watch/coverage."
+---
+
+```bash
+# Run the test suite
+bunx @kaonashi-dev/techne test tests/ --watch --coverage
+```
+
+`test` shells out to `bun test`. Pass a path to scope the run; `--watch`
+keeps re-running on save, and `--coverage` writes a coverage report.
+
+For testing patterns (modules, `overrideProvider`, etc.), see
+[Testing](/testing/overview).

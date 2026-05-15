@@ -1,0 +1,33 @@
+---
+title: "CORS"
+description: "Enable CORS declaratively in techne.config.ts or attach the Elysia plugin directly."
+---
+
+The simplest path is to set `cors` in `techne.config.ts`. The options object
+is forwarded straight to the underlying Elysia CORS plugin:
+
+```ts
+// techne.config.ts
+import { defineTechneConfig } from "@kaonashi-dev/techne/core";
+
+export default defineTechneConfig({
+  features: [AppFeature],
+  port: 3000,
+  cors: { origin: true, credentials: true },
+});
+```
+
+## Plugin form
+
+If you need fine-grained control (multiple instances, dynamic origin
+resolution, conditional attach), attach the Elysia CORS plugin directly:
+
+```ts
+import { cors } from "@elysiajs/cors";
+
+app.use(cors());
+```
+
+`app.use()` accepts any native Elysia plugin and is the same path Techne
+plugins use under the hood. See [Using Elysia plugins](/plugins/using-elysia-plugins)
+for interop notes.

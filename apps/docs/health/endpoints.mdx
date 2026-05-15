@@ -1,0 +1,45 @@
+---
+title: "Health endpoints"
+description: "/healthz and /readyz are auto-registered; configure custom checks via health.checks."
+---
+
+`TechneFactory.create()` auto-registers two health endpoints:
+
+- `GET /healthz` — liveness. Always returns 200 once the process is up.
+- `GET /readyz` — readiness. Returns 200 only after `onApplicationBootstrap`
+  has completed AND every configured health check resolves to
+  `healthy: true`. During shutdown, readiness flips to `false` immediately so
+  load balancers can stop routing traffic before in-flight requests drain.
+
+Paths and checks are configurable through the `health` option:
+
+```ts
+// techne.config.ts
+import { defineTechneConfig } from "@kaonashi-dev/techne/core";
+import { AppFeature } from "./src/app.module";
+import { db } from "./src/db";
+
+export default defineTechneConfig({
+  features: [AppFeature],
+  health: {
+    livenessPath: "/healthz",
+    readinessPath: "/readyz",
+    checks: [
+      async () => ({
+        name: "database",
+        healthy: await db.ping(),
+      }),
+    ],
+  },
+});
+```
+
+Set `health: { enabled: false }` to opt out of the auto-registered endpoints
+entirely.
+
+## HealthCheckService
+
+`HealthCheckService` from `@kaonashi-dev/techne/health` provides `pingCheck()`
+and `memoryCheck()` helpers for callers that want to expose a custom health
+indicator independently of the auto-registered endpoints. Inject it like any
+other provider and call its helpers from your own route.

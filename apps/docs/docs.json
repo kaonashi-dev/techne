@@ -1,0 +1,195 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "Techne",
+  "colors": {
+    "primary": "#000000",
+    "light": "#0070f3",
+    "dark": "#000000"
+  },
+  "favicon": "/favicon.svg",
+  "navigation": {
+    "anchors": [
+      {
+        "anchor": "Documentation",
+        "icon": "book-open",
+        "groups": [
+          {
+            "group": "Get started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart",
+              "project-structure"
+            ]
+          },
+          {
+            "group": "Concepts",
+            "pages": [
+              "concepts/features",
+              "concepts/controllers",
+              "concepts/dependency-injection",
+              "concepts/application-lifecycle"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/techne-config",
+              "configuration/environment"
+            ]
+          },
+          {
+            "group": "HTTP",
+            "pages": [
+              "http/routing",
+              "http/middleware",
+              "http/guards",
+              "http/validation",
+              "http/response-hooks",
+              "http/exceptions",
+              "http/cors"
+            ]
+          },
+          {
+            "group": "Plugins",
+            "pages": [
+              "plugins/plugin-protocol",
+              "plugins/using-elysia-plugins"
+            ]
+          },
+          {
+            "group": "Auth",
+            "pages": [
+              "auth/jwt",
+              "auth/roles"
+            ]
+          },
+          {
+            "group": "Swagger",
+            "pages": [
+              "swagger/auto-document",
+              "swagger/custom-document"
+            ]
+          },
+          {
+            "group": "Health",
+            "pages": [
+              "health/endpoints",
+              "health/graceful-shutdown"
+            ]
+          },
+          {
+            "group": "Testing",
+            "pages": [
+              "testing/overview"
+            ]
+          },
+          {
+            "group": "CQRS",
+            "pages": [
+              "cqrs/overview",
+              "cqrs/handlers",
+              "cqrs/event-store"
+            ]
+          },
+          {
+            "group": "MQ",
+            "pages": [
+              "mq/overview",
+              "mq/processors",
+              "mq/drivers",
+              "mq/legacy-queue"
+            ]
+          },
+          {
+            "group": "Contract",
+            "pages": [
+              "contract/rpc-client",
+              "contract/codegen"
+            ]
+          },
+          {
+            "group": "CLI",
+            "pages": [
+              "cli/overview",
+              "cli/new",
+              "cli/dev",
+              "cli/start",
+              "cli/build",
+              "cli/test",
+              "cli/deploy",
+              "cli/doctor",
+              "cli/generate"
+            ]
+          },
+          {
+            "group": "Errors",
+            "pages": [
+              "errors/overview",
+              "errors/bad-request",
+              "errors/unauthorized",
+              "errors/forbidden",
+              "errors/not-found",
+              "errors/conflict",
+              "errors/unprocessable-entity",
+              "errors/too-many-requests",
+              "errors/internal-server-error",
+              "errors/bad-gateway",
+              "errors/service-unavailable",
+              "errors/gateway-timeout"
+            ]
+          },
+          {
+            "group": "Performance",
+            "pages": [
+              "performance/benchmarks",
+              "performance/optimizations"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "reference/status-license"
+            ]
+          }
+        ]
+      },
+      {
+        "anchor": "Changelog",
+        "icon": "list",
+        "groups": [
+          {
+            "group": "Reference",
+            "pages": [
+              "reference/changelog"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg",
+    "href": "https://github.com/kaonashi-dev/techne"
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "Issues",
+        "href": "https://github.com/kaonashi-dev/techne/issues"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "GitHub",
+      "href": "https://github.com/kaonashi-dev/techne"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/kaonashi-dev/techne"
+    }
+  }
+}

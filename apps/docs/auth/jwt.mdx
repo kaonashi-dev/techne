@@ -1,0 +1,28 @@
+---
+title: "JWT"
+description: "jwt() plugin, JwtService, and JwtAuthGuard."
+---
+
+```ts
+import { APP_GUARD, Public, Roles, RolesGuard } from "@kaonashi-dev/techne/common";
+import { Reflector, TechneFactory } from "@kaonashi-dev/techne/core";
+import { jwt, JwtAuthGuard, JwtService } from "@kaonashi-dev/techne/jwt";
+
+const app = await TechneFactory.create({
+  plugins: [jwt({ secret: "top-secret" })],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useFactory: (jwt: JwtService, reflector: Reflector) => [
+        new JwtAuthGuard(reflector, jwt),
+        new RolesGuard(reflector),
+      ],
+      inject: [JwtService, Reflector],
+    },
+  ],
+});
+```
+
+Use `@Public()` to skip auth and `@Roles(...)` for role metadata consumed by
+`RolesGuard`. See [Roles](/auth/roles) for the role-based authorization
+companion piece.

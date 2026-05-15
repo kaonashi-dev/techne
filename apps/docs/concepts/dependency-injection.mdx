@@ -1,0 +1,50 @@
+---
+title: "Dependency injection"
+description: "@Injectable providers, @Inject tokens, custom factories, scopes, and ModuleRef."
+---
+
+Mark a class with `@Injectable()` and Techne's container will construct it
+and inject its constructor dependencies. Use `@Inject(token)` for non-class
+tokens (symbols, strings, or DI sentinels).
+
+```ts
+import { Inject, Injectable } from "@kaonashi-dev/techne/common";
+
+const API_KEY = Symbol("API_KEY");
+
+@Injectable()
+class AuthService {
+  constructor(@Inject(API_KEY) private readonly apiKey: string) {}
+}
+
+const app = await TechneFactory.create({
+  providers: [
+    AuthService,
+    { provide: API_KEY, useValue: process.env.API_KEY },
+  ],
+});
+```
+
+## Provider shapes
+
+A `providers: [...]` entry can be:
+
+- A class (the container news it up and uses it as both token and value).
+- `{ provide, useValue }` — register a literal value under `provide`.
+- `{ provide, useClass }` — register a class under a different token.
+- `{ provide, useFactory, inject? }` — call a factory; `inject` declares the
+  factory's own dependencies.
+
+## Scopes
+
+Providers default to **singleton** scope. Mark a provider as request-scoped
+when it holds per-request state — Techne will resolve a fresh instance for
+each request, sharing it across guards and handlers in that request via
+`ContextIdFactory` from `@kaonashi-dev/techne/core`.
+
+## ModuleRef
+
+`ModuleRef` lets you resolve providers dynamically when you cannot or do not
+want to inject them in the constructor (for example inside a generic helper
+that needs to look up a provider by token). It is exported from
+`@kaonashi-dev/techne/core` and resolved like any other injectable.

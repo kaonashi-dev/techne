@@ -1,0 +1,30 @@
+---
+title: "422 Unprocessable Entity"
+description: "RFC 7807 problem document for HTTP 422 Unprocessable Entity, including the `errors` extension field."
+---
+
+This page documents the Techne RFC 7807 problem document for HTTP `unprocessable-entity` errors.
+
+A `problem+json` response with `type` of
+`https://github.com/kaonashi-dev/techne/blob/main/docs/errors/unprocessable-entity.md`
+indicates the server encountered an Unprocessable Entity condition.
+
+```json
+{
+  "type": "https://github.com/kaonashi-dev/techne/blob/main/docs/errors/unprocessable-entity.md",
+  "title": "Unprocessable Entity",
+  "status": 422,
+  "detail": "<human-readable explanation>",
+  "code": "<optional stable machine-readable code>",
+  "instance": "<request URL path>",
+  "requestId": "<uuid>",
+  "errors": [
+    { "path": "/email", "message": "Expected string" }
+  ]
+}
+```
+
+On `422`, Techne attaches a `ValidationError[]` `errors` extension field
+describing each failing path. See [Validation](/http/validation) for the
+DTO/schema surface that produces it, and [Exceptions](/http/exceptions)
+for the full error contract.

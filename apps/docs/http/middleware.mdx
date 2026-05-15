@@ -1,0 +1,41 @@
+---
+title: "Middleware"
+description: "Attach @Middleware to a controller; functions run before guards in registration order."
+---
+
+`@Middleware()` accepts one or more functions that run for every request
+handled by the decorated controller. Middleware is the right place for
+cross-cutting side effects like access logs, tracing, and request-context
+setup.
+
+```ts
+import { Controller, Get, Middleware } from "@kaonashi-dev/techne/common";
+
+const logMiddleware = async (context: any) => {
+  console.log(`${context.request.method} ${context.request.url}`);
+};
+
+@Controller("admin")
+@Middleware(logMiddleware)
+class AdminController {
+  @Get("/dashboard")
+  dashboard() {
+    return { access: "granted" };
+  }
+}
+```
+
+## Ordering
+
+Middleware runs in the order it is declared on the controller, before
+[guards](/http/guards). Inside the Elysia request lifecycle, middleware
+executes during the `beforeHandle` phase.
+
+Combine middleware with `@UseGuards()` to stack cross-cutting concerns:
+
+```ts
+@Controller("admin")
+@UseGuards(AuthGuard)
+@Middleware(logMiddleware)
+class AdminController { /* ... */ }
+```

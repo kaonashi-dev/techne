@@ -1,0 +1,18 @@
+---
+title: "Optimizations"
+description: "Arity-specialized fast path, hoisted guards on the slow path, and a compiled TypeBox stringifier."
+---
+
+Notable optimizations on the hot path:
+
+- **Arity-specialized compiled handlers** for routes without enhancers.
+- **Cost-tagged slow path** that hoists static `@Injectable()` guards out at
+  route registration time so they cost nothing per request.
+- **Compiled TypeBox stringifiers** (`compileStringifier(schema)` from
+  `@kaonashi-dev/techne/schema`) used automatically for routes with a
+  `response` schema, with a per-schema `WeakMap` cache.
+- **Cheaper validation error path** and lighter request-id / in-flight
+  tracking.
+
+To see these in action against raw Elysia, run the
+[benchmark matrix](/performance/benchmarks).

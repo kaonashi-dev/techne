@@ -1,0 +1,20 @@
+---
+title: "techne build"
+description: "Build an entrypoint with `bun build` (target bun/node/browser, optional minify)."
+---
+
+```bash
+# Build an entrypoint with bun build
+bunx @kaonashi-dev/techne build src/main.ts --out dist/app.bun --minify
+bunx @kaonashi-dev/techne build src/main.ts --target node --out dist/app.js
+```
+
+`build` shells out to `bun build` under the hood and forwards the flags
+that matter most:
+
+- `--target bun | node | browser` — selects the runtime target.
+- `--out <path>` — emits a single bundled file at `<path>`.
+- `--minify` — minify the resulting bundle.
+
+For non-trivial builds, write a `bun build` script of your own — `techne build`
+is a convenience wrapper, not a replacement.

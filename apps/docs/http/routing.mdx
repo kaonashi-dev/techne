@@ -1,0 +1,53 @@
+---
+title: "Routing"
+description: "@Get / @Post / @Put / @Patch / @Delete and the @Version decorator for URI-versioned routes."
+---
+
+Routing decorators live in `@kaonashi-dev/techne/common`. Each one accepts a
+path string and an optional per-route schema bag (`{ params, query, body,
+response }`).
+
+```ts
+import { Body, Controller, Get, Param, Post, Query } from "@kaonashi-dev/techne/common";
+
+@Controller("users")
+class UsersController {
+  constructor(private readonly usersService: UsersService) {}
+
+  @Get("/")
+  findAll(@Query("page") page?: string) {
+    return this.usersService.findAll(Number(page) || 1);
+  }
+
+  @Get("/:id")
+  findOne(@Param("id") id: string) {
+    return this.usersService.findOne(id);
+  }
+
+  @Post("/", { body: CreateUserSchema })
+  create(@Body() body: any) {
+    return this.usersService.create(body);
+  }
+}
+```
+
+## URI versioning
+
+Enable versioning declaratively:
+
+```ts
+// techne.config.ts
+export default defineTechneConfig({
+  features: [UsersFeature],
+  versioning: { type: "uri" },
+});
+```
+
+Then annotate controllers or routes with `@Version("1")` and Techne will
+prefix the resulting path (e.g. `/v1/users`). Per-route `@Version` wins over
+controller-level `@Version`.
+
+## Global prefix
+
+`globalPrefix: "api"` in `techne.config.ts` prepends `/api` to every route in
+the app — combine it with versioning to get `/api/v1/...`.

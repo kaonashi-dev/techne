@@ -1,0 +1,46 @@
+---
+title: "Guards"
+description: "Authorize requests with CanActivate-style guards via @UseGuards or the APP_GUARD token."
+---
+
+A guard is any `@Injectable()` class that implements `CanActivate`. Return
+`true` to allow the request through, `false` (or throw) to reject it.
+
+```ts
+import { Controller, Get, Injectable, UseGuards } from "@kaonashi-dev/techne/common";
+import type { CanActivate } from "@kaonashi-dev/techne/common";
+
+@Injectable()
+class AuthGuard implements CanActivate {
+  canActivate(context: any) {
+    return context.headers.authorization === "Bearer valid-token";
+  }
+}
+
+@Controller("admin")
+@UseGuards(AuthGuard)
+class AdminController {
+  @Get("/dashboard")
+  dashboard() {
+    return { access: "granted" };
+  }
+}
+```
+
+## Global guards via APP_GUARD
+
+To register guards application-wide, provide them under the `APP_GUARD`
+token. Useful for stacking authentication + authorization:
+
+```ts
+import { APP_GUARD } from "@kaonashi-dev/techne/common";
+
+const app = await TechneFactory.create({
+  providers: [
+    { provide: APP_GUARD, useClass: AuthGuard },
+  ],
+});
+```
+
+`useFactory` works too — return an array of guard instances to register
+multiple guards in one entry (see the [JWT recipe](/auth/jwt)).

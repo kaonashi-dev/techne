@@ -1,0 +1,29 @@
+---
+title: "Graceful shutdown"
+description: "Drain in-flight work on SIGTERM/SIGINT; plugin onShutdown handlers fire in LIFO order."
+---
+
+Graceful shutdown is configured through `shutdown` in `techne.config.ts`:
+
+```ts
+// techne.config.ts
+import { defineTechneConfig } from "@kaonashi-dev/techne/core";
+import { AppFeature } from "./src/app.module";
+
+export default defineTechneConfig({
+  features: [AppFeature],
+  shutdown: {
+    gracePeriod: 15_000,
+    signals: ["SIGTERM", "SIGINT"],
+  },
+});
+```
+
+When a configured signal fires, the adapter starts refusing new requests with
+HTTP 503 and waits up to `gracePeriod` ms (default `10_000`) for in-flight
+work to settle before stopping. Plugin `onShutdown` handlers fire in LIFO
+order, then the MQ registry closes, then `onModuleDestroy` runs.
+
+This pairs with [health endpoints](/health/endpoints): during shutdown,
+`/readyz` flips to `false` immediately so load balancers stop routing
+traffic before in-flight requests drain.

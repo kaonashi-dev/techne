@@ -1,0 +1,39 @@
+---
+title: "Typed RPC client"
+description: "createClient<Routes>(baseUrl) returns a TypedClient that mirrors your server's route map; failures throw ClientError."
+---
+
+`@kaonashi-dev/techne/contract` ships a typed HTTP client that mirrors your
+server's route map. Generate a `Routes` type from the running server (see
+[codegen](/contract/codegen)) and pass it to `createClient<Routes>()`:
+
+```ts
+import { createClient } from "@kaonashi-dev/techne/contract";
+import type { Routes } from "./generated-routes";
+
+const client = createClient<Routes>({ baseUrl: "http://localhost:3000" });
+
+const user = await client.users[":id"].get({ params: { id: "42" } });
+```
+
+The returned `TypedClient<Routes>` is fully typed: paths, methods, params,
+query, body, and response are all inferred from the `Routes` map. Server
+errors throw `ClientError`, which carries the parsed RFC 7807 problem
+document (when the response is `application/problem+json`):
+
+```ts
+import { ClientError } from "@kaonashi-dev/techne/contract";
+
+try {
+  await client.users[":id"].get({ params: { id: "missing" } });
+} catch (err) {
+  if (err instanceof ClientError) {
+    console.error(err.problem?.code, err.status, err.message);
+  }
+  throw err;
+}
+```
+
+`ClientOptions` accepts the standard `fetch`-style knobs (`baseUrl`,
+`headers`, `fetch` override) so the client is easy to drop into tests or
+non-browser runtimes.

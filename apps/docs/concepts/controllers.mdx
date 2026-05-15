@@ -1,0 +1,36 @@
+---
+title: "Controllers"
+description: "Define HTTP routes with @Controller and verb decorators; pull request data with @Param, @Query, and @Body."
+---
+
+Decorate a class with `@Controller(prefix)` and attach HTTP verbs to its
+methods. Parameter decorators (`@Param`, `@Query`, `@Body`) extract data from
+the request.
+
+```ts
+import { Body, Controller, Get, Param, Post, Query } from "@kaonashi-dev/techne/common";
+
+@Controller("users")
+class UsersController {
+  constructor(private readonly usersService: UsersService) {}
+
+  @Get("/")
+  findAll(@Query("page") page?: string) {
+    return this.usersService.findAll(Number(page) || 1);
+  }
+
+  @Get("/:id")
+  findOne(@Param("id") id: string) {
+    return this.usersService.findOne(id);
+  }
+
+  @Post("/", { body: CreateUserSchema })
+  create(@Body() body: any) {
+    return this.usersService.create(body);
+  }
+}
+```
+
+Per-route options like `body`, `params`, `query`, and `response` accept
+TypeBox schemas — see [Validation](/http/validation) for details. For URI
+versioning, see [Routing](/http/routing).

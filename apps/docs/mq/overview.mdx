@@ -1,0 +1,56 @@
+---
+title: "MQ overview"
+description: "BullMQ-style queues and workers under @kaonashi-dev/techne/mq."
+---
+
+Queue utilities live under `./mq`. The legacy `./queue` subpath remains as a
+temporary core-only compatibility layer that re-exports `Queue`, `Worker`,
+`Job`, and `QueueEvents`.
+
+```ts
+import {
+  InjectMq,
+  Job,
+  mq,
+  MqProcess,
+  MqProcessor,
+  Queue,
+  Worker,
+} from "@kaonashi-dev/techne/mq";
+
+const queue = new Queue("emails");
+
+await queue.add("send", { email: "user@example.com" }, { attempts: 3, backoff: 1000 });
+
+@MqProcessor("emails")
+class EmailProcessor {
+  constructor(@InjectMq("emails") private readonly emails: Queue<{ email: string }>) {}
+
+  @MqProcess("send")
+  async send(job: Job<{ email: string }>) {
+    return { delivered: job.data.email };
+  }
+}
+
+const worker = new Worker(queue, async (job) => {
+  console.log("Processing:", job.name, job.data);
+  return { ok: true };
+});
+
+await worker.run();
+```
+
+## Framework integration
+
+Use the `mq()` plugin to declare queues at bootstrap and let Techne wire up
+their workers + DI tokens for you:
+
+```ts
+const app = await TechneFactory.create({
+  plugins: [mq({ queues: [{ name: "emails" }] })],
+  providers: [EmailProcessor],
+});
+```
+
+See [Processors](/mq/processors) for the decorator surface and
+[Drivers](/mq/drivers) for the Redis and in-memory backends.

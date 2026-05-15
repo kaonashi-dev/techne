@@ -1,0 +1,47 @@
+---
+title: "CQRS overview"
+description: "Command / Query / DomainEvent base classes plus the buses Techne registers automatically."
+---
+
+CQRS utilities live under `./cqrs`. Define your commands and events by
+extending the base classes, then wire up handlers.
+
+```ts
+import {
+  Command,
+  CommandBus,
+  CommandHandler,
+  DomainEvent,
+  EventBus,
+  EventHandler,
+} from "@kaonashi-dev/techne/cqrs";
+
+class CreateUserCommand extends Command<{ name: string }> {}
+
+class UserCreatedEvent extends DomainEvent<{ id: number; name: string }> {}
+
+@CommandHandler(CreateUserCommand)
+class CreateUserHandler {
+  constructor(private readonly eventBus: EventBus) {}
+
+  async execute(command: CreateUserCommand) {
+    const user = { id: 1, ...command.payload };
+    await this.eventBus.emit(new UserCreatedEvent(user), `user-${user.id}`);
+    return user;
+  }
+}
+
+@EventHandler(UserCreatedEvent)
+class UserCreatedLogger {
+  handle(event: UserCreatedEvent) {
+    console.log("User created:", event.data.name);
+  }
+}
+```
+
+`TechneFactory.create()` registers the command, query, and event buses
+automatically — you can inject `CommandBus`, `QueryBus`, and `EventBus`
+into any provider that needs them.
+
+See [Handlers](/cqrs/handlers) for the decorator surface and
+[Event store](/cqrs/event-store) for the persisted event interface.

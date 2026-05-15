@@ -1,0 +1,14 @@
+---
+title: "techne dev"
+description: "Run with hot reload and an optional inspector."
+---
+
+```bash
+# Run with hot reload and an optional inspector
+bunx @kaonashi-dev/techne dev --port 3000 --inspect
+```
+
+`dev` watches your source files and restarts on change. `--inspect`
+attaches Bun's inspector so a debugger can connect. The port resolution
+order is the same as [`bootstrap()`](/configuration/techne-config): flag
+→ `techne.config.ts` → `PORT` → `3000`.

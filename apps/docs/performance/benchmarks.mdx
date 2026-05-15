@@ -1,0 +1,24 @@
+---
+title: "Benchmarks"
+description: "How to run the benchmark matrix that lives under `benchmarks/`."
+---
+
+A benchmark matrix lives under [`benchmarks/`](https://github.com/kaonashi-dev/techne/tree/main/benchmarks)
+covering the code paths that actually matter — raw Elysia vs Techne, the
+arity-specialized **fast path** for routes with no enhancers, the cost-tagged
+**slow path** for routes with guards and filters, schema validation (valid +
+invalid bodies), response schemas (exercising the compiled TypeBox
+stringifier), container resolution, and cold start with `Bun.spawn`.
+
+```bash
+bun run benchmarks/index.ts            # full matrix
+bun run benchmarks/index.ts --quick    # CI smoke
+bun run benchmarks/index.ts --json     # machine-readable
+```
+
+`--quick` is the right flag for CI: it runs a smaller iteration count
+suitable for catching regressions without blowing the budget. `--json`
+emits a stable, machine-readable result you can diff against a baseline.
+
+For the underlying optimizations that show up in these numbers, see
+[Optimizations](/performance/optimizations).

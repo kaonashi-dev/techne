@@ -1,0 +1,33 @@
+---
+title: "Application lifecycle"
+description: "onApplicationBootstrap, onModuleDestroy, TechneApplicationContext, and ContextIdFactory."
+---
+
+`TechneFactory.create()` registers the command, query, and event buses
+automatically and walks providers in dependency order, invoking lifecycle
+hooks as it goes.
+
+## Hooks
+
+- `onApplicationBootstrap()` — called once after the container is fully
+  constructed and before the HTTP server starts listening. Plugin
+  `onReady` handlers run after this.
+- `onModuleDestroy()` — called during graceful shutdown, after plugin
+  `onShutdown` handlers (LIFO) and after the MQ registry closes.
+
+Implement these as instance methods on any `@Injectable()` provider; the
+container detects them by name.
+
+## Standalone application context
+
+`TechneFactory.createApplicationContext()` builds a flat provider graph
+**without** booting an HTTP server. It is useful for one-off scripts, jobs,
+and tests that need DI but not the request lifecycle.
+
+## Request-scoped context
+
+Request-scoped providers share a stable context across guards and handlers
+within the same request through `ContextIdFactory` from
+`@kaonashi-dev/techne/core`. Use it when you need to correlate work done
+inside the request (logging, tracing, caching) with the originating
+request id.

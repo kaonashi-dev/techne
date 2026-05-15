@@ -1,0 +1,26 @@
+---
+title: "Processors"
+description: "@MqProcessor, @MqProcess, and @InjectMq turn a class into a typed queue worker."
+---
+
+A processor is an `@Injectable()` class decorated with `@MqProcessor(name)`.
+Each `@MqProcess(jobName)` method handles one job name on the queue.
+`@InjectMq(name)` injects the typed `Queue` instance.
+
+```ts
+import { InjectMq, Job, MqProcess, MqProcessor, Queue } from "@kaonashi-dev/techne/mq";
+
+@MqProcessor("emails")
+class EmailProcessor {
+  constructor(@InjectMq("emails") private readonly emails: Queue<{ email: string }>) {}
+
+  @MqProcess("send")
+  async send(job: Job<{ email: string }>) {
+    return { delivered: job.data.email };
+  }
+}
+```
+
+Register the processor through your feature's `providers` (or the `providers`
+array on `TechneFactory.create()`) and declare the queue through the `mq()`
+plugin — see [MQ overview](/mq/overview).

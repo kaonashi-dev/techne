@@ -1,0 +1,39 @@
+---
+title: "RFC 7807 errors"
+description: "Anatomy of the problem+json envelope Techne uses for every HTTP error."
+---
+
+Techne serializes every HTTP error as an RFC 7807 problem document with
+`Content-Type: application/problem+json`. The body always carries the
+following fields:
+
+| Field | Meaning |
+| --- | --- |
+| `type` | URI identifying the error class. Resolves to a page in this section. |
+| `title` | Short, human-readable summary tied to the status code. |
+| `status` | HTTP status code, mirrored as a number in the body. |
+| `detail` | Optional, human-readable explanation. Omitted in production for non-`HttpException` throws. |
+| `code` | Optional, stable, machine-readable code (e.g. `user.not_found`). |
+| `instance` | Request path that produced the error. |
+| `requestId` | UUID propagated from `x-request-id` or generated when absent. |
+
+The `errors` extension field is added on `422 Unprocessable Entity`
+responses as a `ValidationError[]`. See
+[Validation](/http/validation) for the matching DTO surface and
+[Exceptions](/http/exceptions) for the `HttpException` API.
+
+## Status reference
+
+| Status | Page |
+| --- | --- |
+| 400 | [Bad Request](/errors/bad-request) |
+| 401 | [Unauthorized](/errors/unauthorized) |
+| 403 | [Forbidden](/errors/forbidden) |
+| 404 | [Not Found](/errors/not-found) |
+| 409 | [Conflict](/errors/conflict) |
+| 422 | [Unprocessable Entity](/errors/unprocessable-entity) |
+| 429 | [Too Many Requests](/errors/too-many-requests) |
+| 500 | [Internal Server Error](/errors/internal-server-error) |
+| 502 | [Bad Gateway](/errors/bad-gateway) |
+| 503 | [Service Unavailable](/errors/service-unavailable) |
+| 504 | [Gateway Timeout](/errors/gateway-timeout) |

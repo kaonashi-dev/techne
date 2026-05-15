@@ -1,0 +1,61 @@
+---
+title: "Plugin protocol"
+description: "definePlugin and PluginContext: provide/resolve, onReady, onShutdown, http(), and app.register/use."
+---
+
+Plugins are the sanctioned extension point. A plugin is a named, optionally
+dependency-ordered unit with a single `setup()` function that receives a
+`PluginContext` — the only surface allowed to mutate framework state, register
+DI tokens, hook into lifecycle, or reach the raw Elysia instance.
+
+```ts
+import { definePlugin } from "@kaonashi-dev/techne/core";
+
+interface MetricsOptions {
+  prefix?: string;
+}
+
+const MetricsPlugin = definePlugin<MetricsOptions>({
+  name: "metrics",
+  version: "0.1.0",
+  dependencies: [],
+  setup(ctx, options) {
+    const prefix = options?.prefix ?? "techne_";
+    ctx.logger.log(`registering metrics with prefix "${prefix}"`);
+
+    ctx.provide("METRICS_PREFIX", prefix);
+
+    ctx.http().get("/metrics", () => `# metrics for ${prefix}\n`);
+
+    ctx.onReady(async () => {
+      ctx.logger.log("ready: metrics endpoint live");
+    });
+
+    ctx.onShutdown(async () => {
+      ctx.logger.log("flushing metrics before exit");
+    });
+  },
+});
+
+const app = await TechneFactory.create({ controllers: [], providers: [] });
+await app.register(MetricsPlugin, { prefix: "myapp_" });
+```
+
+## PluginContext surface
+
+- `ctx.provide(token, value)` registers a token in the root DI scope.
+- `ctx.resolve(token)` reads from the root scope.
+- `ctx.onReady(handler)` fires after `onApplicationBootstrap` and before the
+  HTTP server starts listening.
+- `ctx.onShutdown(handler)` fires in LIFO order during graceful shutdown,
+  before the MQ registry closes and before `onModuleDestroy`.
+- `ctx.http()` returns the raw Elysia instance for low-level integrations.
+
+## Registration semantics
+
+Re-registering the same `name` + `setup` function is a no-op (handy for HMR);
+a different `setup` for the same `name` throws. Missing `dependencies` throw
+at registration time.
+
+`app.getRegisteredPlugins()` returns the list of registered plugin names in
+registration order — useful for diagnostics.

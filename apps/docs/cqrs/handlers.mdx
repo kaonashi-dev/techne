@@ -1,0 +1,33 @@
+---
+title: "Handlers"
+description: "@CommandHandler, @QueryHandler, and @EventHandler decorators."
+---
+
+Decorate a class with `@CommandHandler(CommandClass)` to bind it to a
+command. Techne instantiates it through DI and invokes its `execute()`
+method when a matching command runs on the bus.
+
+```ts
+import { CommandHandler, EventBus } from "@kaonashi-dev/techne/cqrs";
+
+@CommandHandler(CreateUserCommand)
+class CreateUserHandler {
+  constructor(private readonly eventBus: EventBus) {}
+
+  async execute(command: CreateUserCommand) {
+    const user = { id: 1, ...command.payload };
+    await this.eventBus.emit(new UserCreatedEvent(user), `user-${user.id}`);
+    return user;
+  }
+}
+```
+
+The matching decorators for the other buses:
+
+- `@QueryHandler(QueryClass)` binds a class to a query; implement `execute()`.
+- `@EventHandler(EventClass)` binds a class to a domain event; implement
+  `handle()`. Multiple handlers can subscribe to the same event.
+
+Handlers must be listed in your feature's `providers` (or the
+`providers` array passed to `TechneFactory.create()`) — the container
+needs to construct them before the bus can dispatch.

@@ -1,0 +1,30 @@
+---
+title: "Routes codegen"
+description: "Generate a Routes type for createClient with `techne generate client` (or the lower-level helpers)."
+---
+
+The easiest path is the CLI generator, which writes a `Routes` type alongside
+a thin client module ready to import:
+
+```bash
+bunx @kaonashi-dev/techne g client
+```
+
+Under the hood the generator uses two helpers from
+`@kaonashi-dev/techne/contract`:
+
+- `generateRoutesType(app)` — walks the running application and returns a
+  TypeScript source string declaring the `Routes` route map.
+- `typeboxToTypeScript(schema)` — converts a single TypeBox schema into its
+  TypeScript equivalent. Useful when you want to emit additional types
+  (shared DTOs, enum unions) into the same generated file.
+
+```ts
+import { generateRoutesType, typeboxToTypeScript } from "@kaonashi-dev/techne/contract";
+
+const routes = await generateRoutesType(app);
+await Bun.write("./src/generated-routes.ts", routes);
+```
+
+Once `Routes` is generated, pass it to `createClient<Routes>()` — see
+[Typed RPC client](/contract/rpc-client).
