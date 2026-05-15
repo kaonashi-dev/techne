@@ -1,0 +1,70 @@
+---
+title: "Getting Started"
+description: "Use Prisma with Techne through the optional prisma() plugin."
+---
+
+Techne does not generate or migrate Prisma schemas. Your `schema.prisma` stays
+the source of truth, and you run the Prisma CLI yourself.
+
+```bash
+bun add @prisma/client
+bun add -D prisma
+```
+
+Create `prisma/schema.prisma`:
+
+```prisma
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+}
+```
+
+Generate the client and create your database:
+
+```bash
+DATABASE_URL="file:./dev.db" bunx prisma generate
+DATABASE_URL="file:./dev.db" bunx prisma migrate dev --name init
+```
+
+Register the plugin in `techne.config.ts`:
+
+```ts
+import { defineTechneConfig } from "@kaonashi-dev/techne/core";
+import { prisma } from "@kaonashi-dev/techne/prisma";
+
+export default defineTechneConfig({
+  plugins: [prisma()],
+});
+```
+
+Inject the client in a provider:
+
+```ts
+import { Injectable } from "@kaonashi-dev/techne/common";
+import { InjectPrisma } from "@kaonashi-dev/techne/prisma";
+import type { PrismaClient } from "@prisma/client";
+
+@Injectable()
+export class UsersService {
+  constructor(@InjectPrisma() private readonly db: PrismaClient) {}
+
+  list() {
+    return this.db.user.findMany();
+  }
+}
+```
+
+The plugin dynamically imports `@prisma/client`, so apps that do not register
+`prisma()` do not load Prisma.

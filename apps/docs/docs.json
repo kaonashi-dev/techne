@@ -66,6 +66,15 @@
             ]
           },
           {
+            "group": "ORM",
+            "pages": [
+              "orm/getting-started",
+              "orm/injecting-the-client",
+              "orm/lifecycle",
+              "orm/testing"
+            ]
+          },
+          {
             "group": "Swagger",
             "pages": [
               "swagger/auto-document",

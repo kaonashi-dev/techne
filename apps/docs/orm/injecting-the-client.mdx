@@ -1,0 +1,58 @@
+---
+title: "Injecting The Client"
+description: "Resolve PrismaClient with InjectPrisma, PRISMA_CLIENT, or class-based DI."
+---
+
+The Prisma plugin provides the generated client under `PRISMA_CLIENT` and
+under its runtime constructor. With a vanilla `new PrismaClient()` you can
+resolve it by class type. With `client.$extends(...)` the extended object's
+constructor is a Prisma-internal class you cannot import, so prefer
+`@InjectPrisma()` (or `@Inject(PRISMA_CLIENT)`) — class-typed parameters like
+`constructor(private db: PrismaClient)` would otherwise resolve a fresh,
+unextended client.
+
+```ts
+import { Body, Controller, Get, Post } from "@kaonashi-dev/techne/common";
+import { Dto, IsString } from "@kaonashi-dev/techne/common";
+import { InjectPrisma } from "@kaonashi-dev/techne/prisma";
+import type { PrismaClient } from "@prisma/client";
+
+@Dto()
+class CreateUserDto {
+  @IsString()
+  email!: string;
+
+  @IsString()
+  name!: string;
+}
+
+@Controller("/users")
+export class UsersController {
+  constructor(@InjectPrisma() private readonly db: PrismaClient) {}
+
+  @Get()
+  list() {
+    return this.db.user.findMany();
+  }
+
+  @Post()
+  create(@Body() body: CreateUserDto) {
+    return this.db.user.create({ data: body });
+  }
+}
+```
+
+You can also inject the token directly:
+
+```ts
+import { Inject } from "@kaonashi-dev/techne/common";
+import { PRISMA_CLIENT } from "@kaonashi-dev/techne/prisma";
+import type { PrismaClient } from "@prisma/client";
+
+class UsersService {
+  constructor(@Inject(PRISMA_CLIENT) private readonly db: PrismaClient) {}
+}
+```
+
+Request DTOs stay regular Techne DTOs — the ORM integration only wires the
+client into DI.
