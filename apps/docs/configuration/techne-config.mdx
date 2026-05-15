@@ -1,0 +1,79 @@
+---
+title: "techne.config.ts"
+description: "defineTechneConfig, bootstrap(), techne(), and how port and runtime options are resolved."
+---
+
+`defineTechneConfig()` is the declarative entry point for a Techne app. A
+`techne.config.ts` in your project root holds every framework option, and
+`main.ts` becomes a one-liner.
+
+```ts
+// techne.config.ts
+import { defineTechneConfig } from "@kaonashi-dev/techne/core";
+import { AppFeature } from "./src/app.module";
+
+export default defineTechneConfig({
+  features: [AppFeature],
+  port: 3000,
+  cors: { origin: true },
+});
+```
+
+```ts
+// src/main.ts
+import { bootstrap } from "@kaonashi-dev/techne/core";
+
+await bootstrap();
+```
+
+`bootstrap()` reads `techne.config.ts` from `process.cwd()`, calls
+`TechneFactory.create()`, and starts listening. The shorthand `techne()`
+returns the application **without** starting the server, which is handy
+when you want to attach extras (`app.use(...)`, custom listeners) before
+calling `app.listen()` yourself.
+
+## Port resolution
+
+Resolution order:
+
+1. `options.port` passed to `bootstrap(options)` / `techne(options)`
+2. `port` declared in `techne.config.ts`
+3. `Bun.env.PORT`
+4. `3000`
+
+`host` defaults to `"0.0.0.0"`.
+
+## Declarative runtime options
+
+Prefer declaring runtime options in `techne.config.ts`. The setters below
+are still supported but emit a one-time deprecation warning per process
+and will be removed in v1.0:
+
+```ts
+const app = await TechneFactory.create({ controllers: [UsersController] });
+
+// Deprecated — declare these in techne.config.ts instead.
+app.setGlobalPrefix("api");
+app.enableVersioning({ type: "uri" });
+app.enableCors({ origin: true, credentials: true });
+app.useGlobalGuards(new AuthGuard());
+```
+
+The declarative equivalent:
+
+```ts
+// techne.config.ts
+import { defineTechneConfig } from "@kaonashi-dev/techne/core";
+
+export default defineTechneConfig({
+  features: [UsersFeature],
+  globalPrefix: "api",
+  versioning: { type: "uri" },
+  cors: { origin: true, credentials: true },
+});
+```
+
+`TechneFactory.createApplicationContext()` is also available for
+standalone flat provider graphs without HTTP. Request-scoped providers
+share a stable context across guards and handlers within the same request
+through `ContextIdFactory` from `@kaonashi-dev/techne/core`.

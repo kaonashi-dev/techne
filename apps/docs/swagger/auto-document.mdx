@@ -1,0 +1,24 @@
+---
+title: "Auto OpenAPI document"
+description: "SwaggerModule.createAutoDocument walks every route and emits an OpenAPI 3.1 spec."
+---
+
+`SwaggerModule.createAutoDocument(app, builder?)` walks every registered route
+(including their TypeBox `params`, `query`, `body`, and `response` schemas) and
+emits an OpenAPI 3.1 document — no manual `addPath()` calls required. Anything
+the builder adds explicitly takes precedence, so the auto-generated spec can
+still be patched without forking.
+
+```ts
+import { SwaggerModule, DocumentBuilder } from "@kaonashi-dev/techne/swagger";
+
+const document = SwaggerModule.createAutoDocument(
+  app,
+  new DocumentBuilder().setTitle("My API").setVersion("1.0.0"),
+);
+
+SwaggerModule.setup("/api-docs", app, document);
+```
+
+`SwaggerModule.setup(path, app, document)` exposes Swagger UI at `path`
+(here, `/api-docs`) using the generated document.

@@ -1,0 +1,27 @@
+---
+title: "Event store"
+description: "InMemoryEventStore + StoredEvent for persisting domain events emitted through the EventBus."
+---
+
+The CQRS module ships with an in-memory event store and a `StoredEvent`
+type describing a persisted domain event. It is exported from
+`@kaonashi-dev/techne/cqrs` and is useful for tests, local development,
+or as a reference implementation for a real store.
+
+```ts
+import { DomainEvent, EventBus, InMemoryEventStore } from "@kaonashi-dev/techne/cqrs";
+import type { StoredEvent } from "@kaonashi-dev/techne/cqrs";
+
+const store = new InMemoryEventStore();
+const eventBus = new EventBus(store);
+
+class UserCreatedEvent extends DomainEvent<{ id: number; name: string }> {}
+
+await eventBus.emit(new UserCreatedEvent({ id: 1, name: "Ada" }), "user-1");
+
+const stream: StoredEvent[] = await store.read("user-1");
+```
+
+`StoredEvent` carries the event's stream id, sequence number, payload, and
+metadata — enough to rebuild aggregate state by folding the stream from the
+beginning, or by replaying it into a projection.

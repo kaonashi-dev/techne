@@ -1,0 +1,187 @@
+{
+  "$schema": "https://mintlify.com/schema.json",
+  "name": "Techne",
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg",
+    "href": "https://github.com/kaonashi-dev/techne"
+  },
+  "favicon": "/favicon.svg",
+  "colors": {
+    "primary": "#0f172a",
+    "light": "#38bdf8",
+    "dark": "#0ea5e9",
+    "anchors": {
+      "from": "#0ea5e9",
+      "to": "#22d3ee"
+    }
+  },
+  "topbarLinks": [
+    {
+      "name": "Issues",
+      "url": "https://github.com/kaonashi-dev/techne/issues"
+    }
+  ],
+  "topbarCtaButton": {
+    "name": "GitHub",
+    "url": "https://github.com/kaonashi-dev/techne"
+  },
+  "anchors": [
+    {
+      "name": "Changelog",
+      "icon": "list",
+      "url": "reference/changelog"
+    },
+    {
+      "name": "Migrating",
+      "icon": "arrows-rotate",
+      "url": "reference/migrating"
+    }
+  ],
+  "navigation": [
+    {
+      "group": "Get started",
+      "pages": [
+        "introduction",
+        "installation",
+        "quickstart",
+        "project-structure"
+      ]
+    },
+    {
+      "group": "Concepts",
+      "pages": [
+        "concepts/features",
+        "concepts/controllers",
+        "concepts/dependency-injection",
+        "concepts/application-lifecycle"
+      ]
+    },
+    {
+      "group": "Configuration",
+      "pages": [
+        "configuration/techne-config",
+        "configuration/environment"
+      ]
+    },
+    {
+      "group": "HTTP",
+      "pages": [
+        "http/routing",
+        "http/middleware",
+        "http/guards",
+        "http/validation",
+        "http/response-hooks",
+        "http/exceptions",
+        "http/cors"
+      ]
+    },
+    {
+      "group": "Plugins",
+      "pages": [
+        "plugins/plugin-protocol",
+        "plugins/using-elysia-plugins"
+      ]
+    },
+    {
+      "group": "Auth",
+      "pages": [
+        "auth/jwt",
+        "auth/roles"
+      ]
+    },
+    {
+      "group": "Swagger",
+      "pages": [
+        "swagger/auto-document",
+        "swagger/custom-document"
+      ]
+    },
+    {
+      "group": "Health",
+      "pages": [
+        "health/endpoints",
+        "health/graceful-shutdown"
+      ]
+    },
+    {
+      "group": "Testing",
+      "pages": [
+        "testing/overview"
+      ]
+    },
+    {
+      "group": "CQRS",
+      "pages": [
+        "cqrs/overview",
+        "cqrs/handlers",
+        "cqrs/event-store"
+      ]
+    },
+    {
+      "group": "MQ",
+      "pages": [
+        "mq/overview",
+        "mq/processors",
+        "mq/drivers",
+        "mq/legacy-queue"
+      ]
+    },
+    {
+      "group": "Contract",
+      "pages": [
+        "contract/rpc-client",
+        "contract/codegen"
+      ]
+    },
+    {
+      "group": "CLI",
+      "pages": [
+        "cli/overview",
+        "cli/new",
+        "cli/dev",
+        "cli/start",
+        "cli/build",
+        "cli/test",
+        "cli/deploy",
+        "cli/doctor",
+        "cli/generate"
+      ]
+    },
+    {
+      "group": "Errors",
+      "pages": [
+        "errors/overview",
+        "errors/bad-request",
+        "errors/unauthorized",
+        "errors/forbidden",
+        "errors/not-found",
+        "errors/conflict",
+        "errors/unprocessable-entity",
+        "errors/too-many-requests",
+        "errors/internal-server-error",
+        "errors/bad-gateway",
+        "errors/service-unavailable",
+        "errors/gateway-timeout"
+      ]
+    },
+    {
+      "group": "Performance",
+      "pages": [
+        "performance/benchmarks",
+        "performance/optimizations"
+      ]
+    },
+    {
+      "group": "Reference",
+      "pages": [
+        "reference/migrating",
+        "reference/changelog",
+        "reference/status-license"
+      ]
+    }
+  ],
+  "footerSocials": {
+    "github": "https://github.com/kaonashi-dev/techne"
+  }
+}

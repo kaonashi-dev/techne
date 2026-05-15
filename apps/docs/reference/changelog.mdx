@@ -1,0 +1,82 @@
+---
+title: "Changelog"
+description: "Notable changes to Techne, mirrored from CHANGELOG.md."
+---
+
+The authoritative changelog is [`CHANGELOG.md`](https://github.com/kaonashi-dev/techne/blob/main/CHANGELOG.md)
+in the repo root. Notable highlights below.
+
+## Unreleased
+
+### Added
+
+- `ResponseHook` and `@OnResponse()` for the Techne v1 flat HTTP response-hook
+  metadata surface.
+
+### Removed
+
+- Public interceptor and pipe exports from `@kaonashi-dev/techne/common`,
+  including `UseInterceptors`, `FileInterceptor`, `UsePipes`,
+  `TechneInterceptor`, `PipeTransform`, `APP_INTERCEPTOR`, and `APP_PIPE`.
+- CLI `g pipe` and `g interceptor` generator entries.
+
+## [0.4.0] — 2026-05-13 — Renamed Bnest to Techne
+
+The project was renamed from `Bnest` to `Techne` (Greek τέχνη — "applied
+craft"). See the [migration guide](/reference/migrating) for the upgrade
+recipe.
+
+Concrete breaking changes:
+
+1. **Package name**: `@kaonashi-dev/bnest` → `@kaonashi-dev/techne` (the
+   bnest package keeps working through 0.4.x via a shim).
+2. **CLI bin**: `bnest <cmd>` → `techne <cmd>`.
+3. **Redis prefixes**: defaults change from `bnest:*` to `techne:*`.
+4. **RFC 7807 problem `type` URL** moved to a `github.com/.../docs/errors/<slug>.md`
+   host.
+5. **OpenAPI marker**: `x-bnest-unknown-kind` → `x-techne-unknown-kind`.
+
+### Added (highlights)
+
+- `defineConfig({ schema })` validates env values against a TypeBox schema
+  at startup and returns a typed `AppConfig` with `.get()` / `.getOrThrow()`.
+- `defineTechneConfig(config)` typing helper for `techne.config.ts`.
+- `bootstrap(module?, overrides?)` and `techne(module?, options?)` shorthands.
+- `definePlugin({ name, version?, dependencies?, setup })` plugin protocol;
+  `app.register(plugin, options)`, `app.use(elysiaPlugin)`, and
+  `app.getRegisteredPlugins()`.
+- RFC 7807 error responses with `Content-Type: application/problem+json`.
+- `HttpException` accepts a structured `(response, status, options?)`
+  signature plus `{ code, type }` on every subclass.
+- Auto-registered `GET /healthz` and `GET /readyz`, configurable via
+  `health` + `shutdown` in `techne.config.ts`.
+- `x-request-id` propagation, structured logger modes, and child loggers.
+- `compileStringifier(schema)` fast TypeBox stringifier in `@kaonashi-dev/techne/schema`.
+- CLI commands `dev`, `start`, `test`, `doctor`, and `deploy`; new
+  generators `g middleware|guard|filter|interceptor|dto|docker|client`.
+- Multi-stage Bun `Dockerfile` + `.dockerignore` generator.
+- Auto OpenAPI 3.1 emitter: `SwaggerModule.createAutoDocument(app, builder?)`.
+- `docs/errors/{...}.md` stub pages backing the RFC 7807 `type` URLs (now
+  migrated into the [errors section](/errors/overview) of this site).
+
+### Changed
+
+- Error responses are now served as `application/problem+json` (RFC 7807)
+  instead of the legacy `{ statusCode, message, error }` JSON shape.
+- Scaffolded projects (`techne new`) emit a `bootstrap()` `main.ts` paired
+  with a `techne.config.ts` instead of a manual `TechneFactory.create()`
+  block.
+- Config-file discovery prefers `techne.config.{ts,js,mjs}`; legacy
+  `bnest.config.{ts,js,mjs}` still loads but emits a one-time warning.
+
+### Deprecated
+
+- `app.setGlobalPrefix()`, `app.enableVersioning()`, `app.enableCors()`,
+  and `app.useGlobalGuards()` — declare these in `techne.config.ts`
+  instead.
+- Every `Bnest*` class/function/type — aliases stay through 0.4.x.
+- The legacy `bnest.config.ts` filename — removed in v0.5+.
+- The legacy `@kaonashi-dev/bnest` npm package.
+
+For the full entry list (including performance notes), see the file in the
+repo.

@@ -1,0 +1,20 @@
+---
+title: "techne deploy"
+description: "Emit deployment scaffolding. Today only `--target docker` is implemented."
+---
+
+```bash
+bunx @kaonashi-dev/techne deploy --target docker --port 3000
+```
+
+`techne deploy --target docker` currently writes the same multi-stage
+Dockerfile as the `g docker` generator. Other deploy targets (`fly`,
+`railway`, `cloudflare`, `bun-vm`) are planned but not implemented yet.
+
+The generated Dockerfile uses an unprivileged OS user named `techne` and
+exposes the port you pass on the command line. To re-emit the same files
+without running the rest of the deploy flow, use `techne g docker`:
+
+```bash
+bunx @kaonashi-dev/techne g docker --port 3000
+```

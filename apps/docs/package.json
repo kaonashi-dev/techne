@@ -1,0 +1,13 @@
+{
+  "name": "@kaonashi-dev/techne-docs",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Techne documentation site (Mintlify).",
+  "scripts": {
+    "dev": "mintlify dev",
+    "broken-links": "mintlify broken-links"
+  },
+  "devDependencies": {
+    "mintlify": "^4.0.0"
+  }
+}

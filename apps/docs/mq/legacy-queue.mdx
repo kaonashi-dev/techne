@@ -1,0 +1,24 @@
+---
+title: "Legacy ./queue subpath"
+description: "The ./queue export is a back-compat barrel; prefer ./mq for new code."
+---
+
+Queue utilities now live under `./mq`. The legacy `./queue` subpath remains
+as a temporary core-only compatibility layer that re-exports `Queue`,
+`Worker`, `Job`, and `QueueEvents`:
+
+```ts
+// Legacy — still works, but prefer ./mq
+import { Queue, Worker } from "@kaonashi-dev/techne/queue";
+```
+
+Migrate to:
+
+```ts
+import { Queue, Worker } from "@kaonashi-dev/techne/mq";
+```
+
+The legacy barrel only re-exports the core primitives — decorators
+(`@MqProcessor`, `@MqProcess`, `@InjectMq`), the `mq()` plugin, and the
+Redis/Memory drivers are only available through `./mq`. It will be removed
+in a future major version.

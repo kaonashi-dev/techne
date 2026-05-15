@@ -1,0 +1,59 @@
+---
+title: "Environment & config"
+description: "defineConfig validates env values against a TypeBox schema; @InjectConfig pulls the typed AppConfig from DI."
+---
+
+The preferred entry point is `defineConfig`, which validates env values against
+a TypeBox schema at startup and produces a typed `AppConfig` object. It pairs
+with `appConfig(config)` so handlers can pull the same object out of
+DI via `@InjectConfig()`.
+
+```ts
+import { appConfig as appConfigPlugin, defineConfig, InjectConfig, t } from "@kaonashi-dev/techne/config";
+import { Controller, Get } from "@kaonashi-dev/techne/common";
+import { TechneFactory } from "@kaonashi-dev/techne/core";
+
+const typedConfig = defineConfig({
+  schema: t.Object({
+    PORT: t.Integer({ minimum: 1, maximum: 65535 }),
+    DATABASE_URL: t.String({ minLength: 1 }),
+    LOG_LEVEL: t.Optional(t.Union([t.Literal("debug"), t.Literal("info")])),
+  }),
+});
+
+type Config = typeof typedConfig;
+
+@Controller("status")
+class StatusController {
+  constructor(@InjectConfig() private readonly config: Config) {}
+
+  @Get("/")
+  status() {
+    return { port: this.config.get("PORT") };
+  }
+}
+
+const app = await TechneFactory.create({
+  plugins: [appConfigPlugin(typedConfig)],
+  controllers: [StatusController],
+});
+```
+
+Invalid or missing env values throw `ConfigValidationError` before the HTTP
+server starts. `t` is a re-export of TypeBox's `Type` for ergonomic schema
+authoring, and `APP_CONFIG` is the DI token `@InjectConfig()` resolves.
+
+## ConfigService
+
+`config()` registers `ConfigService` from env files, runtime env, and optional
+load factories:
+
+```ts
+import { ConfigService, config } from "@kaonashi-dev/techne/config";
+
+const app = await TechneFactory.create({
+  plugins: [config({ expandVariables: true })],
+});
+const config = app.get<ConfigService>(ConfigService);
+config.getOrThrow("DATABASE_URL");
+```

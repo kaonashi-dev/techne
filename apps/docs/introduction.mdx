@@ -1,0 +1,45 @@
+---
+title: "Introduction"
+description: "Techne is an experimental Bun-native application framework built on Elysia with a decorator-first developer experience."
+---
+
+# Techne
+
+> Experimental Bun-native application framework using Elysia as the HTTP layer.
+
+Techne is a personal project focused on a decorator-first developer experience, explicit application architecture, and Bun-native runtime ergonomics. It is built for exploration, not production use, and breaking changes should be expected.
+
+## Why Techne
+
+- Bun-first runtime
+- Decorator-based controllers and providers with flat feature config
+- Built-in dependency injection
+- TypeBox-powered request schemas
+- CQRS, queues, and testing utilities in one package
+- CLI for scaffolding, code generation, and Bun builds
+
+## Techne Surfaces
+
+The recommended mental model is:
+
+- `@kaonashi-dev/techne/common` for decorators, exceptions, DTO/schema helpers, and request lifecycle interfaces.
+- `@kaonashi-dev/techne/core` for bootstrap and infrastructure APIs.
+- `@kaonashi-dev/techne/config`, `/jwt`, `/swagger`, `/health`, `/testing`, `/cqrs`, and `/mq` for specialized features.
+
+### Import Map
+
+| Area | Package |
+| --- | --- |
+| Decorators, exceptions, schemas | `@kaonashi-dev/techne/common` |
+| Bootstrap, DI container, reflector, config loader | `@kaonashi-dev/techne/core` |
+| Testing utilities | `@kaonashi-dev/techne/testing` |
+| CQRS buses and event store | `@kaonashi-dev/techne/cqrs` |
+| Queue and worker primitives | `@kaonashi-dev/techne/mq` |
+
+`@kaonashi-dev/techne` is now a minimal bootstrap entrypoint. Use it only when you explicitly want the smallest possible surface.
+
+## Next steps
+
+- [Install Techne](/installation)
+- [Quickstart](/quickstart)
+- [Project structure](/project-structure)

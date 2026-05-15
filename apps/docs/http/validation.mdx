@@ -1,0 +1,58 @@
+---
+title: "Validation & DTOs"
+description: "Schema helper, Dto class decorators, and how Techne forwards schemas directly to Elysia."
+---
+
+Techne exposes a `Schema` helper built on `@sinclair/typebox`.
+
+```ts
+import { Body, Controller, Post, Schema } from "@kaonashi-dev/techne/common";
+
+const CreateUserSchema = Schema.Object({
+  name: Schema.String({ minLength: 2 }),
+  email: Schema.String(),
+  role: Schema.enum(["admin", "editor", "viewer"] as const),
+  age: Schema.Optional(Schema.Integer({ minimum: 0 })),
+});
+
+@Controller("users")
+class UsersController {
+  @Post("/", { body: CreateUserSchema })
+  create(@Body() body: any) {
+    return body;
+  }
+}
+```
+
+Decorator-style DTO metadata is also available through exports such as
+`Dto`, `IsString`, `IsNumber`, `IsInteger`, `IsBoolean`, and `IsEnum`. DTO
+schemas are passed to Elysia directly, so request validation is a single
+native Elysia pass. DTOs reject unknown properties by default; use
+`@Dto({ allowAdditional: true })` to opt out.
+
+## Class-style DTOs
+
+```ts
+import { Dto, IsString, IsInteger, IsEnum } from "@kaonashi-dev/techne/common";
+
+@Dto()
+class CreateUserDto {
+  @IsString({ minLength: 2 })
+  name!: string;
+
+  @IsString()
+  email!: string;
+
+  @IsEnum(["admin", "editor", "viewer"] as const)
+  role!: "admin" | "editor" | "viewer";
+
+  @IsInteger({ minimum: 0 })
+  age?: number;
+}
+```
+
+## Validation failures
+
+Failed validation returns an RFC 7807 `422 Unprocessable Entity` problem
+document with a `ValidationError[]` extension field — see
+[Exceptions](/http/exceptions) and the [422 reference](/errors/unprocessable-entity).

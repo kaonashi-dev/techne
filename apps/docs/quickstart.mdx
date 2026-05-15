@@ -1,0 +1,75 @@
+---
+title: "Quickstart"
+description: "Spin up a Techne app with a declarative techne.config.ts, a one-line bootstrap(), and a single AppFeature."
+---
+
+The recommended setup is declarative: a `techne.config.ts` at the project root
+holds every framework option, and `main.ts` becomes a one-liner.
+
+```ts
+// techne.config.ts
+import { defineTechneConfig } from "@kaonashi-dev/techne/core";
+import { AppFeature } from "./src/app.module";
+
+export default defineTechneConfig({
+  features: [AppFeature],
+  port: 3000,
+  cors: { origin: true },
+});
+```
+
+```ts
+// src/main.ts
+import { bootstrap } from "@kaonashi-dev/techne/core";
+
+await bootstrap();
+```
+
+```ts
+// src/app.module.ts
+import { defineFeature } from "@kaonashi-dev/techne/core";
+import { Controller, Get, Injectable } from "@kaonashi-dev/techne/common";
+
+@Injectable()
+class AppService {
+  getHello() {
+    return { message: "Hello from Techne" };
+  }
+}
+
+@Controller("app")
+class AppController {
+  constructor(private readonly appService: AppService) {}
+
+  @Get("/")
+  hello() {
+    return this.appService.getHello();
+  }
+}
+
+export const AppFeature = defineFeature({
+  controllers: [AppController],
+  providers: [AppService],
+});
+```
+
+`bootstrap()` reads `techne.config.ts` from `process.cwd()`, calls
+`TechneFactory.create()`, and starts listening. Port resolution is
+`options.port` → config `port` → `Bun.env.PORT` → `3000`. `host` defaults to
+`"0.0.0.0"`. The shorthand `techne()` returns the application without starting
+the server.
+
+## Lower-level API
+
+`TechneFactory.create()` is still available and is the right call when you need
+full control over the lifecycle (e.g. tests, in-process invocations):
+
+```ts
+import { TechneFactory } from "@kaonashi-dev/techne/core";
+import { AppFeature } from "./src/app.module";
+
+const app = await TechneFactory.create({ features: [AppFeature] });
+app.listen(3000, () => {
+  console.log("Server running at http://localhost:3000");
+});
+```

@@ -1,0 +1,27 @@
+---
+title: "Features"
+description: "defineFeature() groups controllers and providers into a flat, composable unit."
+---
+
+A **feature** is the basic unit of organization in Techne. `defineFeature()`
+returns a plain config object that can be listed in `techne.config.ts`.
+
+```ts
+import { defineFeature } from "@kaonashi-dev/techne/core";
+
+export const UsersFeature = defineFeature({
+  controllers: [UsersController],
+  providers: [UsersService],
+});
+```
+
+Compose multiple features by listing them in your config:
+
+```ts
+// techne.config.ts
+import { defineTechneConfig } from "@kaonashi-dev/techne/core";
+
+export default defineTechneConfig({
+  features: [UsersFeature, ReportsFeature],
+});
+```

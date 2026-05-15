@@ -1,0 +1,41 @@
+---
+title: "Roles & @Public"
+description: "@Roles attaches role metadata; @Public opts a route out of auth; RolesGuard reads both via the Reflector."
+---
+
+`@Roles(...roles)` attaches role metadata to a controller or handler.
+`RolesGuard` (from `@kaonashi-dev/techne/common`) reads that metadata via
+the `Reflector` and rejects requests whose principal lacks any of the
+listed roles.
+
+```ts
+import { Controller, Get, Roles } from "@kaonashi-dev/techne/common";
+
+@Controller("admin")
+@Roles("admin")
+class AdminController {
+  @Get("/dashboard")
+  dashboard() {
+    return { ok: true };
+  }
+}
+```
+
+`@Public()` is the inverse — mark a single route as anonymous to bypass
+auth guards (including `JwtAuthGuard`):
+
+```ts
+import { Controller, Get, Public } from "@kaonashi-dev/techne/common";
+
+@Controller("status")
+class StatusController {
+  @Get("/")
+  @Public()
+  ping() {
+    return { ok: true };
+  }
+}
+```
+
+Wire `RolesGuard` (and any auth guard) globally through `APP_GUARD` — see
+the [JWT recipe](/auth/jwt) for the canonical setup.
