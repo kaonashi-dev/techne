@@ -1,0 +1,35 @@
+---
+title: "Testing"
+description: "Mock PrismaClient through clientFactory without a real database."
+---
+
+Tests can provide a fake client through `clientFactory`; no database is needed
+for unit tests.
+
+```ts
+import { expect, test } from "bun:test";
+import { TechneFactory } from "@kaonashi-dev/techne/core";
+import { prisma } from "@kaonashi-dev/techne/prisma";
+
+test("uses a fake prisma client", async () => {
+  const fakeDb = {
+    user: { findMany: async () => [{ id: 1, email: "a@b.c" }] },
+    $connect: async () => {},
+    $disconnect: async () => {},
+    $queryRaw: async () => [{ ok: 1 }],
+  };
+
+  const app = await TechneFactory.create({
+    logger: false,
+    plugins: [prisma({ clientFactory: () => fakeDb })],
+  });
+
+  await app.listen(0);
+  expect(await fakeDb.user.findMany()).toHaveLength(1);
+  await app.close();
+});
+```
+
+For an optional integration test, use SQLite with a generated Prisma client and
+pass `datasourceUrl: "file::memory:?cache=shared"`. Keep migration and generate
+steps explicit in your test setup; Techne does not run Prisma CLI commands.
