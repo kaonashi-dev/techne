@@ -1,6 +1,6 @@
 {
   "name": "@kaonashi-dev/techne",
-  "version": "0.4.0",
+  "version": "0.0.1",
   "description": "Techne — a Bun-native application framework built on Elysia with a decorator-first developer experience",
   "module": "src/index.ts",
   "main": "src/index.ts",
