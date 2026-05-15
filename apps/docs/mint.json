@@ -8,12 +8,12 @@
   },
   "favicon": "/favicon.svg",
   "colors": {
-    "primary": "#0f172a",
-    "light": "#38bdf8",
-    "dark": "#0ea5e9",
+    "primary": "#000000",
+    "light": "#0070f3",
+    "dark": "#000000",
     "anchors": {
-      "from": "#0ea5e9",
-      "to": "#22d3ee"
+      "from": "#000000",
+      "to": "#171717"
     }
   },
   "topbarLinks": [
@@ -31,11 +31,6 @@
       "name": "Changelog",
       "icon": "list",
       "url": "reference/changelog"
-    },
-    {
-      "name": "Migrating",
-      "icon": "arrows-rotate",
-      "url": "reference/migrating"
     }
   ],
   "navigation": [
