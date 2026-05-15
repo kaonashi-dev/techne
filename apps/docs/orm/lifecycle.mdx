@@ -1,0 +1,52 @@
+---
+title: "Lifecycle"
+description: "Connection timing, healthchecks, clientFactory, and graceful shutdown."
+---
+
+`prisma()` creates the client during plugin setup and disconnects during
+graceful shutdown. By default it does **not** call `$connect()` — Prisma
+connects lazily on the first query, so server boot is not gated on database
+availability.
+
+```ts
+import { prisma } from "@kaonashi-dev/techne/prisma";
+
+export default defineTechneConfig({
+  plugins: [
+    prisma({
+      log: ["query", "warn"],
+      healthcheck: true,
+    }),
+  ],
+});
+```
+
+`healthcheck: true` eagerly calls `$connect()` and runs `SELECT 1` during
+`onReady`, so a misconfigured database fails the boot. Leave it disabled for
+fast local startup; Prisma will connect on first query.
+
+Use `clientFactory` when you need Prisma extensions, middleware, or a test
+client:
+
+```ts
+import { PrismaClient } from "@prisma/client";
+import { prisma } from "@kaonashi-dev/techne/prisma";
+
+const db = new PrismaClient().$extends({
+  query: {
+    user: {
+      async findMany({ args, query }) {
+        return query(args);
+      },
+    },
+  },
+});
+
+export default defineTechneConfig({
+  plugins: [prisma({ clientFactory: () => db })],
+});
+```
+
+Shutdown handlers run in reverse plugin registration order. If another plugin
+uses Prisma during shutdown, register that plugin after `prisma()` so it tears
+down first while the database is still connected.
