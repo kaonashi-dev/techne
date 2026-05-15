@@ -3,7 +3,7 @@
  *
  * Measures the wall-clock time from `bun` process start to the point where
  * a Techne application is bootstrapped and capable of serving a request. We
- * vary the module count (N = 1, 10, 50) so the scaling behavior of the
+ * vary the feature count (N = 1, 10, 50) so the scaling behavior of the
  * scanner and container is visible.
  *
  * Implementation:
@@ -19,15 +19,15 @@
  * The driver script is embedded inline so this file is self-contained.
  */
 
-import { isJson, isQuick, emitResults, type ScenarioResult } from "./scenarios";
+import { isQuick, emitResults, type ScenarioResult } from "./scenarios";
 import { join } from "node:path";
 
 const DRIVER_PATH = join(import.meta.dir, "_cold-start-driver.ts");
 
 /** Driver source. Written once on first run; cached on disk to avoid `eval`. */
 const DRIVER_SOURCE = `
-import { Controller, Get, Injectable, Module } from "../src/common";
-import { TechneFactory } from "../src/core";
+import { Controller, Get, Injectable } from "../src/common";
+import { defineFeature, TechneFactory } from "../src/core";
 
 const t0 = Bun.nanoseconds();
 
@@ -45,27 +45,20 @@ class C {
   ping() { return this.s.ping(); }
 }
 
-// Dynamically build N sibling feature modules. The root module imports them
-// all so the scanner walks the full graph.
-const siblings: any[] = [];
+const features: any[] = [];
 for (let i = 0; i < N; i++) {
   @Injectable()
   class SiblingService {}
 
-  @Module({ providers: [SiblingService], exports: [SiblingService] })
-  class SiblingModule {}
-
-  siblings.push(SiblingModule);
+  features.push(defineFeature({ providers: [SiblingService] }));
 }
 
-@Module({
-  imports: siblings,
+const app = await TechneFactory.create({
+  features,
   controllers: [C],
   providers: [S],
-})
-class AppModule {}
-
-const app = await TechneFactory.create(AppModule, { logger: false });
+  logger: false,
+});
 // Force a handle() to ensure the first request path is JITed too.
 await app.handle(new Request("http://localhost/ping"));
 

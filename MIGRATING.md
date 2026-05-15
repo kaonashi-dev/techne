@@ -46,7 +46,6 @@ Renames at a glance:
 | `BnestApplicationOptions`       | `TechneApplicationOptions`         |
 | `BnestHealthOptions`            | `TechneHealthOptions`              |
 | `BnestShutdownOptions`          | `TechneShutdownOptions`            |
-| `BnestInterceptor`              | `TechneInterceptor`                |
 | `BnestConfig`                   | `TechneConfig`                     |
 | `defineBnestConfig`             | `defineTechneConfig`               |
 | `loadBnestConfigFile`           | `loadTechneConfigFile`             |
@@ -191,7 +190,16 @@ as a key, swap it.
   imports and the `Techne*` class names. Files already in your repo are
   untouched until you regenerate them.
 
-## 10. Verification checklist
+## 10. Techne v1 flat HTTP surface
+
+- Public interceptor and pipe APIs are removed from `@kaonashi-dev/techne/common`.
+  Replace response-shaping interceptors with `@OnResponse()` plus a
+  `ResponseHook`; keep request validation and coercion in route schemas.
+- The CLI no longer scaffolds `g pipe` or `g interceptor`. Supported generator
+  kinds are `module`, `controller`, `service`, `resource`, `middleware`,
+  `guard`, `filter`, `hook`, `dto`, `docker`, and `client`.
+
+## 11. Verification checklist
 
 After upgrading:
 

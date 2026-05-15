@@ -14,16 +14,18 @@ export class JwtAuthGuard implements CanActivate {
 
   async canActivate(context: any): Promise<boolean> {
     const isPublic = this.reflector.getAllAndOverride<boolean>(PUBLIC_METADATA, [
-      context.getHandler(),
-      context.getClass(),
+      context.handler,
+      context.controller,
     ]);
     if (isPublic) {
       return true;
     }
 
-    const request = context.switchToHttp().getRequest();
+    const request = context.ctx?.request as any;
     const header =
-      request?.headers?.authorization ?? request?.request?.headers?.get?.("authorization");
+      context.ctx?.headers?.authorization ??
+      context.ctx?.headers?.Authorization ??
+      request?.headers?.get?.("authorization");
     if (!header || typeof header !== "string" || !header.startsWith("Bearer ")) {
       throw new UnauthorizedException("Missing bearer token");
     }
@@ -31,9 +33,7 @@ export class JwtAuthGuard implements CanActivate {
     const token = header.slice("Bearer ".length);
     const payload = await this.jwtService.verifyAsync(token);
     request.user = payload;
-    if (request.request && typeof request.request === "object") {
-      (request.request as Record<string, unknown>).user = payload;
-    }
+    context.ctx.user = payload;
     return true;
   }
 }

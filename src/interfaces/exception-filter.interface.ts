@@ -1,5 +1,5 @@
-import type { ArgumentsHost } from "../core/execution-context";
+import type { ResponseHookContext } from "./response-hook.interface";
 
 export interface ExceptionFilter<T = any> {
-  catch(exception: T, host: ArgumentsHost): any;
+  catch(exception: T, host: ResponseHookContext): any;
 }

@@ -16,6 +16,9 @@ const randomUUIDv7: () => string =
 interface ElysiaAdapterOptions {
   logger?: boolean;
   container?: Container;
+  shutdown?: {
+    gracePeriod?: number;
+  };
 }
 
 interface CompiledCorsOptions {
@@ -23,6 +26,7 @@ interface CompiledCorsOptions {
   allowedOrigins?: Set<string>;
   fallbackOrigin?: string;
   staticHeaders: Record<string, string>;
+  staticCorsHeaders?: Record<string, string>;
 }
 
 // Per-context-store flag used to dedupe inflight counter increment/decrement
@@ -38,10 +42,12 @@ export class ElysiaAdapter {
   private corsHooksInstalled = false;
   private inflight = 0;
   private isDraining = false;
+  private readonly trackInflight: boolean;
 
   constructor(private options?: ElysiaAdapterOptions) {
     this.container = options?.container || globalContainer;
     this.logger = new Logger("ElysiaAdapter");
+    this.trackInflight = options?.shutdown?.gracePeriod !== 0;
     this.app = this.createApp();
   }
 
@@ -88,6 +94,18 @@ export class ElysiaAdapter {
   }
 
   private setupInflightTracking(app: Elysia) {
+    if (!this.trackInflight) {
+      app.onRequest(() => {
+        if (this.isDraining) {
+          return new Response(null, {
+            status: 503,
+            headers: { connection: "close" },
+          });
+        }
+      });
+      return;
+    }
+
     app.onRequest((ctx: any) => {
       if (this.isDraining) {
         return new Response(null, {
@@ -130,6 +148,9 @@ export class ElysiaAdapter {
     //
     // We do, however, skip the `requestStartTimes` bookkeeping when logging
     // is off: the start time is only consumed inside the logging callbacks.
+    // There is no current boot-time flag that proves no request-id consumer is
+    // active, so the request-id work itself remains part of the compatibility
+    // contract for logger-disabled apps.
     app.onRequest((ctx: any) => {
       const request = ctx.request;
       const inbound = request.headers.get("x-request-id");
@@ -290,6 +311,7 @@ export class ElysiaAdapter {
   private createCorsHeaders(request: Request): HeadersInit {
     const cors = this.compiledCorsOptions;
     if (!cors) return {};
+    if (cors.staticCorsHeaders) return cors.staticCorsHeaders;
 
     const origin = request.headers.get("origin");
     const allowedOrigin = Array.isArray(cors.origin)
@@ -328,11 +350,26 @@ export class ElysiaAdapter {
       staticHeaders["access-control-max-age"] = `${options.maxAge}`;
     }
 
+    const staticOrigin =
+      typeof options.origin === "string"
+        ? options.origin
+        : options.origin === false
+          ? "*"
+          : undefined;
+    const staticCorsHeaders =
+      staticOrigin === undefined
+        ? undefined
+        : {
+            "access-control-allow-origin": staticOrigin,
+            ...staticHeaders,
+          };
+
     return {
       origin: options.origin,
       allowedOrigins: Array.isArray(options.origin) ? new Set(options.origin) : undefined,
       fallbackOrigin: Array.isArray(options.origin) ? options.origin[0] : undefined,
       staticHeaders,
+      staticCorsHeaders,
     };
   }
 

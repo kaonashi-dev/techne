@@ -7,10 +7,9 @@ import {
   generateResource,
   generateMiddleware,
   generateGuard,
-  generatePipe,
   generateFilter,
-  generateInterceptor,
   generateDto,
+  generateHook,
   generateDockerfile,
   createProject,
 } from "./generators";
@@ -217,9 +216,8 @@ Available generators:
   resource
   middleware
   guard
-  pipe
   filter
-  interceptor
+  hook
   dto
   docker          (writes Dockerfile + .dockerignore; supports --port, --bun-version, --out, --force, --dry-run)
   client          (writes a typed RPC route map; supports --out, defaults to src/routes.generated.ts)
@@ -426,14 +424,11 @@ async function main() {
       case "guard":
         await generateGuard(name);
         break;
-      case "pipe":
-        await generatePipe(name);
-        break;
       case "filter":
         await generateFilter(name);
         break;
-      case "interceptor":
-        await generateInterceptor(name);
+      case "hook":
+        await generateHook(name);
         break;
       case "dto":
         await generateDto(name);

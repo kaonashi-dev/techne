@@ -10,7 +10,7 @@
  * path the validator is probably building rich error messages eagerly.
  */
 
-import { Body, Controller, Injectable, Module, Post, Schema } from "../src/common";
+import { Body, Controller, Injectable, Post, Schema } from "../src/common";
 import { TechneFactory } from "../src/core";
 import { emitResults, getDefaults, isQuick, runScenario, type ScenarioResult } from "./scenarios";
 
@@ -36,10 +36,11 @@ class ValidationController {
   }
 }
 
-@Module({ controllers: [ValidationController], providers: [ValidationService] })
-class ValidationModule {}
-
-const techneApp = await TechneFactory.create(ValidationModule, { logger: false });
+const techneApp = await TechneFactory.create({
+  controllers: [ValidationController],
+  providers: [ValidationService],
+  logger: false,
+});
 
 const validBody = JSON.stringify({ name: "Alice", age: 30 });
 const invalidBody = JSON.stringify({ name: "Alice" }); // missing `age`

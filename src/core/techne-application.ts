@@ -3,8 +3,6 @@ import type { Container, ResolutionContext } from "./container";
 import type { RouterExecutionContext } from "./router/router-execution-context";
 import type { CanActivate } from "../interfaces/can-activate.interface";
 import type { ExceptionFilter } from "../interfaces/exception-filter.interface";
-import type { TechneInterceptor } from "../interfaces/interceptor.interface";
-import type { PipeTransform } from "../interfaces/pipe-transform.interface";
 import { Logger } from "../services/logger.service";
 import type { MqRegistry } from "../mq/registry";
 import type {
@@ -113,28 +111,18 @@ export class TechneApplication {
   ) {
     this.shutdownOptions = {
       ...DEFAULT_SHUTDOWN,
-      ...(options?.shutdown ?? {}),
+      ...options?.shutdown,
     };
     this.healthOptions = {
       ...DEFAULT_HEALTH,
-      ...(options?.health ?? {}),
+      ...options?.health,
       checks: options?.health?.checks ?? DEFAULT_HEALTH.checks,
     };
-    this.userOptions = Object.freeze({ ...(options?.userOptions ?? {}) });
+    this.userOptions = Object.freeze({ ...options?.userOptions });
   }
 
   useGlobalFilters(...filters: ExceptionFilter[]): this {
     this.executionContext?.setGlobalFilters(filters);
-    return this;
-  }
-
-  useGlobalInterceptors(...interceptors: TechneInterceptor[]): this {
-    this.executionContext?.setGlobalInterceptors(interceptors);
-    return this;
-  }
-
-  useGlobalPipes(...pipes: PipeTransform[]): this {
-    this.executionContext?.setGlobalPipes(pipes);
     return this;
   }
 

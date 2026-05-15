@@ -1,13 +1,13 @@
 import "../reflect-setup";
 import { PARAMS_METADATA } from "../common/constants";
-import type { ExecutionContext } from "../core/execution-context";
+import type { ResponseHookContext } from "../interfaces/response-hook.interface";
 
 export type ParamType = "body" | "param" | "query" | "headers" | "request" | "file" | "custom";
 
 /** Factory signature used by `createParamDecorator`. */
 export type CustomParamFactory<TData = any, TOutput = any> = (
   data: TData,
-  ctx: ExecutionContext,
+  ctx: ResponseHookContext,
 ) => TOutput;
 
 export interface ParamMetadata {
@@ -97,13 +97,13 @@ export const UploadedFile = createBuiltinParamDecorator("file");
 
 /**
  * Techne custom parameter decorator helper. Given a factory that reads from
- * the `ExecutionContext`, returns a parameter decorator that injects the
+ * the route context, returns a parameter decorator that injects the
  * factory's return value into a handler argument at request time.
  *
  * ```ts
  * export const CurrentUser = createParamDecorator(
- *   (data: string | undefined, ctx: ExecutionContext) => {
- *     const req = ctx.switchToHttp().getRequest();
+ *   (data: string | undefined, ctx) => {
+ *     const req = ctx.ctx.request;
  *     return data ? req.user?.[data] : req.user;
  *   },
  * );

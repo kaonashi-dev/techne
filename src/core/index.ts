@@ -1,7 +1,6 @@
 export * from "./application-context";
 export * from "./techne-application";
 export * from "./container";
-export * from "./context-id-factory";
 export * from "./define-feature";
 export * from "./define-techne-config";
 export * from "./http-options";
@@ -26,9 +25,7 @@ import { Logger } from "../services/logger.service";
  */
 export function techne(): Promise<TechneApplication>;
 export function techne(config: AppBootstrapConfig): Promise<TechneApplication>;
-export function techne(
-  config?: AppBootstrapConfig,
-): Promise<TechneApplication> {
+export function techne(config?: AppBootstrapConfig): Promise<TechneApplication> {
   if (config === undefined) return TechneFactory.create();
   return TechneFactory.create(config);
 }

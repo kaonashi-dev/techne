@@ -83,6 +83,7 @@ const injectTokensCache = new Map<Function, Record<number, any>>();
 export class Container {
   private instances = new Map<any, any>();
   private requestInstances = new Map<symbol, Map<any, any>>();
+  private requestContextIds = new WeakMap<object, symbol>();
   private resolutionStack = new Set<any>();
   private staticCache = new Map<any, boolean>();
   private providers = new Map<any, Provider>();
@@ -121,8 +122,16 @@ export class Container {
     return Symbol("techne:context");
   }
 
-  public clearContext(contextId: symbol): void {
+  public clearContext(contextIdOrRequest: symbol | object): void {
+    if (typeof contextIdOrRequest === "symbol") {
+      this.requestInstances.delete(contextIdOrRequest);
+      return;
+    }
+
+    const contextId = this.requestContextIds.get(contextIdOrRequest);
+    if (!contextId) return;
     this.requestInstances.delete(contextId);
+    this.requestContextIds.delete(contextIdOrRequest);
   }
 
   public isStatic(token: any): boolean {
@@ -173,7 +182,7 @@ export class Container {
 
     const scope = getClassScope(target);
     if (scope === Scope.REQUEST) {
-      const contextId = context.contextId ?? (context.request ? this.createContextId() : undefined);
+      const contextId = this.getResolutionContextId(context);
       if (!contextId) {
         throw new Error(
           `Cannot resolve request-scoped provider ${target?.name || target} without a request context.`,
@@ -194,7 +203,7 @@ export class Container {
     }
 
     if (!this.isStatic(target)) {
-      const contextId = context.contextId ?? (context.request ? this.createContextId() : undefined);
+      const contextId = this.getResolutionContextId(context);
       if (!contextId) {
         throw new Error(
           `Cannot resolve contextual provider ${target?.name || target} without a request context.`,
@@ -236,7 +245,11 @@ export class Container {
 
       const injections = tokens!.map((token: any, index: number) => {
         const resolvedToken = injectTokens![index] !== undefined ? injectTokens![index] : token;
-        return this.resolve(resolvedToken, { contextId: context.contextId, request: context.request, inquirer: target });
+        return this.resolve(resolvedToken, {
+          contextId: context.contextId,
+          request: context.request,
+          inquirer: target,
+        });
       });
 
       return new target(...injections);
@@ -250,7 +263,7 @@ export class Container {
     const scope = getProviderScope(provider);
 
     if (scope === Scope.REQUEST) {
-      const contextId = context.contextId ?? (context.request ? this.createContextId() : undefined);
+      const contextId = this.getResolutionContextId(context);
       if (!contextId) {
         throw new Error(
           `Cannot resolve request-scoped provider ${String(token)} without a request context.`,
@@ -271,7 +284,7 @@ export class Container {
     }
 
     if (!this.isStatic(token)) {
-      const contextId = context.contextId ?? (context.request ? this.createContextId() : undefined);
+      const contextId = this.getResolutionContextId(context);
       if (!contextId) {
         throw new Error(
           `Cannot resolve contextual provider ${String(token)} without a request context.`,
@@ -332,6 +345,22 @@ export class Container {
       this.requestInstances.set(contextId, scopedInstances);
     }
     return scopedInstances;
+  }
+
+  private getResolutionContextId(context: ResolutionContext): symbol | undefined {
+    if (context.contextId) return context.contextId;
+    const request = context.request;
+    if (!request || (typeof request !== "object" && typeof request !== "function")) {
+      return undefined;
+    }
+
+    let contextId = this.requestContextIds.get(request);
+    if (!contextId) {
+      contextId = this.createContextId();
+      this.requestContextIds.set(request, contextId);
+    }
+    context.contextId = contextId;
+    return contextId;
   }
 
   public hasContextualDeps(target: any): boolean {
@@ -401,6 +430,7 @@ export class Container {
   public reset(): void {
     this.instances.clear();
     this.requestInstances.clear();
+    this.requestContextIds = new WeakMap<object, symbol>();
     this.resolutionStack.clear();
     this.staticCache.clear();
     this.providers.clear();

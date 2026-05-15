@@ -1,5 +1,5 @@
-import { Controller, Get, Injectable, Module } from "../src/common";
-import { TechneFactory } from "../src/core";
+import { Controller, Get, Injectable } from "../src/common";
+import { defineFeature, TechneFactory } from "../src/core";
 
 const t0 = Bun.nanoseconds();
 
@@ -21,27 +21,20 @@ class C {
   }
 }
 
-// Dynamically build N sibling feature modules. The root module imports them
-// all so the scanner walks the full graph.
-const siblings: any[] = [];
+const features: any[] = [];
 for (let i = 0; i < N; i++) {
   @Injectable()
   class SiblingService {}
 
-  @Module({ providers: [SiblingService], exports: [SiblingService] })
-  class SiblingModule {}
-
-  siblings.push(SiblingModule);
+  features.push(defineFeature({ providers: [SiblingService] }));
 }
 
-@Module({
-  imports: siblings,
+const app = await TechneFactory.create({
+  features,
   controllers: [C],
   providers: [S],
-})
-class AppModule {}
-
-const app = await TechneFactory.create(AppModule, { logger: false });
+  logger: false,
+});
 // Force a handle() to ensure the first request path is JITed too.
 await app.handle(new Request("http://localhost/ping"));
 

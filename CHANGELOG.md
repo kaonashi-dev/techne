@@ -4,6 +4,20 @@ All notable changes to Techne are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `ResponseHook` and `@OnResponse()` for the Techne v1 flat HTTP response-hook
+  metadata surface.
+
+### Removed
+
+- Public interceptor and pipe exports from `@kaonashi-dev/techne/common`,
+  including `UseInterceptors`, `FileInterceptor`, `UsePipes`,
+  `TechneInterceptor`, `PipeTransform`, `APP_INTERCEPTOR`, and `APP_PIPE`.
+- CLI `g pipe` and `g interceptor` generator entries.
+
 ## [0.4.0] - 2026-05-13 — Renamed Bnest to Techne
 
 > **Breaking — read first.** The project has been renamed from `Bnest` to

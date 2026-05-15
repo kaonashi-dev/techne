@@ -142,7 +142,7 @@ async function measureOnce(
   const startNs = Bun.nanoseconds();
   for (let issued = 0; issued < total; issued += batch) {
     const n = Math.min(batch, total - issued);
-    const promises = new Array<Promise<unknown>>(n);
+    const promises: Promise<unknown>[] = [];
     for (let i = 0; i < n; i++) {
       const t0 = Bun.nanoseconds();
       const localIdx = idx++;
@@ -168,7 +168,7 @@ async function runBatched(
 ): Promise<void> {
   for (let issued = 0; issued < total; issued += batch) {
     const n = Math.min(batch, total - issued);
-    const promises = new Array<Promise<unknown>>(n);
+    const promises: Promise<unknown>[] = [];
     for (let i = 0; i < n; i++) {
       promises[i] = handler(make()).then((res) => res.status);
     }
