@@ -364,10 +364,12 @@ export async function createProject(name: string) {
     private: true,
     type: "module",
     scripts: {
-      dev: "bun --hot run src/main.ts",
-      start: "bun run src/main.ts",
-      build: "bun build src/main.ts --target=bun --outfile=dist/app.bun --minify",
-      "build:node": "bun build src/main.ts --target=node --outdir=dist --format=esm --minify",
+      dev: "techne dev",
+      start: "techne start",
+      build: "techne build",
+      "build:bundle": "techne build --target=bun --minify",
+      "build:node": "techne build --target=node --minify",
+      "deploy:docker": "techne deploy --target docker",
       lint: "oxlint .",
       "lint:fix": "oxlint --fix .",
       format: "oxfmt .",
@@ -449,11 +451,13 @@ Starter project generated with Techne.
 
 ## Scripts
 
-- \`bun run dev\` - start the app in watch mode
-- \`bun run start\` - run the app once
-- \`bun run build\` - build a Bun binary bundle
-- \`bun run build:node\` - build a Node-compatible ESM bundle
-- \`bun run check\` - run lint and format checks
+- \`bun run dev\` — start the app in watch mode
+- \`bun run start\` — run the app once (no hot reload)
+- \`bun run build\` — compile to a standalone binary (no Bun needed on the server)
+- \`bun run build:bundle\` — JS bundle for Bun runtime (Docker/VPS with Bun)
+- \`bun run build:node\` — JS bundle for Node.js (ESM)
+- \`bun run deploy:docker\` — generate Dockerfile + .dockerignore (Railway, VPS)
+- \`bun run check\` — run lint and format checks
 
 ## Getting Started
 

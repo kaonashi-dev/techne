@@ -62,23 +62,30 @@ function positionalArgAfterCommand(defaultValue: string): string {
 
 async function buildApp(
   entry: string,
-  options: { out?: string; target?: string; minify?: boolean },
+  options: { out?: string; target?: string; minify?: boolean; compile?: boolean },
 ) {
-  const outFile = options.out ?? "dist/app.bun";
-  const target = options.target ?? "bun";
+  const compile = options.compile ?? false;
+  const outFile = options.out ?? (compile ? "dist/app" : "dist/app.bun");
   const minify = options.minify ?? false;
 
-  const minifyFlag = minify ? "--minify" : "";
-  const cmd = `bun build ${entry} --target=${target} --outfile=${outFile} ${minifyFlag}`.trim();
+  const bunArgs = ["bun", "build"];
+  if (compile) {
+    bunArgs.push("--compile");
+  } else {
+    bunArgs.push(`--target=${options.target ?? "bun"}`);
+  }
+  bunArgs.push(`--outfile=${outFile}`);
+  if (minify) bunArgs.push("--minify");
+  bunArgs.push(entry);
 
   console.log(`Building ${entry}...`);
-  const proc = Bun.spawn(cmd.split(" "), { stdout: "inherit", stderr: "inherit" });
+  const proc = Bun.spawn(bunArgs, { stdout: "inherit", stderr: "inherit" });
   const exitCode = await proc.exited;
 
   if (exitCode === 0) {
-    console.log(`Build complete: ${outFile}`);
+    ok(`Build complete: ${outFile}${compile ? " (standalone binary)" : ""}`);
   } else {
-    console.error(`Build failed with exit code ${exitCode}`);
+    fail(`Build failed with exit code ${exitCode}`);
     process.exit(exitCode);
   }
 }
@@ -218,7 +225,8 @@ Usage:
   techne dev [--port N] [--inspect]
   techne start [--port N]
   techne test [pattern] [--watch] [--coverage]
-  techne build|b [entry] [--out <file>] [--target <bun|node|browser>] [--minify] [--precompile]
+  techne build|b [entry] [--out <file>] [--minify] [--precompile]          (standalone binary, default)
+  techne build|b [entry] --target <bun|node|browser> [--out <file>] [--minify] [--precompile]  (JS bundle)
   techne deploy --target docker [--out Dockerfile] [--port N] [--bun-version V] [--dry-run] [--force]
   techne doctor
   techne generate|g <type> <name>
@@ -236,13 +244,14 @@ Available generators:
   docker          (writes Dockerfile + .dockerignore; supports --port, --bun-version, --out, --force, --dry-run)
   client          (writes a typed RPC route map; supports --out, defaults to src/routes.generated.ts)
 
-Build targets:
-  bun      Standalone Bun binary (default)
-  node     Node.js ESM module
-  browser  Browser bundle
+Build modes:
+  (default)        Standalone binary via bun build --compile. Output: dist/app. No runtime needed on server.
+  --target=bun     JS bundle that runs with Bun. Output: dist/app.bun.
+  --target=node    JS bundle (ESM) for Node.js.
+  --target=browser JS bundle for the browser.
 
-Precompile:
-  --precompile writes .techne/routes.json from techne.config.ts before building
+Build flags:
+  --precompile  Writes .techne/routes.json from techne.config.ts before building (AOT route optimization).
 
 Deploy targets:
   docker   Multi-stage Bun Dockerfile (only target supported for now)
@@ -462,21 +471,24 @@ async function main() {
     }
 
     const entry = positionalArgAfterCommand("src/main.ts");
-    const outIndex = args.indexOf("--out");
-    const targetIndex = args.indexOf("--target");
-    const minifyIndex = args.indexOf("--minify");
+    const out = flagValue("--out");
+    const target = flagValue("--target");
+    const minify = flag("--minify");
+    // --compile is the default when no --target is given
+    const compile = !target || flag("--compile");
 
-    const out = outIndex !== -1 ? args[outIndex + 1] : undefined;
-    const target = targetIndex !== -1 ? args[targetIndex + 1] : undefined;
-    const minify = minifyIndex !== -1;
+    if (flag("--compile") && target) {
+      warn("--target is ignored when --compile is set (Bun standalone binaries are always bun-target)");
+    }
 
     const ext = path.extname(entry);
-    const outDefault = ext === ".ts" ? "dist/app.bun" : entry.replace(ext, ".bun");
+    const outDefault = compile ? "dist/app" : (ext === ".ts" ? "dist/app.bun" : entry.replace(ext, ".bun"));
 
     await buildApp(entry, {
       out: out ?? outDefault,
-      target: target ?? "bun",
+      target,
       minify,
+      compile,
     });
   } else {
     printHelp();
