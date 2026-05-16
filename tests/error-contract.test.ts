@@ -3,6 +3,7 @@ import { TechneFactory } from "../src/factory/techne-factory";
 import { Controller } from "../src/decorators/controller.decorator";
 import { Get } from "../src/decorators/routes.decorator";
 import { NotFoundException } from "../src/exceptions";
+import { __setIsProduction } from "../src/core/router/router-response-controller";
 describe("RFC 7807 error contract", () => {
   test("HttpException with options.code → status, type, title, detail, code, content-type", async () => {
     @Controller("users")
@@ -33,15 +34,19 @@ describe("RFC 7807 error contract", () => {
   });
   describe("plain Error → 500", () => {
     const originalEnv = Bun.env.NODE_ENV;
+    const originalIsProduction = originalEnv === "production";
     beforeEach(() => {
       // ensure no leak from previous tests
       Bun.env.NODE_ENV = originalEnv;
+      __setIsProduction(originalIsProduction);
     });
     afterEach(() => {
       Bun.env.NODE_ENV = originalEnv;
+      __setIsProduction(originalIsProduction);
     });
     test("omits detail in production", async () => {
       Bun.env.NODE_ENV = "production";
+      __setIsProduction(true);
       @Controller("boom")
       class BoomController {
         @Get("/")
@@ -65,6 +70,7 @@ describe("RFC 7807 error contract", () => {
     });
     test("includes detail outside production", async () => {
       Bun.env.NODE_ENV = "development";
+      __setIsProduction(false);
       @Controller("boom-dev")
       class BoomDevController {
         @Get("/")
@@ -123,7 +129,9 @@ describe("RFC 7807 error contract", () => {
   });
   test("non-Error throws (string) map to 500, detail only outside production", async () => {
     const originalEnv = Bun.env.NODE_ENV;
+    const originalIsProduction = originalEnv === "production";
     Bun.env.NODE_ENV = "production";
+    __setIsProduction(true);
     try {
       @Controller("throw-string")
       class ThrowStringController {
@@ -144,6 +152,7 @@ describe("RFC 7807 error contract", () => {
       expect(body.detail).toBeUndefined();
     } finally {
       Bun.env.NODE_ENV = originalEnv;
+      __setIsProduction(originalIsProduction);
     }
   });
 });
