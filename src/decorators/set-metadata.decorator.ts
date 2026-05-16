@@ -1,4 +1,5 @@
 import "../reflect-setup";
+import { defineMetadataFromContext, isDecoratorContext } from "../core/metadata-store";
 
 /**
  * Techne `SetMetadata` helper. Attaches arbitrary metadata to a handler
@@ -20,7 +21,16 @@ export function SetMetadata<K extends PropertyKey = string, V = any>(
   metadataKey: K,
   metadataValue: V,
 ): MethodDecorator & ClassDecorator {
-  const decorator = (target: any, key?: string | symbol, descriptor?: PropertyDescriptor) => {
+  const decorator = (target: any, key?: any, descriptor?: PropertyDescriptor) => {
+    if (isDecoratorContext(key)) {
+      if (key.kind === "class" && key.metadata) {
+        defineMetadataFromContext(key.metadata, metadataKey as string, metadataValue);
+      } else {
+        Reflect.defineMetadata(metadataKey as string, metadataValue, target);
+      }
+      return;
+    }
+
     if (descriptor) {
       Reflect.defineMetadata(metadataKey as string, metadataValue, descriptor.value);
       return descriptor;

@@ -1,6 +1,9 @@
 /**
  * Patches the global `Reflect` object with the three methods that
- * `reflect-metadata` normally provides:
+ * `reflect-metadata` normally provides. The default backing store is
+ * `target[Symbol.metadata]` (TC39 decorator metadata); setting
+ * `TECHNE_LEGACY_DECORATORS=1` keeps writes on the historical WeakMap path
+ * for one release while reads still understand both stores.
  *
  *   - Reflect.metadata(key, value)      ← emitted by TypeScript (emitDecoratorMetadata)
  *   - Reflect.defineMetadata(key, v, t)  ← used by framework decorators

@@ -10,7 +10,10 @@ export class RoutesResolver {
   private readonly responseController = new RouterResponseController();
   public readonly executionContext = new RouterExecutionContext(this.responseController);
 
-  constructor(private readonly scanner: Scanner) {
+  constructor(
+    private readonly scanner: Scanner,
+    private readonly precompiledRoutes?: DiscoveredRouteDefinition[],
+  ) {
     this.explorer = new RouterExplorer(scanner);
   }
 
@@ -19,7 +22,8 @@ export class RoutesResolver {
     const routes = [];
     this.executionContext.resetRoutes();
 
-    for (const route of this.explorer.explore()) {
+    const discoveredRoutes = this.precompiledRoutes ?? this.explorer.explore();
+    for (const route of discoveredRoutes) {
       for (const expandedRoute of this.expandRoute(route, options)) {
         routes.push(this.executionContext.create(expandedRoute, container));
       }
