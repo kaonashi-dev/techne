@@ -59,6 +59,12 @@ interface RouteRuntimeCache {
   responseValidator?: { Check(value: unknown): boolean };
   controllerClass?: any;
   guards: any[];
+  // The compiled per-request closure. Selected at compile time based on
+  // enhancers/req-scoped deps so the hot path never re-checks those flags.
+  // Swapped by `refreshRouteCache` when global filters change post-boot.
+  handler: (context: RequestHandlerContext) => unknown;
+  // Compile inputs retained so we can recompile when the cache flags change.
+  recompile?: () => void;
 }
 
 const EMPTY_ARRAY: readonly never[] = Object.freeze([]);
@@ -225,6 +231,7 @@ export class RouterExecutionContext {
     this.globalFilters = filters;
     for (const cache of this.routeCaches) {
       this.refreshRouteCache(cache);
+      cache.recompile?.();
     }
   }
 
@@ -269,6 +276,8 @@ export class RouterExecutionContext {
       hasRequestScopedDeps: false,
       controllerClass,
       guards: mergedGuards,
+      // Placeholder; replaced before `create` returns.
+      handler: () => undefined,
     };
 
     if (route.schema?.response) {
@@ -286,17 +295,25 @@ export class RouterExecutionContext {
       }
     }
 
+    cache.recompile = () => {
+      cache.handler = this.compileHandler(
+        route,
+        metadata,
+        cache,
+        controllerClass,
+        handlerRef,
+        container,
+      );
+    };
+
     this.refreshRouteCache(cache);
     this.routeCaches.push(cache);
+    cache.recompile();
 
-    const handler = this.compileHandler(
-      route,
-      metadata,
-      cache,
-      controllerClass,
-      handlerRef,
-      container,
-    );
+    // Outer Elysia-registered wrapper indirects through `cache.handler` so that
+    // a post-boot `refreshRouteCache` recompile (e.g. global filters change)
+    // can swap the closure without re-registering with Elysia.
+    const handler = (context: RequestHandlerContext) => cache.handler(context);
 
     return {
       method: route.method,
@@ -315,13 +332,97 @@ export class RouterExecutionContext {
     handlerRef: Function,
     container: ContainerLike,
   ): (context: RequestHandlerContext) => unknown {
-    const responseController = this.responseController;
     const handlerName = route.handlerName;
     const paramsMetadata = route.paramsMetadata;
     const bindArgs = metadata.bindArgs;
     const hasCustomParam = metadata.hasCustomParam;
 
-    const slow = (context: RequestHandlerContext) => {
+    // Boot-time decision: a route with neither a response validator nor a
+    // response stringifier has nothing to do in `maybeStringify`. We emit a
+    // closure that skips the call entirely so the per-request hot path never
+    // touches the validator/stringifier fields on the cache.
+    const needsResponseWork =
+      cache.responseValidator !== undefined || cache.responseStringifier !== undefined;
+
+    // Fast path: no enhancers, no request-scoped deps, static controller, and
+    // a compileable param layout. The runtime flag check is gone — recompile
+    // (via `cache.recompile`) re-selects this branch when flags change.
+    if (!cache.hasRuntimeEnhancers && !cache.hasRequestScopedDeps) {
+      const fastController = container.isStatic(controllerClass)
+        ? container.get<any>(controllerClass)
+        : undefined;
+      const fast = fastController
+        ? compileFastHandler(fastController, handlerName, paramsMetadata)
+        : null;
+      if (fast) {
+        return needsResponseWork
+          ? this.createFastHandlerWithResponseWork(fast, cache)
+          : this.createFastHandlerNoResponseWork(fast);
+      }
+    }
+
+    return this.createSlowHandler(
+      cache,
+      controllerClass,
+      handlerRef,
+      handlerName,
+      bindArgs,
+      hasCustomParam,
+      container,
+    );
+  }
+
+  private createFastHandlerWithResponseWork(
+    fast: (ctx: any) => unknown,
+    cache: RouteRuntimeCache,
+  ): (context: RequestHandlerContext) => unknown {
+    const responseController = this.responseController;
+    return (context: RequestHandlerContext) => {
+      try {
+        const result = fast(context);
+        if (isPromiseLike(result)) {
+          return (result as Promise<unknown>).then(
+            (resolved) => this.maybeStringify(context, cache, resolved),
+            (err) => responseController.mapException(context, err),
+          );
+        }
+        return this.maybeStringify(context, cache, result);
+      } catch (error) {
+        return responseController.mapException(context, error);
+      }
+    };
+  }
+
+  private createFastHandlerNoResponseWork(
+    fast: (ctx: any) => unknown,
+  ): (context: RequestHandlerContext) => unknown {
+    const responseController = this.responseController;
+    return (context: RequestHandlerContext) => {
+      try {
+        const result = fast(context);
+        if (isPromiseLike(result)) {
+          return (result as Promise<unknown>).then(undefined, (err) =>
+            responseController.mapException(context, err),
+          );
+        }
+        return result;
+      } catch (error) {
+        return responseController.mapException(context, error);
+      }
+    };
+  }
+
+  private createSlowHandler(
+    cache: RouteRuntimeCache,
+    controllerClass: any,
+    handlerRef: Function,
+    handlerName: string,
+    bindArgs: CompiledArgsBinder,
+    hasCustomParam: boolean,
+    container: ContainerLike,
+  ): (context: RequestHandlerContext) => unknown {
+    const responseController = this.responseController;
+    return (context: RequestHandlerContext) => {
       const resolutionContext = cache.hasRequestScopedDeps ? { request: context } : undefined;
       const controllerInstance = resolutionContext
         ? this.resolveInstance<any>(controllerClass, container, resolutionContext)
@@ -394,62 +495,6 @@ export class RouterExecutionContext {
         return fail(error);
       }
     };
-
-    // Boot-time decision: a route with neither a response validator nor a
-    // response stringifier has nothing to do in `maybeStringify`. We emit a
-    // closure that skips the call entirely so the per-request hot path never
-    // touches the validator/stringifier fields on the cache.
-    const needsResponseWork =
-      cache.responseValidator !== undefined || cache.responseStringifier !== undefined;
-
-    if (!cache.hasRuntimeEnhancers && !cache.hasRequestScopedDeps) {
-      const fastController = container.isStatic(controllerClass)
-        ? container.get<any>(controllerClass)
-        : undefined;
-      const fast = fastController
-        ? compileFastHandler(fastController, handlerName, paramsMetadata)
-        : null;
-      if (fast) {
-        if (needsResponseWork) {
-          return (context: RequestHandlerContext) => {
-            if (cache.hasRuntimeEnhancers || cache.hasRequestScopedDeps) {
-              return slow(context);
-            }
-            try {
-              const result = fast(context);
-              if (isPromiseLike(result)) {
-                return (result as Promise<unknown>).then(
-                  (resolved) => this.maybeStringify(context, cache, resolved),
-                  (err) => responseController.mapException(context, err),
-                );
-              }
-              return this.maybeStringify(context, cache, result);
-            } catch (error) {
-              return responseController.mapException(context, error);
-            }
-          };
-        }
-        // No response validator, no stringifier: skip `maybeStringify` entirely.
-        return (context: RequestHandlerContext) => {
-          if (cache.hasRuntimeEnhancers || cache.hasRequestScopedDeps) {
-            return slow(context);
-          }
-          try {
-            const result = fast(context);
-            if (isPromiseLike(result)) {
-              return (result as Promise<unknown>).then(undefined, (err) =>
-                responseController.mapException(context, err),
-              );
-            }
-            return result;
-          } catch (error) {
-            return responseController.mapException(context, error);
-          }
-        };
-      }
-    }
-
-    return slow;
   }
 
   private finalizeResult(
