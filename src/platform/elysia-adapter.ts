@@ -88,10 +88,7 @@ export class ElysiaAdapter {
     this.logger = new Logger("ElysiaAdapter");
     this.trackInflight = options?.shutdown?.gracePeriod !== 0;
     this.loggerEnabled = options?.logger !== false;
-    this.needsRequestId = ElysiaAdapter.computeNeedsRequestId(
-      options,
-      this.loggerEnabled,
-    );
+    this.needsRequestId = ElysiaAdapter.computeNeedsRequestId(options, this.loggerEnabled);
     this.app = this.createApp();
   }
 
@@ -152,146 +149,178 @@ export class ElysiaAdapter {
   private createApp() {
     const app = new Elysia();
     this.corsHooksInstalled = false;
-    this.setupInflightTracking(app);
-    this.setupRequestLogging(app);
+    this.installFusedHooks(app);
     this.setupCors(app);
-    this.setupValidationErrors(app);
     return app;
   }
 
-  private setupInflightTracking(app: Elysia) {
-    if (!this.trackInflight) {
-      app.onRequest(() => {
+  /**
+   * Installs the fused per-phase hooks. Replaces the historical 1-per-feature
+   * registration pattern (inflight + request-id + logging + validation) with
+   * a single monomorphic callback per phase whose body is composed once at
+   * boot from the active feature flags. Each callback sees only one ctx shape
+   * (Elysia's request context), so V8 keeps the call-site monomorphic.
+   *
+   * Phases with zero active branches don't register at all — keeps the
+   * Elysia hook chain length proportional to the actual feature surface.
+   *
+   * User plugins still call `adapter.getInstance().onRequest()` etc. and
+   * chain after ours; the fusion only collapses first-party hooks.
+   */
+  private installFusedHooks(app: Elysia) {
+    const trackInflight = this.trackInflight;
+    const needsRequestId = this.needsRequestId;
+    const loggingEnabled = this.loggerEnabled;
+    const exhaustive = this.options?.validation?.exhaustive === true;
+    // `setupInflightTracking` historically registered an `onRequest` even
+    // when `!trackInflight` purely to short-circuit drains during graceful
+    // shutdown. The drain check is independent of counting, so it stays on
+    // unconditionally.
+    const onRequestActive = true;
+    const onAfterHandleActive = trackInflight || needsRequestId;
+    const onErrorActive = true; // validation error mapping is always-on
+
+    if (onRequestActive) {
+      app.onRequest((ctx: any) => {
         if (this.isDraining) {
           return new Response(null, {
             status: 503,
             headers: { connection: "close" },
           });
         }
+
+        // Inflight: increment counter on first sight of this ctx.
+        if (trackInflight) {
+          const store = ctx.store ?? (ctx.store = {});
+          if (!store[INFLIGHT_COUNTED_KEY]) {
+            store[INFLIGHT_COUNTED_KEY] = true;
+            this.inflight++;
+          }
+        }
+
+        // Request-id: lazily install the UUID accessor (or copy inbound
+        // header through) so consumers can read `ctx.store.requestId`
+        // without paying the UUID cost when nobody asks. Logging start
+        // time is captured here as well to keep the read paths together.
+        if (needsRequestId) {
+          const request = ctx.request;
+          const inbound = request.headers.get("x-request-id");
+          const store = ctx.store ?? (ctx.store = {});
+          if (typeof inbound === "string" && inbound.length > 0) {
+            store.requestId = inbound;
+          } else {
+            ElysiaAdapter.installLazyRequestId(store);
+          }
+          if (loggingEnabled) {
+            this.requestStartTimes.set(request, performance.now());
+          }
+        }
       });
-      return;
     }
 
-    app.onRequest((ctx: any) => {
-      if (this.isDraining) {
-        return new Response(null, {
-          status: 503,
-          headers: { connection: "close" },
-        });
-      }
-      const store = ctx.store ?? (ctx.store = {});
-      if (!store[INFLIGHT_COUNTED_KEY]) {
-        store[INFLIGHT_COUNTED_KEY] = true;
-        this.inflight++;
-      }
-    });
-
-    // Inflight release bodies are inlined into the `onAfterHandle` and
-    // `onError` callbacks so V8 sees a monomorphic call-site at each hook —
-    // a shared closure adds an extra indirection and tends to go polymorphic
-    // when Elysia threads heterogeneous `ctx` shapes through it.
-    app.onAfterHandle((ctx: any) => {
-      const store = ctx.store;
-      if (store && store[INFLIGHT_COUNTED_KEY]) {
-        store[INFLIGHT_COUNTED_KEY] = false;
-        if (this.inflight > 0) this.inflight--;
-      }
-    });
-
-    app.onError((ctx: any) => {
-      const store = ctx.store;
-      if (store && store[INFLIGHT_COUNTED_KEY]) {
-        store[INFLIGHT_COUNTED_KEY] = false;
-        if (this.inflight > 0) this.inflight--;
-      }
-    });
-  }
-
-  private setupRequestLogging(app: Elysia) {
-    const loggingEnabled = this.loggerEnabled;
-
-    if (!this.needsRequestId) {
-      // No consumer reads `store.requestId`: skip UUID allocation and the
-      // store mutation entirely. We still honour inbound `x-request-id`
-      // headers so upstream tracing keeps working — a tiny dedicated hook
-      // copies the header through to the response without touching the
-      // store or generating a UUID.
+    if (onAfterHandleActive) {
       app.onAfterHandle((ctx: any) => {
-        this.echoInboundRequestId(ctx);
+        if (trackInflight) {
+          const store = ctx.store;
+          if (store && store[INFLIGHT_COUNTED_KEY]) {
+            store[INFLIGHT_COUNTED_KEY] = false;
+            if (this.inflight > 0) this.inflight--;
+          }
+        }
+
+        if (needsRequestId) {
+          if (loggingEnabled) {
+            const { request, set } = ctx;
+            const start = this.requestStartTimes.get(request) || performance.now();
+            const duration = Math.round(performance.now() - start);
+            const path = this.getRequestPath(request.url);
+            const requestId = ctx.store?.requestId as string | undefined;
+            const requestLogger = requestId ? createRequestLogger(requestId, "HTTP") : this.logger;
+            requestLogger.log(
+              `${request.method} ${path} ${set.status || 200} +${duration}ms`,
+              "HTTP",
+            );
+            this.echoRequestId(ctx);
+            this.requestStartTimes.delete(request);
+          } else {
+            this.echoRequestId(ctx);
+          }
+        } else {
+          // request-id pipeline disabled — still echo inbound header so
+          // clients that opt in to correlation see their id reflected.
+          this.echoInboundRequestId(ctx);
+        }
       });
-      app.onError((ctx: any) => {
-        this.echoInboundRequestId(ctx);
-      });
-      return;
     }
 
-    // `needsRequestId` is true. Install the request-id hook, but defer the
-    // UUID allocation: when no inbound header is present we attach a lazy
-    // getter to `ctx.store.requestId` that materialises the id on first
-    // read. This lets routes that never read or echo the id pay zero UUID
-    // cost on the success path, while preserving the contract that the
-    // value is always a string by the time anyone observes it.
-    app.onRequest((ctx: any) => {
-      const request = ctx.request;
-      const inbound = request.headers.get("x-request-id");
-      const store = ctx.store ?? (ctx.store = {});
-      if (typeof inbound === "string" && inbound.length > 0) {
-        store.requestId = inbound;
-      } else {
-        ElysiaAdapter.installLazyRequestId(store);
-      }
-      if (loggingEnabled) {
-        this.requestStartTimes.set(request, performance.now());
-      }
-    });
-
-    if (!loggingEnabled) {
-      // Logging suppressed — but we still echo `x-request-id` so clients can
-      // correlate requests. No `requestStartTimes` to clean up.
-      app.onAfterHandle((ctx: any) => {
-        this.echoRequestId(ctx);
-      });
+    if (onErrorActive) {
       app.onError((ctx: any) => {
-        this.echoRequestId(ctx);
+        if (trackInflight) {
+          const store = ctx.store;
+          if (store && store[INFLIGHT_COUNTED_KEY]) {
+            store[INFLIGHT_COUNTED_KEY] = false;
+            if (this.inflight > 0) this.inflight--;
+          }
+        }
+
+        if (needsRequestId) {
+          if (loggingEnabled) {
+            const { request, code, error, set } = ctx;
+            const start = this.requestStartTimes.get(request) || performance.now();
+            const duration = Math.round(performance.now() - start);
+            const path = this.getRequestPath(request.url);
+            const stack = error instanceof Error ? error.stack : undefined;
+            const requestId = ctx.store?.requestId as string | undefined;
+            const requestLogger = requestId ? createRequestLogger(requestId, "HTTP") : this.logger;
+            requestLogger.error(
+              `${request.method} ${path} ${set.status || 500} +${duration}ms (${code})`,
+              stack,
+              "HTTP",
+            );
+            this.echoRequestId(ctx);
+            this.requestStartTimes.delete(request);
+          } else {
+            this.echoRequestId(ctx);
+          }
+        } else {
+          this.echoInboundRequestId(ctx);
+        }
+
+        // Validation error mapping — runs last so any header echo above is
+        // preserved, and we return the problem+json body that Elysia uses
+        // as the response.
+        if (ctx.code !== "VALIDATION") return;
+        const { error, set } = ctx;
+        set.status = 422;
+        const existing = set.headers;
+        if (existing == null) {
+          set.headers = PROBLEM_JSON_HEADERS;
+        } else if (existing instanceof Headers) {
+          existing.set("content-type", "application/problem+json");
+        } else {
+          (existing as Record<string, string>)["content-type"] = "application/problem+json";
+        }
+
+        let errors: unknown[];
+        if (exhaustive) {
+          errors = error?.all ?? [];
+        } else {
+          // Default fast path: avoid Elysia's `error.all` getter, which
+          // spreads the entire TypeBox `Errors(...)` iterator. Prefer the
+          // first-error fields the ValidationError already stores on the
+          // instance.
+          const first = error?.first ?? error?.valueError ?? error?.messageValue ?? error?.all?.[0];
+          errors = first ? [first] : [];
+        }
+
+        return {
+          type: "https://httpstatuses.com/422",
+          title: "Unprocessable Entity",
+          status: 422,
+          errors,
+        };
       });
-      return;
     }
-
-    app.onAfterHandle((ctx: any) => {
-      const { request, set } = ctx;
-      const start = this.requestStartTimes.get(request) || performance.now();
-      const duration = Math.round(performance.now() - start);
-      const path = this.getRequestPath(request.url);
-      const requestId = ctx.store?.requestId as string | undefined;
-      const requestLogger = requestId
-        ? createRequestLogger(requestId, "HTTP")
-        : this.logger;
-      requestLogger.log(
-        `${request.method} ${path} ${set.status || 200} +${duration}ms`,
-        "HTTP",
-      );
-      this.echoRequestId(ctx);
-      this.requestStartTimes.delete(request);
-    });
-
-    app.onError((ctx: any) => {
-      const { request, code, error, set } = ctx;
-      const start = this.requestStartTimes.get(request) || performance.now();
-      const duration = Math.round(performance.now() - start);
-      const path = this.getRequestPath(request.url);
-      const stack = error instanceof Error ? error.stack : undefined;
-      const requestId = ctx.store?.requestId as string | undefined;
-      const requestLogger = requestId
-        ? createRequestLogger(requestId, "HTTP")
-        : this.logger;
-      requestLogger.error(
-        `${request.method} ${path} ${set.status || 500} +${duration}ms (${code})`,
-        stack,
-        "HTTP",
-      );
-      this.echoRequestId(ctx);
-      this.requestStartTimes.delete(request);
-    });
   }
 
   /**
@@ -387,43 +416,6 @@ export class ElysiaAdapter {
     });
   }
 
-  private setupValidationErrors(app: Elysia) {
-    const exhaustive = this.options?.validation?.exhaustive === true;
-
-    app.onError(({ code, error, set }: any) => {
-      if (code !== "VALIDATION") return;
-
-      set.status = 422;
-      const existing = set.headers;
-      if (existing == null) {
-        set.headers = PROBLEM_JSON_HEADERS;
-      } else if (existing instanceof Headers) {
-        existing.set("content-type", "application/problem+json");
-      } else {
-        (existing as Record<string, string>)["content-type"] =
-          "application/problem+json";
-      }
-
-      let errors: unknown[];
-      if (exhaustive) {
-        errors = error?.all ?? [];
-      } else {
-        // Default fast path: avoid Elysia's `error.all` getter, which spreads
-        // the entire TypeBox `Errors(...)` iterator. Prefer the first-error
-        // fields the ValidationError already stores on the instance.
-        const first = error?.first ?? error?.valueError ?? error?.messageValue ?? error?.all?.[0];
-        errors = first ? [first] : [];
-      }
-
-      return {
-        type: "https://httpstatuses.com/422",
-        title: "Unprocessable Entity",
-        status: 422,
-        errors,
-      };
-    });
-  }
-
   public registerRoutes(routes: CompiledRouteDefinition[]) {
     for (const route of routes) {
       const elysiaMethod = route.method.toLowerCase() as
@@ -438,25 +430,17 @@ export class ElysiaAdapter {
         if (route.schema.body) elysiaOptions.body = route.schema.body;
         if (route.schema.query) elysiaOptions.query = route.schema.query;
         if (route.schema.params) elysiaOptions.params = route.schema.params;
-        if (route.schema.response)
-          elysiaOptions.response = route.schema.response;
+        if (route.schema.response) elysiaOptions.response = route.schema.response;
       }
 
       if (route.beforeHandle && route.beforeHandle.length > 0) {
         elysiaOptions.beforeHandle = route.beforeHandle;
       }
 
-      (this.app as any)[elysiaMethod](
-        route.fullPath,
-        route.handler,
-        elysiaOptions,
-      );
+      (this.app as any)[elysiaMethod](route.fullPath, route.handler, elysiaOptions);
 
       if (this.options?.logger !== false) {
-        this.logger.debug(
-          `Mapped {${route.fullPath}, ${route.method}} route`,
-          "Router",
-        );
+        this.logger.debug(`Mapped {${route.fullPath}, ${route.method}} route`, "Router");
       }
     }
   }
@@ -502,8 +486,7 @@ export class ElysiaAdapter {
     };
 
     if (options.exposedHeaders) {
-      staticHeaders["access-control-expose-headers"] =
-        options.exposedHeaders.join(",");
+      staticHeaders["access-control-expose-headers"] = options.exposedHeaders.join(",");
     }
     if (options.credentials) {
       staticHeaders["access-control-allow-credentials"] = "true";
@@ -528,12 +511,8 @@ export class ElysiaAdapter {
 
     return {
       origin: options.origin,
-      allowedOrigins: Array.isArray(options.origin)
-        ? new Set(options.origin)
-        : undefined,
-      fallbackOrigin: Array.isArray(options.origin)
-        ? options.origin[0]
-        : undefined,
+      allowedOrigins: Array.isArray(options.origin) ? new Set(options.origin) : undefined,
+      fallbackOrigin: Array.isArray(options.origin) ? options.origin[0] : undefined,
       staticHeaders,
       staticCorsHeaders,
     };
@@ -581,8 +560,6 @@ export class ElysiaAdapter {
     }
 
     const queryStart = url.indexOf("?", pathStart);
-    return queryStart === -1
-      ? url.slice(pathStart)
-      : url.slice(pathStart, queryStart);
+    return queryStart === -1 ? url.slice(pathStart) : url.slice(pathStart, queryStart);
   }
 }
