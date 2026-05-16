@@ -36,12 +36,31 @@ export interface PluginContext {
   logger: Logger;
 }
 
+/**
+ * When a plugin's `setup()` should run relative to the framework boot phases.
+ * - `"before-routes"` (default): runs during factory boot, before routes are
+ *   mapped onto the adapter. Required when the plugin must influence routing
+ *   (hooks, decorators that read DI tokens at route compile time, etc).
+ * - `"before-listen"`: runs at the start of `app.listen()` before
+ *   `onApplicationBootstrap` hooks. Suitable for route-independent concerns
+ *   (logging, metrics) that don't need to be in place when routes compile.
+ *   Plugins in this phase can initialize concurrently with each other.
+ */
+export type PluginReadyPhase = "before-routes" | "before-listen";
+
 export interface PluginDefinition<TOptions = void> {
   name: string;
   /** Optional semver-ish version (informational only). */
   version?: string;
   /** Names of other plugins that must be registered before this one. */
   dependencies?: string[];
+  /**
+   * When this plugin's `setup()` should run. Defaults to `"before-routes"`
+   * for back-compat. Set to `"before-listen"` for route-independent plugins
+   * (logging, metrics, etc.) so they can initialize in parallel with peers
+   * in the same phase.
+   */
+  ready?: PluginReadyPhase;
   /** Called once at registration with the resolved context and options. */
   setup: (ctx: PluginContext, options: TOptions) => void | Promise<void>;
 }

@@ -1,18 +1,9 @@
 import { APP_FILTER, APP_GUARD } from "../common/constants";
 import { resolveTechneMode, type TechneMode } from "../common/mode";
 import { TechneApplicationContext } from "../core/application-context";
-import type {
-  CorsOptions,
-  GlobalPrefixOptions,
-  VersioningOptions,
-} from "../core/http-options";
+import type { CorsOptions, GlobalPrefixOptions, VersioningOptions } from "../core/http-options";
 import { Scanner } from "../core/scanner";
-import {
-  Container,
-  getClassScope,
-  getProviderScope,
-  isCustomProvider,
-} from "../core/container";
+import { Container, getClassScope, getProviderScope, isCustomProvider } from "../core/container";
 import { Scope } from "../core/scope";
 import { RoutesResolver } from "../core/router/routes-resolver";
 import { ElysiaAdapter } from "../platform/elysia-adapter";
@@ -132,9 +123,7 @@ export interface TechneHealthOptions {
   /** Path for readiness probe. Default: "/readyz" */
   readinessPath?: string;
   /** Custom checks to evaluate when serving the readiness endpoint. */
-  checks?: Array<
-    () => Promise<{ healthy: boolean; name: string; detail?: any }>
-  >;
+  checks?: Array<() => Promise<{ healthy: boolean; name: string; detail?: any }>>;
 }
 
 export interface TechneApplicationOptions {
@@ -210,13 +199,9 @@ export interface AppBootstrapConfig extends TechneApplicationOptions {
 }
 
 export class TechneFactory {
-  public static async create(
-    config: AppBootstrapConfig,
-  ): Promise<TechneApplication>;
+  public static async create(config: AppBootstrapConfig): Promise<TechneApplication>;
   public static async create(): Promise<TechneApplication>;
-  public static async create(
-    config?: AppBootstrapConfig,
-  ): Promise<TechneApplication> {
+  public static async create(config?: AppBootstrapConfig): Promise<TechneApplication> {
     const fileConfig = await loadTechneConfigFile();
     if (!config && !fileConfig) {
       throw new Error(
@@ -280,37 +265,26 @@ export class TechneFactory {
       },
     );
 
-    for (const plugin of plugins) {
-      await app.register(plugin);
-    }
+    await this.registerPluginsPhased(app, plugins);
 
     this.initializeStaticProviders(scanner, container, loggerEnabled);
     await scanner.callLifecycleHook("onModuleInit");
 
     const buses = new BusRegistry(container);
     buses.register();
-    buses.registerFromClasses([
-      ...scanner.getProviders(),
-      ...scanner.getControllers(),
-    ]);
+    buses.registerFromClasses([...scanner.getProviders(), ...scanner.getControllers()]);
 
     if (container.has(MQ_DRIVER)) {
       const mqRegistry = new MqRegistry(container, container.get(MQ_DRIVER));
       mqRegistry.register();
       if (mode !== "server") {
-        mqRegistry.registerFromClasses([
-          ...scanner.getProviders(),
-          ...scanner.getControllers(),
-        ]);
+        mqRegistry.registerFromClasses([...scanner.getProviders(), ...scanner.getControllers()]);
       }
       app.attachMqRegistry(mqRegistry);
     }
 
     const globalGuards = [
-      ...this.normalizeGlobalProvider<CanActivate | Function>(
-        container,
-        APP_GUARD,
-      ),
+      ...this.normalizeGlobalProvider<CanActivate | Function>(container, APP_GUARD),
       ...(effectiveOptions?.globalGuards ?? []),
     ];
     const globalFilters = this.normalizeGlobalProvider(container, APP_FILTER);
@@ -371,33 +345,129 @@ export class TechneFactory {
       { mode, userOptions: config as Record<string, unknown> },
     );
 
-    for (const plugin of config.plugins ?? []) {
-      await pluginApp.register(plugin);
-    }
+    await this.registerPluginsPhased(pluginApp, config.plugins ?? []);
 
     this.initializeStaticProviders(scanner, container, loggerEnabled);
     await scanner.callLifecycleHook("onModuleInit");
 
     const buses = new BusRegistry(container);
     buses.register();
-    buses.registerFromClasses([
-      ...scanner.getProviders(),
-      ...scanner.getControllers(),
-    ]);
+    buses.registerFromClasses([...scanner.getProviders(), ...scanner.getControllers()]);
 
     let mqRegistry: MqRegistry | undefined;
     if (container.has(MQ_DRIVER)) {
       mqRegistry = new MqRegistry(container, container.get(MQ_DRIVER));
       mqRegistry.register();
       if (mode !== "server") {
-        mqRegistry.registerFromClasses([
-          ...scanner.getProviders(),
-          ...scanner.getControllers(),
-        ]);
+        mqRegistry.registerFromClasses([...scanner.getProviders(), ...scanner.getControllers()]);
       }
     }
 
     return new TechneApplicationContext(scanner, container, mqRegistry).init();
+  }
+
+  /**
+   * Register plugins partitioned by their `ready` phase. The default
+   * `"before-routes"` phase runs here (before routes are mapped) so plugins
+   * that influence routing still apply. The `"before-listen"` phase is
+   * queued onto the app and flushed at the start of `listen()` — those
+   * plugins fan out concurrently via `Promise.all`.
+   *
+   * Within the `"before-routes"` phase we still need a topo sort because
+   * existing plugins may declare `dependencies`. Plugins without
+   * inter-dependencies in this phase init concurrently (Kahn's algorithm in
+   * layers). When no plugin opts into the new fields this matches the
+   * previous sequential behavior: each plugin lands in its own layer in
+   * declaration order via the dependency graph.
+   */
+  private static async registerPluginsPhased(
+    app: TechneApplication,
+    plugins: PluginDefinition<any>[],
+  ): Promise<void> {
+    if (plugins.length === 0) return;
+
+    // Partition once. Order is preserved within each phase — important for
+    // back-compat (declaration order is the tiebreaker for the topo sort).
+    const beforeRoutes: PluginDefinition<any>[] = [];
+    for (const plugin of plugins) {
+      const phase = plugin.ready ?? "before-routes";
+      if (phase === "before-listen") {
+        app.enqueueBeforeListenPlugin(plugin);
+      } else {
+        beforeRoutes.push(plugin);
+      }
+    }
+
+    if (beforeRoutes.length === 0) return;
+
+    // Fast-path: if no plugin in this phase declares a dependency, run them
+    // sequentially in declaration order to preserve the historical guarantee
+    // that `register()` resolves in the same order callers wrote.
+    let anyDep = false;
+    for (const p of beforeRoutes) {
+      if (p.dependencies && p.dependencies.length > 0) {
+        anyDep = true;
+        break;
+      }
+    }
+    if (!anyDep) {
+      for (const plugin of beforeRoutes) {
+        await app.register(plugin);
+      }
+      return;
+    }
+
+    // Topo sort via Kahn's algorithm. Each layer's plugins have all their
+    // intra-phase deps satisfied and run concurrently.
+    const byName = new Map<string, PluginDefinition<any>>();
+    for (const p of beforeRoutes) byName.set(p.name, p);
+    const remaining = new Map<string, number>();
+    const dependents = new Map<string, string[]>();
+    for (const p of beforeRoutes) {
+      let count = 0;
+      for (const dep of p.dependencies ?? []) {
+        if (byName.has(dep)) {
+          count++;
+          const list = dependents.get(dep);
+          if (list) list.push(p.name);
+          else dependents.set(dep, [p.name]);
+        }
+        // Deps outside this phase fall through to `register()`'s own check,
+        // which throws if the dep was never registered at all.
+      }
+      remaining.set(p.name, count);
+    }
+
+    let layer: PluginDefinition<any>[] = [];
+    for (const p of beforeRoutes) {
+      if ((remaining.get(p.name) ?? 0) === 0) layer.push(p);
+    }
+
+    let processed = 0;
+    while (layer.length > 0) {
+      await Promise.all(layer.map((plugin) => app.register(plugin)));
+      processed += layer.length;
+      const next: PluginDefinition<any>[] = [];
+      for (const p of layer) {
+        for (const dependentName of dependents.get(p.name) ?? []) {
+          const count = (remaining.get(dependentName) ?? 0) - 1;
+          remaining.set(dependentName, count);
+          if (count === 0) {
+            const entry = byName.get(dependentName);
+            if (entry) next.push(entry);
+          }
+        }
+      }
+      layer = next;
+    }
+
+    if (processed !== beforeRoutes.length) {
+      const stuck: string[] = [];
+      for (const [name, count] of remaining) {
+        if (count > 0) stuck.push(name);
+      }
+      throw new Error(`Cyclic plugin dependency detected among: ${stuck.join(", ")}.`);
+    }
   }
 
   private static flattenBootstrapConfig(config: AppBootstrapConfig): {
@@ -442,22 +512,14 @@ export class TechneFactory {
         if (loggerEnabled) {
           logger.debug(`Initializing provider ${String(token?.name || token)}`);
         }
-        if (
-          getProviderScope(provider) === Scope.DEFAULT &&
-          container.isStatic(token)
-        ) {
+        if (getProviderScope(provider) === Scope.DEFAULT && container.isStatic(token)) {
           container.get(token);
         }
       } else {
         if (loggerEnabled) {
-          logger.debug(
-            `Initializing provider ${provider.name || "UnknownProvider"}`,
-          );
+          logger.debug(`Initializing provider ${provider.name || "UnknownProvider"}`);
         }
-        if (
-          getClassScope(provider) === Scope.DEFAULT &&
-          container.isStatic(provider)
-        ) {
+        if (getClassScope(provider) === Scope.DEFAULT && container.isStatic(provider)) {
           container.get(provider);
         }
       }
@@ -467,10 +529,7 @@ export class TechneFactory {
     container.primeFastTable();
   }
 
-  private static normalizeGlobalProvider<T>(
-    container: Container,
-    token: any,
-  ): T[] {
+  private static normalizeGlobalProvider<T>(container: Container, token: any): T[] {
     if (!container.has(token)) return [];
 
     const provider = container.getProviderDefinition(token);
