@@ -1,5 +1,6 @@
 import "../reflect-setup";
 import { CONTROLLER_METADATA, SCOPE_OPTIONS_METADATA } from "../common/constants";
+import { getOrCreateControllerDescriptor } from "../core/metadata-store";
 import type { ScopeOptions } from "../core/scope";
 
 export interface ControllerOptions extends ScopeOptions {
@@ -14,5 +15,7 @@ export function Controller(prefixOrOptions?: string | ControllerOptions): ClassD
     if (typeof prefixOrOptions === "object") {
       Reflect.defineMetadata(SCOPE_OPTIONS_METADATA, { scope: prefixOrOptions.scope }, target);
     }
+    // Mirror prefix into the symbol-keyed descriptor for one-pass reads.
+    getOrCreateControllerDescriptor(target).prefix = path;
   };
 }
