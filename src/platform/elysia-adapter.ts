@@ -29,6 +29,18 @@ interface ElysiaAdapterOptions {
      */
     exhaustive?: boolean;
   };
+  /**
+   * Force-enable (or force-disable) the request-id pipeline. When unset we
+   * derive it from `logger` + presence of an RFC 7807 exception filter. See
+   * {@link ElysiaAdapter.computeNeedsRequestId}.
+   */
+  requestId?: boolean;
+  /**
+   * Set to `true` when an RFC 7807 problem-document filter is wired in
+   * downstream (default in Techne via `RouterResponseController`). When true,
+   * the request-id hook is registered so problem responses can stamp the id.
+   */
+  hasProblemFilter?: boolean;
 }
 
 interface CompiledCorsOptions {
@@ -61,12 +73,48 @@ export class ElysiaAdapter {
   private inflight = 0;
   private isDraining = false;
   private readonly trackInflight: boolean;
+  private readonly loggerEnabled: boolean;
+  /**
+   * Boot-time gate for the request-id pipeline. When `false`, the full
+   * `onRequest` request-id hook is skipped (no UUID allocation, no
+   * `ctx.store` mutation). We still echo an inbound `x-request-id` header
+   * via a tiny dedicated hook so clients keep correlation when they ask
+   * for it. See {@link computeNeedsRequestId}.
+   */
+  private readonly needsRequestId: boolean;
 
   constructor(private options?: ElysiaAdapterOptions) {
     this.container = options?.container || globalContainer;
     this.logger = new Logger("ElysiaAdapter");
     this.trackInflight = options?.shutdown?.gracePeriod !== 0;
+    this.loggerEnabled = options?.logger !== false;
+    this.needsRequestId = ElysiaAdapter.computeNeedsRequestId(
+      options,
+      this.loggerEnabled,
+    );
     this.app = this.createApp();
+  }
+
+  /**
+   * `needsRequestId` is true when at least one consumer reads the id:
+   *  - request logging is on (the HTTP access log prefixes every line with it),
+   *  - an RFC 7807 problem-document filter is installed (it stamps `requestId`
+   *    on every error body; in Techne the default `RouterResponseController`
+   *    qualifies, so callers pass `hasProblemFilter: true`),
+   *  - the user explicitly opted in via `options.requestId === true`.
+   * `options.requestId === false` is a hard opt-out for callers who know they
+   * have no consumers (e.g. embedded micro-services behind a proxy that owns
+   * correlation).
+   */
+  private static computeNeedsRequestId(
+    options: ElysiaAdapterOptions | undefined,
+    loggerEnabled: boolean,
+  ): boolean {
+    if (options?.requestId === false) return false;
+    if (options?.requestId === true) return true;
+    if (loggerEnabled) return true;
+    if (options?.hasProblemFilter !== false) return true;
+    return false;
   }
 
   public reset() {
@@ -138,44 +186,60 @@ export class ElysiaAdapter {
       }
     });
 
-    const release = (ctx: any) => {
+    // Inflight release bodies are inlined into the `onAfterHandle` and
+    // `onError` callbacks so V8 sees a monomorphic call-site at each hook —
+    // a shared closure adds an extra indirection and tends to go polymorphic
+    // when Elysia threads heterogeneous `ctx` shapes through it.
+    app.onAfterHandle((ctx: any) => {
       const store = ctx.store;
       if (store && store[INFLIGHT_COUNTED_KEY]) {
         store[INFLIGHT_COUNTED_KEY] = false;
         if (this.inflight > 0) this.inflight--;
       }
-    };
-
-    app.onAfterHandle((ctx: any) => {
-      release(ctx);
     });
 
     app.onError((ctx: any) => {
-      release(ctx);
+      const store = ctx.store;
+      if (store && store[INFLIGHT_COUNTED_KEY]) {
+        store[INFLIGHT_COUNTED_KEY] = false;
+        if (this.inflight > 0) this.inflight--;
+      }
     });
   }
 
   private setupRequestLogging(app: Elysia) {
-    const loggingEnabled = this.options?.logger !== false;
+    const loggingEnabled = this.loggerEnabled;
 
-    // The request-id hook must run even when request logging is disabled,
-    // because downstream code (mapException, the RFC 7807 problem document,
-    // controllers reading `store.requestId`) relies on the id being present.
-    // The `error-contract` test suite asserts this behavior with
-    // `logger: false`, so we cannot skip the block entirely.
-    //
-    // We do, however, skip the `requestStartTimes` bookkeeping when logging
-    // is off: the start time is only consumed inside the logging callbacks.
-    // There is no current boot-time flag that proves no request-id consumer is
-    // active, so the request-id work itself remains part of the compatibility
-    // contract for logger-disabled apps.
+    if (!this.needsRequestId) {
+      // No consumer reads `store.requestId`: skip UUID allocation and the
+      // store mutation entirely. We still honour inbound `x-request-id`
+      // headers so upstream tracing keeps working — a tiny dedicated hook
+      // copies the header through to the response without touching the
+      // store or generating a UUID.
+      app.onAfterHandle((ctx: any) => {
+        this.echoInboundRequestId(ctx);
+      });
+      app.onError((ctx: any) => {
+        this.echoInboundRequestId(ctx);
+      });
+      return;
+    }
+
+    // `needsRequestId` is true. Install the request-id hook, but defer the
+    // UUID allocation: when no inbound header is present we attach a lazy
+    // getter to `ctx.store.requestId` that materialises the id on first
+    // read. This lets routes that never read or echo the id pay zero UUID
+    // cost on the success path, while preserving the contract that the
+    // value is always a string by the time anyone observes it.
     app.onRequest((ctx: any) => {
       const request = ctx.request;
       const inbound = request.headers.get("x-request-id");
-      const requestId =
-        typeof inbound === "string" && inbound.length > 0 ? inbound : randomUUIDv7();
       const store = ctx.store ?? (ctx.store = {});
-      store.requestId = requestId;
+      if (typeof inbound === "string" && inbound.length > 0) {
+        store.requestId = inbound;
+      } else {
+        ElysiaAdapter.installLazyRequestId(store);
+      }
       if (loggingEnabled) {
         this.requestStartTimes.set(request, performance.now());
       }
@@ -199,8 +263,13 @@ export class ElysiaAdapter {
       const duration = Math.round(performance.now() - start);
       const path = this.getRequestPath(request.url);
       const requestId = ctx.store?.requestId as string | undefined;
-      const requestLogger = requestId ? createRequestLogger(requestId, "HTTP") : this.logger;
-      requestLogger.log(`${request.method} ${path} ${set.status || 200} +${duration}ms`, "HTTP");
+      const requestLogger = requestId
+        ? createRequestLogger(requestId, "HTTP")
+        : this.logger;
+      requestLogger.log(
+        `${request.method} ${path} ${set.status || 200} +${duration}ms`,
+        "HTTP",
+      );
       this.echoRequestId(ctx);
       this.requestStartTimes.delete(request);
     });
@@ -212,7 +281,9 @@ export class ElysiaAdapter {
       const path = this.getRequestPath(request.url);
       const stack = error instanceof Error ? error.stack : undefined;
       const requestId = ctx.store?.requestId as string | undefined;
-      const requestLogger = requestId ? createRequestLogger(requestId, "HTTP") : this.logger;
+      const requestLogger = requestId
+        ? createRequestLogger(requestId, "HTTP")
+        : this.logger;
       requestLogger.error(
         `${request.method} ${path} ${set.status || 500} +${duration}ms (${code})`,
         stack,
@@ -221,6 +292,56 @@ export class ElysiaAdapter {
       this.echoRequestId(ctx);
       this.requestStartTimes.delete(request);
     });
+  }
+
+  /**
+   * Attaches a lazy `requestId` accessor to `store`. The UUID is generated
+   * on first read and the property is then replaced with a plain string so
+   * subsequent reads are a property lookup with no getter call.
+   */
+  private static installLazyRequestId(store: Record<string, unknown>): void {
+    Object.defineProperty(store, "requestId", {
+      configurable: true,
+      enumerable: true,
+      get() {
+        const id = randomUUIDv7();
+        Object.defineProperty(store, "requestId", {
+          configurable: true,
+          enumerable: true,
+          writable: true,
+          value: id,
+        });
+        return id;
+      },
+      set(value: unknown) {
+        Object.defineProperty(store, "requestId", {
+          configurable: true,
+          enumerable: true,
+          writable: true,
+          value,
+        });
+      },
+    });
+  }
+
+  /**
+   * Echoes an inbound `x-request-id` header back on the response without
+   * ever touching `ctx.store`. Used when `needsRequestId` is false: we still
+   * want clients that opt in to correlation to see their id reflected.
+   */
+  private echoInboundRequestId(ctx: any): void {
+    const inbound = ctx?.request?.headers?.get?.("x-request-id");
+    if (typeof inbound !== "string" || inbound.length === 0) return;
+    const set = ctx.set;
+    if (!set) return;
+    const existing = set.headers;
+    if (existing == null) {
+      set.headers = { "x-request-id": inbound };
+    } else if (existing instanceof Headers) {
+      existing.set("x-request-id", inbound);
+    } else {
+      (existing as Record<string, string>)["x-request-id"] = inbound;
+    }
   }
 
   private echoRequestId(ctx: any): void {
@@ -279,7 +400,8 @@ export class ElysiaAdapter {
       } else if (existing instanceof Headers) {
         existing.set("content-type", "application/problem+json");
       } else {
-        (existing as Record<string, string>)["content-type"] = "application/problem+json";
+        (existing as Record<string, string>)["content-type"] =
+          "application/problem+json";
       }
 
       let errors: unknown[];
@@ -316,17 +438,25 @@ export class ElysiaAdapter {
         if (route.schema.body) elysiaOptions.body = route.schema.body;
         if (route.schema.query) elysiaOptions.query = route.schema.query;
         if (route.schema.params) elysiaOptions.params = route.schema.params;
-        if (route.schema.response) elysiaOptions.response = route.schema.response;
+        if (route.schema.response)
+          elysiaOptions.response = route.schema.response;
       }
 
       if (route.beforeHandle && route.beforeHandle.length > 0) {
         elysiaOptions.beforeHandle = route.beforeHandle;
       }
 
-      (this.app as any)[elysiaMethod](route.fullPath, route.handler, elysiaOptions);
+      (this.app as any)[elysiaMethod](
+        route.fullPath,
+        route.handler,
+        elysiaOptions,
+      );
 
       if (this.options?.logger !== false) {
-        this.logger.debug(`Mapped {${route.fullPath}, ${route.method}} route`, "Router");
+        this.logger.debug(
+          `Mapped {${route.fullPath}, ${route.method}} route`,
+          "Router",
+        );
       }
     }
   }
@@ -372,7 +502,8 @@ export class ElysiaAdapter {
     };
 
     if (options.exposedHeaders) {
-      staticHeaders["access-control-expose-headers"] = options.exposedHeaders.join(",");
+      staticHeaders["access-control-expose-headers"] =
+        options.exposedHeaders.join(",");
     }
     if (options.credentials) {
       staticHeaders["access-control-allow-credentials"] = "true";
@@ -397,8 +528,12 @@ export class ElysiaAdapter {
 
     return {
       origin: options.origin,
-      allowedOrigins: Array.isArray(options.origin) ? new Set(options.origin) : undefined,
-      fallbackOrigin: Array.isArray(options.origin) ? options.origin[0] : undefined,
+      allowedOrigins: Array.isArray(options.origin)
+        ? new Set(options.origin)
+        : undefined,
+      fallbackOrigin: Array.isArray(options.origin)
+        ? options.origin[0]
+        : undefined,
       staticHeaders,
       staticCorsHeaders,
     };
@@ -446,6 +581,8 @@ export class ElysiaAdapter {
     }
 
     const queryStart = url.indexOf("?", pathStart);
-    return queryStart === -1 ? url.slice(pathStart) : url.slice(pathStart, queryStart);
+    return queryStart === -1
+      ? url.slice(pathStart)
+      : url.slice(pathStart, queryStart);
   }
 }
