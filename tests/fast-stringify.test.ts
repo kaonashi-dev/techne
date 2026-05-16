@@ -84,6 +84,33 @@ describe("compileStringifier", () => {
     const value = { s: 'with "quotes"\nand\tnewlines' };
     expect(JSON.parse(stringify(value))).toEqual(value);
   });
+  test("ASCII fast-path matches JSON.stringify byte-for-byte", () => {
+    const schema = Type.Object({ s: Type.String() });
+    const stringify = compileStringifier(schema);
+    const cases = [
+      { s: "" },
+      { s: "alice@example.com" },
+      { s: "hello-world_123" },
+      { s: 'has "quotes" inside' },
+      { s: "back\\slash" },
+      { s: "tab\there" },
+      { s: "newline\nhere" },
+      { s: "control\x01char" },
+      { s: "del\x7fchar" },
+      { s: "emoji \u{1F600} mix" },
+      { s: "non-ascii é 中" },
+      { s: "high-ascii \x7f boundary" },
+    ];
+    for (const value of cases) {
+      expect(stringify(value)).toBe(JSON.stringify(value));
+    }
+  });
+  test("ASCII fast-path inside arrays of strings", () => {
+    const schema = Type.Array(Type.String());
+    const stringify = compileStringifier(schema);
+    const value = ["plain", "", 'with"quote', "tab\t", "é"];
+    expect(stringify(value)).toBe(JSON.stringify(value));
+  });
   test("compiles deterministically by schema reference (cache)", () => {
     const schema = Type.Object({ x: Type.Number() });
     const a = compileStringifier(schema);
