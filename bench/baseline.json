@@ -1,0 +1,238 @@
+{
+  "sections": [
+    {
+      "title": "Fast path (no enhancers)",
+      "results": [
+        {
+          "name": "Elysia (fast)",
+          "request": "GET /users",
+          "total": 50000,
+          "rps": 1435516.9562393986,
+          "avgUs": 35.895337306666676,
+          "minUs": 7.041,
+          "maxUs": 787,
+          "p50Us": 34.333333333333336,
+          "p95Us": 63.778,
+          "p99Us": 76.389
+        },
+        {
+          "name": "Elysia (fast)",
+          "request": "GET /users/:id",
+          "total": 50000,
+          "rps": 1252351.7621844888,
+          "avgUs": 40.93134188666671,
+          "minUs": 7.291,
+          "maxUs": 528.292,
+          "p50Us": 39.69433333333333,
+          "p95Us": 72.52766666666666,
+          "p99Us": 86.76400000000001
+        },
+        {
+          "name": "Techne (fast)",
+          "request": "GET /users",
+          "total": 50000,
+          "rps": 527880.8719392259,
+          "avgUs": 132.52415502666608,
+          "minUs": 66.792,
+          "maxUs": 1047.25,
+          "p50Us": 127.48599999999999,
+          "p95Us": 184.06966666666668,
+          "p99Us": 291.63900000000007
+        },
+        {
+          "name": "Techne (fast)",
+          "request": "GET /users/:id",
+          "total": 50000,
+          "rps": 499497.9504333904,
+          "avgUs": 138.3038774866673,
+          "minUs": 68.084,
+          "maxUs": 1397.167,
+          "p50Us": 132.99966666666668,
+          "p95Us": 192.31933333333333,
+          "p99Us": 296.986
+        }
+      ]
+    },
+    {
+      "title": "Slow path (static guard)",
+      "results": [
+        {
+          "name": "Techne (slow)",
+          "request": "GET /users (guarded)",
+          "total": 50000,
+          "rps": 497920.25113612134,
+          "avgUs": 139.71976052666707,
+          "minUs": 69.792,
+          "maxUs": 1257.75,
+          "p50Us": 134,
+          "p95Us": 194.65266666666665,
+          "p99Us": 334.2776666666667
+        },
+        {
+          "name": "Techne (slow)",
+          "request": "GET /users/:id (guarded)",
+          "total": 50000,
+          "rps": 469414.748130315,
+          "avgUs": 147.8948718533335,
+          "minUs": 70.75,
+          "maxUs": 1582.084,
+          "p50Us": 140.40266666666668,
+          "p95Us": 208.875,
+          "p99Us": 399.5
+        }
+      ]
+    },
+    {
+      "title": "Request validation",
+      "results": [
+        {
+          "name": "Techne (validation)",
+          "request": "POST /users (valid)",
+          "total": 50000,
+          "rps": 278586.0293633973,
+          "avgUs": 254.57240510666608,
+          "minUs": 112.125,
+          "maxUs": 2225.583,
+          "p50Us": 233.40233333333333,
+          "p95Us": 422.61100000000005,
+          "p99Us": 873.3473333333333
+        },
+        {
+          "name": "Techne (validation)",
+          "request": "POST /users (invalid)",
+          "total": 50000,
+          "rps": 98113.94260336453,
+          "avgUs": 903.5189775999988,
+          "minUs": 589.834,
+          "maxUs": 5282.542,
+          "p50Us": 805.9583333333334,
+          "p95Us": 1596.1386666666667,
+          "p99Us": 2441.542
+        }
+      ]
+    },
+    {
+      "title": "Response schema (stringifier)",
+      "results": [
+        {
+          "name": "Techne (response)",
+          "request": "GET /users/typed (schema)",
+          "total": 50000,
+          "rps": 266270.146195933,
+          "avgUs": 303.1479732866669,
+          "minUs": 179,
+          "maxUs": 5144.917,
+          "p50Us": 279.27799999999996,
+          "p95Us": 379.6113333333333,
+          "p99Us": 1105.6393333333333
+        },
+        {
+          "name": "Techne (response)",
+          "request": "GET /users/plain (no schema)",
+          "total": 50000,
+          "rps": 456567.0438062845,
+          "avgUs": 152.04032932666678,
+          "minUs": 73,
+          "maxUs": 884,
+          "p50Us": 145.05566666666667,
+          "p95Us": 218.542,
+          "p99Us": 397.5416666666667
+        }
+      ]
+    },
+    {
+      "title": "Dependency injection",
+      "results": [
+        {
+          "name": "DI",
+          "request": "TopLevelService (cold)",
+          "total": 1,
+          "rps": 157878.11809283233,
+          "avgUs": 6.334,
+          "minUs": 6.334,
+          "maxUs": 6.334,
+          "p50Us": 6.334,
+          "p95Us": 6.334,
+          "p99Us": 6.334
+        },
+        {
+          "name": "DI",
+          "request": "DependencyA (cold)",
+          "total": 1,
+          "rps": 1333333.3333333333,
+          "avgUs": 0.75,
+          "minUs": 0.75,
+          "maxUs": 0.75,
+          "p50Us": 0.75,
+          "p95Us": 0.75,
+          "p99Us": 0.75
+        },
+        {
+          "name": "DI",
+          "request": "TopLevelService (warm)",
+          "total": 100000,
+          "rps": 10507835.272449253,
+          "avgUs": 0.05194188999996377,
+          "minUs": 0,
+          "maxUs": 162.416,
+          "p50Us": 0.042,
+          "p95Us": 0.084,
+          "p99Us": 0.125
+        },
+        {
+          "name": "DI",
+          "request": "DependencyA (warm)",
+          "total": 100000,
+          "rps": 10118385.105737126,
+          "avgUs": 0.045876239999958254,
+          "minUs": 0,
+          "maxUs": 122.083,
+          "p50Us": 0.042,
+          "p95Us": 0.083,
+          "p99Us": 0.125
+        }
+      ]
+    },
+    {
+      "title": "Cold start",
+      "results": [
+        {
+          "name": "Cold start",
+          "request": "N=1 bootstrap (avg ms = 26.5, wall 207.0)",
+          "total": 3,
+          "rps": 37.691283262557484,
+          "avgUs": 26531.333333333332,
+          "minUs": 9727,
+          "maxUs": 36821,
+          "p50Us": 33046,
+          "p95Us": 36821,
+          "p99Us": 36821
+        },
+        {
+          "name": "Cold start",
+          "request": "N=10 bootstrap (avg ms = 9.4, wall 62.8)",
+          "total": 3,
+          "rps": 106.29251700680271,
+          "avgUs": 9408.000000000002,
+          "minUs": 8622,
+          "maxUs": 10566,
+          "p50Us": 9036,
+          "p95Us": 10566,
+          "p99Us": 10566
+        },
+        {
+          "name": "Cold start",
+          "request": "N=50 bootstrap (avg ms = 46.3, wall 123.7)",
+          "total": 3,
+          "rps": 21.612587170768258,
+          "avgUs": 46269.33333333333,
+          "minUs": 17318,
+          "maxUs": 103848,
+          "p50Us": 17642,
+          "p95Us": 103848,
+          "p99Us": 103848
+        }
+      ]
+    }
+  ]
+}
