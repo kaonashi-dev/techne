@@ -102,6 +102,12 @@ export class TechneApplication {
   private readonly registered = new Map<string, RegisteredPlugin>();
   private readyHandlers: Array<() => void | Promise<void>> = [];
   private shutdownPluginHandlers: Array<() => void | Promise<void>> = [];
+  /**
+   * Plugins whose `ready` phase is `"before-listen"`. Queued by the factory
+   * during boot and flushed at the start of {@link listen} so they can init
+   * concurrently without blocking route compilation.
+   */
+  private beforeListenPlugins: Array<{ def: PluginDefinition<any>; options: any }> = [];
 
   constructor(
     private readonly adapter: ElysiaAdapter,
@@ -171,6 +177,12 @@ export class TechneApplication {
 
   async listen(port: number, callback?: () => void) {
     this.registerShutdownHandlers();
+    // Flush plugins whose `ready` phase is `"before-listen"`. They run AFTER
+    // routes have been compiled but BEFORE bootstrap and traffic — peers
+    // without inter-dependencies fan out via `Promise.all` for cheaper boot.
+    if (this.beforeListenPlugins.length > 0) {
+      await this.flushBeforeListenPlugins();
+    }
     // Fire bootstrap BEFORE accepting traffic so the app isn't reachable
     // until every onApplicationBootstrap hook has resolved.
     await this.scanner.callLifecycleHook("onApplicationBootstrap");
@@ -387,6 +399,112 @@ export class TechneApplication {
     this.registered.set(plugin.name, { def: plugin, options });
     await plugin.setup(ctx, options as TOptions);
     return this;
+  }
+
+  /**
+   * @internal — called by `TechneFactory` to queue a `before-listen` plugin
+   * for deferred registration. The factory has already partitioned plugins
+   * by `ready` phase; here we just stash the def/options pair until
+   * {@link listen} flushes the queue.
+   *
+   * The plugin's `name` is reserved immediately so the existing
+   * "depends on X, which has not been registered yet" check fires
+   * deterministically for `before-routes` plugins that mistakenly depend on
+   * a `before-listen` peer (those will resolve correctly when
+   * cross-phase dependencies are detected at flush time below).
+   */
+  enqueueBeforeListenPlugin<TOptions>(
+    plugin: PluginDefinition<TOptions>,
+    options?: TOptions,
+  ): void {
+    if (!plugin || typeof plugin.name !== "string" || plugin.name.length === 0) {
+      throw new Error("Plugin must have a non-empty `name`.");
+    }
+    if (typeof plugin.setup !== "function") {
+      throw new Error(`Plugin "${plugin.name}" must define a setup() function.`);
+    }
+    if (this.registered.has(plugin.name)) {
+      throw new Error(
+        `Plugin "${plugin.name}" is already registered with a different setup function.`,
+      );
+    }
+    this.beforeListenPlugins.push({ def: plugin, options });
+  }
+
+  /**
+   * Flush deferred `before-listen` plugins using a Kahn-style topo sort. Each
+   * layer (plugins whose deps are already satisfied) fans out via
+   * `Promise.all`, so route-independent peers initialize concurrently.
+   * Cross-phase deps are resolved against `this.registered`, which already
+   * contains every `before-routes` plugin.
+   */
+  private async flushBeforeListenPlugins(): Promise<void> {
+    const queue = this.beforeListenPlugins;
+    this.beforeListenPlugins = [];
+
+    // Index pending plugins by name and pre-validate dep references.
+    const pendingByName = new Map<string, { def: PluginDefinition<any>; options: any }>();
+    for (const entry of queue) {
+      pendingByName.set(entry.def.name, entry);
+    }
+
+    // Build remaining-deps count per plugin, only counting deps that are
+    // still pending in this phase. Deps already satisfied by registered
+    // `before-routes` plugins count as zero. Unknown deps throw — matches the
+    // strict semantics of `register()`.
+    const remaining = new Map<string, number>();
+    const dependents = new Map<string, string[]>();
+    for (const { def } of queue) {
+      let count = 0;
+      for (const dep of def.dependencies ?? []) {
+        if (pendingByName.has(dep)) {
+          count++;
+          const list = dependents.get(dep);
+          if (list) list.push(def.name);
+          else dependents.set(dep, [def.name]);
+        } else if (!this.registered.has(dep)) {
+          throw new Error(
+            `Plugin "${def.name}" depends on "${dep}", which has not been registered yet.`,
+          );
+        }
+      }
+      remaining.set(def.name, count);
+    }
+
+    // Process in layers. Each layer is the current set of plugins with zero
+    // remaining deps; they all run concurrently. After the layer settles,
+    // decrement dependents and assemble the next layer.
+    let layer: Array<{ def: PluginDefinition<any>; options: any }> = [];
+    for (const entry of queue) {
+      if ((remaining.get(entry.def.name) ?? 0) === 0) layer.push(entry);
+    }
+
+    let processed = 0;
+    while (layer.length > 0) {
+      await Promise.all(layer.map(({ def, options }) => this.register(def as any, options)));
+      processed += layer.length;
+      const next: Array<{ def: PluginDefinition<any>; options: any }> = [];
+      for (const { def } of layer) {
+        for (const dependentName of dependents.get(def.name) ?? []) {
+          const count = (remaining.get(dependentName) ?? 0) - 1;
+          remaining.set(dependentName, count);
+          if (count === 0) {
+            const entry = pendingByName.get(dependentName);
+            if (entry) next.push(entry);
+          }
+        }
+      }
+      layer = next;
+    }
+
+    if (processed !== queue.length) {
+      // Any plugin still with deps>0 means a cycle.
+      const stuck: string[] = [];
+      for (const [name, count] of remaining) {
+        if (count > 0) stuck.push(name);
+      }
+      throw new Error(`Cyclic plugin dependency detected among: ${stuck.join(", ")}.`);
+    }
   }
 
   /**
