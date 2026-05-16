@@ -1,9 +1,18 @@
 import { APP_FILTER, APP_GUARD } from "../common/constants";
 import { resolveTechneMode, type TechneMode } from "../common/mode";
 import { TechneApplicationContext } from "../core/application-context";
-import type { CorsOptions, GlobalPrefixOptions, VersioningOptions } from "../core/http-options";
+import type {
+  CorsOptions,
+  GlobalPrefixOptions,
+  VersioningOptions,
+} from "../core/http-options";
 import { Scanner } from "../core/scanner";
-import { Container, getClassScope, getProviderScope, isCustomProvider } from "../core/container";
+import {
+  Container,
+  getClassScope,
+  getProviderScope,
+  isCustomProvider,
+} from "../core/container";
 import { Scope } from "../core/scope";
 import { RoutesResolver } from "../core/router/routes-resolver";
 import { ElysiaAdapter } from "../platform/elysia-adapter";
@@ -123,7 +132,9 @@ export interface TechneHealthOptions {
   /** Path for readiness probe. Default: "/readyz" */
   readinessPath?: string;
   /** Custom checks to evaluate when serving the readiness endpoint. */
-  checks?: Array<() => Promise<{ healthy: boolean; name: string; detail?: any }>>;
+  checks?: Array<
+    () => Promise<{ healthy: boolean; name: string; detail?: any }>
+  >;
 }
 
 export interface TechneApplicationOptions {
@@ -199,9 +210,13 @@ export interface AppBootstrapConfig extends TechneApplicationOptions {
 }
 
 export class TechneFactory {
-  public static async create(config: AppBootstrapConfig): Promise<TechneApplication>;
+  public static async create(
+    config: AppBootstrapConfig,
+  ): Promise<TechneApplication>;
   public static async create(): Promise<TechneApplication>;
-  public static async create(config?: AppBootstrapConfig): Promise<TechneApplication> {
+  public static async create(
+    config?: AppBootstrapConfig,
+  ): Promise<TechneApplication> {
     const fileConfig = await loadTechneConfigFile();
     if (!config && !fileConfig) {
       throw new Error(
@@ -238,6 +253,13 @@ export class TechneFactory {
       container,
       shutdown: effectiveOptions?.shutdown,
       validation: effectiveOptions?.validation,
+      // Techne always wires the RFC 7807 problem-document filter via
+      // `RouterResponseController.mapException`, which reads
+      // `ctx.store.requestId` for the `requestId` extension field. Flag it
+      // so the adapter keeps the request-id hook registered even when
+      // request logging is off.
+      hasProblemFilter: true,
+      requestId: (effectiveOptions as { requestId?: boolean })?.requestId,
     });
     const routesResolver = new RoutesResolver(scanner);
     routesResolver.executionContext.setValidateResponses(
@@ -267,19 +289,28 @@ export class TechneFactory {
 
     const buses = new BusRegistry(container);
     buses.register();
-    buses.registerFromClasses([...scanner.getProviders(), ...scanner.getControllers()]);
+    buses.registerFromClasses([
+      ...scanner.getProviders(),
+      ...scanner.getControllers(),
+    ]);
 
     if (container.has(MQ_DRIVER)) {
       const mqRegistry = new MqRegistry(container, container.get(MQ_DRIVER));
       mqRegistry.register();
       if (mode !== "server") {
-        mqRegistry.registerFromClasses([...scanner.getProviders(), ...scanner.getControllers()]);
+        mqRegistry.registerFromClasses([
+          ...scanner.getProviders(),
+          ...scanner.getControllers(),
+        ]);
       }
       app.attachMqRegistry(mqRegistry);
     }
 
     const globalGuards = [
-      ...this.normalizeGlobalProvider<CanActivate | Function>(container, APP_GUARD),
+      ...this.normalizeGlobalProvider<CanActivate | Function>(
+        container,
+        APP_GUARD,
+      ),
       ...(effectiveOptions?.globalGuards ?? []),
     ];
     const globalFilters = this.normalizeGlobalProvider(container, APP_FILTER);
@@ -327,6 +358,7 @@ export class TechneFactory {
       logger: loggerEnabled,
       container,
       validation: config?.validation,
+      hasProblemFilter: true,
     });
     const routesResolver = new RoutesResolver(scanner);
     const pluginApp = new TechneApplication(
@@ -348,14 +380,20 @@ export class TechneFactory {
 
     const buses = new BusRegistry(container);
     buses.register();
-    buses.registerFromClasses([...scanner.getProviders(), ...scanner.getControllers()]);
+    buses.registerFromClasses([
+      ...scanner.getProviders(),
+      ...scanner.getControllers(),
+    ]);
 
     let mqRegistry: MqRegistry | undefined;
     if (container.has(MQ_DRIVER)) {
       mqRegistry = new MqRegistry(container, container.get(MQ_DRIVER));
       mqRegistry.register();
       if (mode !== "server") {
-        mqRegistry.registerFromClasses([...scanner.getProviders(), ...scanner.getControllers()]);
+        mqRegistry.registerFromClasses([
+          ...scanner.getProviders(),
+          ...scanner.getControllers(),
+        ]);
       }
     }
 
@@ -404,14 +442,22 @@ export class TechneFactory {
         if (loggerEnabled) {
           logger.debug(`Initializing provider ${String(token?.name || token)}`);
         }
-        if (getProviderScope(provider) === Scope.DEFAULT && container.isStatic(token)) {
+        if (
+          getProviderScope(provider) === Scope.DEFAULT &&
+          container.isStatic(token)
+        ) {
           container.get(token);
         }
       } else {
         if (loggerEnabled) {
-          logger.debug(`Initializing provider ${provider.name || "UnknownProvider"}`);
+          logger.debug(
+            `Initializing provider ${provider.name || "UnknownProvider"}`,
+          );
         }
-        if (getClassScope(provider) === Scope.DEFAULT && container.isStatic(provider)) {
+        if (
+          getClassScope(provider) === Scope.DEFAULT &&
+          container.isStatic(provider)
+        ) {
           container.get(provider);
         }
       }
@@ -421,7 +467,10 @@ export class TechneFactory {
     container.primeFastTable();
   }
 
-  private static normalizeGlobalProvider<T>(container: Container, token: any): T[] {
+  private static normalizeGlobalProvider<T>(
+    container: Container,
+    token: any,
+  ): T[] {
     if (!container.has(token)) return [];
 
     const provider = container.getProviderDefinition(token);
