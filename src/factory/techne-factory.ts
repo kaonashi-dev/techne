@@ -155,6 +155,28 @@ export interface TechneApplicationOptions {
    * reports `healthy: true`.
    */
   health?: TechneHealthOptions;
+  /**
+   * Request-body / params / query validation behavior.
+   *
+   * By default, a validation failure returns a single-entry `errors` array
+   * containing the first reported error. Set `exhaustive: true` to return
+   * every error TypeBox reports (this materializes the full TypeBox iterator
+   * on every invalid request and is significantly slower; opt in only when
+   * clients need all errors at once).
+   */
+  validation?: TechneValidationOptions;
+}
+
+export interface TechneValidationOptions {
+  /**
+   * When `true`, the validation error response includes every error reported
+   * by the schema. When omitted/`false` (default), only the first error is
+   * returned.
+   *
+   * The wire shape (`errors: [...]`) is unchanged — the default response just
+   * carries a single-element array instead of the full set.
+   */
+  exhaustive?: boolean;
 }
 
 export interface AppBootstrapConfig extends TechneApplicationOptions {
@@ -215,6 +237,7 @@ export class TechneFactory {
       logger: loggerEnabled,
       container,
       shutdown: effectiveOptions?.shutdown,
+      validation: effectiveOptions?.validation,
     });
     const routesResolver = new RoutesResolver(scanner);
     routesResolver.executionContext.setValidateResponses(
@@ -300,7 +323,11 @@ export class TechneFactory {
     const scanner = new Scanner({ logger: loggerEnabled, container });
     scanner.scanFlat(this.flattenBootstrapConfig(config));
 
-    const adapter = new ElysiaAdapter({ logger: loggerEnabled, container });
+    const adapter = new ElysiaAdapter({
+      logger: loggerEnabled,
+      container,
+      validation: config?.validation,
+    });
     const routesResolver = new RoutesResolver(scanner);
     const pluginApp = new TechneApplication(
       adapter,

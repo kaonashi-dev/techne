@@ -19,6 +19,16 @@ interface ElysiaAdapterOptions {
   shutdown?: {
     gracePeriod?: number;
   };
+  validation?: {
+    /**
+     * When true, the validation error response includes every error
+     * reported by the schema (the legacy behavior). When false/undefined
+     * (default), only the first error is returned. Materializing every
+     * error forces TypeBox to walk the whole iterator on every invalid
+     * request and dominates the invalid-body throughput.
+     */
+    exhaustive?: boolean;
+  };
 }
 
 interface CompiledCorsOptions {
@@ -32,6 +42,14 @@ interface CompiledCorsOptions {
 // Per-context-store flag used to dedupe inflight counter increment/decrement
 // without the cost of WeakSet add/has/delete on the `Request` object.
 const INFLIGHT_COUNTED_KEY = "__techneInflightCounted";
+
+// Hoisted to module scope so the validation error path doesn't allocate a
+// fresh headers object per request. Only the `set.headers == null` branch
+// can share the constant — the mutation branches still have to touch the
+// existing Headers/Record in place.
+const PROBLEM_JSON_HEADERS: Record<string, string> = {
+  "content-type": "application/problem+json",
+};
 
 export class ElysiaAdapter {
   private app: Elysia;
@@ -249,24 +267,37 @@ export class ElysiaAdapter {
   }
 
   private setupValidationErrors(app: Elysia) {
+    const exhaustive = this.options?.validation?.exhaustive === true;
+
     app.onError(({ code, error, set }: any) => {
       if (code !== "VALIDATION") return;
 
       set.status = 422;
       const existing = set.headers;
       if (existing == null) {
-        set.headers = { "content-type": "application/problem+json" };
+        set.headers = PROBLEM_JSON_HEADERS;
       } else if (existing instanceof Headers) {
         existing.set("content-type", "application/problem+json");
       } else {
         (existing as Record<string, string>)["content-type"] = "application/problem+json";
       }
 
+      let errors: unknown[];
+      if (exhaustive) {
+        errors = error?.all ?? [];
+      } else {
+        // Default fast path: avoid Elysia's `error.all` getter, which spreads
+        // the entire TypeBox `Errors(...)` iterator. Prefer the first-error
+        // fields the ValidationError already stores on the instance.
+        const first = error?.first ?? error?.valueError ?? error?.messageValue ?? error?.all?.[0];
+        errors = first ? [first] : [];
+      }
+
       return {
         type: "https://httpstatuses.com/422",
         title: "Unprocessable Entity",
         status: 422,
-        errors: error?.all ?? [],
+        errors,
       };
     });
   }
