@@ -339,16 +339,30 @@ export class TechneFactory {
     controllers?: any[];
     providers?: any[];
   } {
-    return {
-      controllers: [
-        ...(config.controllers ?? []),
-        ...(config.features ?? []).flatMap((feature) => feature.controllers ?? []),
-      ],
-      providers: [
-        ...(config.providers ?? []),
-        ...(config.features ?? []).flatMap((feature) => feature.providers ?? []),
-      ],
-    };
+    const baseControllers = config.controllers;
+    const baseProviders = config.providers;
+    const features = config.features;
+
+    // Single pass over features: accumulate controllers and providers
+    // together instead of running `flatMap` once per list (which walked
+    // `features` twice and allocated an intermediate array each time).
+    const controllers: any[] = baseControllers ? baseControllers.slice() : [];
+    const providers: any[] = baseProviders ? baseProviders.slice() : [];
+
+    if (features) {
+      for (const feature of features) {
+        const fc = feature.controllers;
+        if (fc) {
+          for (const c of fc) controllers.push(c);
+        }
+        const fp = feature.providers;
+        if (fp) {
+          for (const p of fp) providers.push(p);
+        }
+      }
+    }
+
+    return { controllers, providers };
   }
 
   private static initializeStaticProviders(

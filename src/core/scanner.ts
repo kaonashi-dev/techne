@@ -12,6 +12,11 @@ import { Logger } from "../services/logger.service";
 export class Scanner {
   private controllers = new Set<any>();
   private providers = new Set<any>();
+  // Insertion-ordered mirrors of the Sets above; we maintain both so that
+  // hot read paths (`getProviders` / `getControllers`) can return a stable
+  // array without spreading the Set on every call.
+  private controllersList: any[] = [];
+  private providersList: any[] = [];
   private logger: Logger;
   private container: Container;
 
@@ -20,12 +25,12 @@ export class Scanner {
     this.container = options?.container || globalContainer;
   }
 
-  public getProviders(): any[] {
-    return [...this.providers];
+  public getProviders(): readonly any[] {
+    return this.providersList;
   }
 
-  public getControllers(): any[] {
-    return [...this.controllers];
+  public getControllers(): readonly any[] {
+    return this.controllersList;
   }
 
   public getContainer(): Container {
@@ -33,15 +38,27 @@ export class Scanner {
   }
 
   public scanFlat(config: { controllers?: any[]; providers?: any[] }): void {
-    for (const provider of config.providers ?? []) {
-      this.providers.add(provider);
-      if (isCustomProvider(provider)) {
-        this.container.addProvider(provider);
+    const providers = config.providers;
+    if (providers) {
+      for (const provider of providers) {
+        if (!this.providers.has(provider)) {
+          this.providers.add(provider);
+          this.providersList.push(provider);
+        }
+        if (isCustomProvider(provider)) {
+          this.container.addProvider(provider);
+        }
       }
     }
-    for (const controller of config.controllers ?? []) {
-      this.controllers.add(controller);
-      this.container.registerController(controller);
+    const controllers = config.controllers;
+    if (controllers) {
+      for (const controller of controllers) {
+        if (!this.controllers.has(controller)) {
+          this.controllers.add(controller);
+          this.controllersList.push(controller);
+        }
+        this.container.registerController(controller);
+      }
     }
   }
 
