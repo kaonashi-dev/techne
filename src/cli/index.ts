@@ -46,6 +46,20 @@ function flagValue(name: string): string | undefined {
   return args[i + 1];
 }
 
+function positionalArgAfterCommand(defaultValue: string): string {
+  const valueFlags = new Set(["--out", "--target", "--port", "--bun-version"]);
+  for (let i = 1; i < args.length; i++) {
+    const arg = args[i];
+    if (valueFlags.has(arg)) {
+      i++;
+      continue;
+    }
+    if (arg.startsWith("--")) continue;
+    return arg;
+  }
+  return defaultValue;
+}
+
 async function buildApp(
   entry: string,
   options: { out?: string; target?: string; minify?: boolean },
@@ -204,7 +218,7 @@ Usage:
   techne dev [--port N] [--inspect]
   techne start [--port N]
   techne test [pattern] [--watch] [--coverage]
-  techne build|b [entry] [--out <file>] [--target <bun|node|browser>] [--minify]
+  techne build|b [entry] [--out <file>] [--target <bun|node|browser>] [--minify] [--precompile]
   techne deploy --target docker [--out Dockerfile] [--port N] [--bun-version V] [--dry-run] [--force]
   techne doctor
   techne generate|g <type> <name>
@@ -226,6 +240,9 @@ Build targets:
   bun      Standalone Bun binary (default)
   node     Node.js ESM module
   browser  Browser bundle
+
+Precompile:
+  --precompile writes .techne/routes.json from techne.config.ts before building
 
 Deploy targets:
   docker   Multi-stage Bun Dockerfile (only target supported for now)
@@ -438,7 +455,13 @@ async function main() {
         process.exit(1);
     }
   } else if (command === "build" || command === "b") {
-    const entry = args[1] ?? "src/main.ts";
+    if (flag("--precompile")) {
+      const { precompileRoutes } = await import("./precompile");
+      const result = await precompileRoutes(process.cwd());
+      ok(`Precompiled ${result.routes} route(s) to ${path.relative(process.cwd(), result.path)}`);
+    }
+
+    const entry = positionalArgAfterCommand("src/main.ts");
     const outIndex = args.indexOf("--out");
     const targetIndex = args.indexOf("--target");
     const minifyIndex = args.indexOf("--minify");
