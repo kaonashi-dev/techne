@@ -32,6 +32,71 @@ const STATUS_SLUG: Record<number, string> = {
   503: "service-unavailable",
 };
 
+// B5: cache the production-env lookup once at module load. The lookup itself
+// is cheap, but the mapException path runs per error and avoiding the repeated
+// env access keeps the hot error path allocation-free of property reads.
+let IS_PRODUCTION = (Bun?.env?.NODE_ENV ?? process.env.NODE_ENV) === "production";
+
+/**
+ * Test-only setter for the cached `IS_PRODUCTION` flag.
+ *
+ * Production code reads `IS_PRODUCTION` once at module load. Tests that flip
+ * `NODE_ENV` at runtime (see `tests/error-contract.test.ts`) need this hook to
+ * keep the cached value in sync. Do not call from production code.
+ */
+export function __setIsProduction(value: boolean): void {
+  IS_PRODUCTION = value;
+}
+
+/**
+ * B6: per-(status, slug) cache of RFC 7807 problem templates and headers.
+ *
+ * The base problem object only depends on `(status, title, type)`, all of
+ * which are derived from `(status, slug-or-explicit-type)`. Caching a frozen
+ * base lets the hot path do a single shallow copy plus dynamic-field
+ * assignment per error, instead of allocating the literal + computing the
+ * type URL each time.
+ *
+ * Headers are cached alongside as a frozen template. Downstream hooks
+ * (`echoRequestId`, CORS) mutate `set.headers`, so `applyResponse` must clone
+ * before assigning — the cache saves the literal allocation, not the clone.
+ */
+interface ProblemTemplate {
+  base: Readonly<ProblemDocument>;
+  headers: Readonly<Record<string, string>>;
+}
+// The headers value is identical across every (status, slug) pair — only
+// `content-type` is set — so we share a single frozen instance rather than
+// allocating one per cache entry. `applyResponse` still spreads it into a
+// fresh object because downstream hooks mutate `set.headers` in place.
+const PROBLEM_HEADERS: Readonly<Record<string, string>> = Object.freeze({
+  "content-type": "application/problem+json",
+});
+const PROBLEM_TEMPLATE_CACHE = new Map<string, ProblemTemplate>();
+
+function getProblemTemplate(
+  status: number,
+  title: string,
+  slug: string | undefined,
+  explicitType: string | undefined,
+): ProblemTemplate {
+  // Key shape: `${status}|${type-or-slug}`. Explicit types short-circuit slug
+  // resolution; otherwise the slug (already canonical via STATUS_SLUG or
+  // slugify) is sufficient. `|` separator avoids ambiguity since neither
+  // status nor slugs contain it.
+  const typeKey = explicitType ?? slug ?? "";
+  const key = `${status}|${typeKey}`;
+  const cached = PROBLEM_TEMPLATE_CACHE.get(key);
+  if (cached !== undefined) return cached;
+  const type = explicitType ?? (slug ? `${PROBLEM_TYPE_BASE}${slug}.md` : ABOUT_BLANK);
+  const entry: ProblemTemplate = {
+    base: Object.freeze({ type, title, status }) as Readonly<ProblemDocument>,
+    headers: PROBLEM_HEADERS,
+  };
+  PROBLEM_TEMPLATE_CACHE.set(key, entry);
+  return entry;
+}
+
 /**
  * Maps thrown values from controller / guard / pipe / interceptor pipelines
  * into HTTP responses.
@@ -54,7 +119,7 @@ const STATUS_SLUG: Record<number, string> = {
  */
 export class RouterResponseController {
   public mapException(context: any, error: unknown): ProblemDocument {
-    const isProduction = (Bun?.env?.NODE_ENV ?? process.env.NODE_ENV) === "production";
+    const isProduction = IS_PRODUCTION;
     const instance = this.getInstance(context);
     const requestId = this.getRequestId(context);
 
@@ -143,12 +208,11 @@ export class RouterResponseController {
     instance?: string;
     requestId?: string;
   }): ProblemDocument {
-    const type = args.type ?? (args.slug ? `${PROBLEM_TYPE_BASE}${args.slug}.md` : ABOUT_BLANK);
-    const body: ProblemDocument = {
-      type,
-      title: args.title,
-      status: args.status,
-    };
+    // B6: pull a frozen base from the per-(status, slug-or-type) cache and
+    // shallow-copy it. The base owns `(type, title, status)`; only dynamic
+    // fields are assigned below.
+    const template = getProblemTemplate(args.status, args.title, args.slug, args.type);
+    const body: ProblemDocument = { ...template.base };
     if (args.detail !== undefined) body.detail = args.detail;
     if (args.code !== undefined) body.code = args.code;
     if (args.instance !== undefined) body.instance = args.instance;
@@ -159,14 +223,22 @@ export class RouterResponseController {
   private applyResponse(context: any, status: number, _body: ProblemDocument): void {
     if (!context || !context.set) return;
     context.set.status = status;
-    const existing = context.set.headers ?? {};
+    const existing = context.set.headers;
     if (existing instanceof Headers) {
       existing.set("content-type", "application/problem+json");
       context.set.headers = existing;
+      return;
+    }
+    // B6: spread the shared frozen header template. We must allocate a fresh
+    // object because downstream hooks (`echoRequestId`, CORS) mutate
+    // `set.headers` in place — the cache saves the string-literal allocation
+    // and the per-template Object.freeze, not the spread itself.
+    if (existing == null) {
+      context.set.headers = { ...PROBLEM_HEADERS };
     } else {
       context.set.headers = {
         ...(existing as Record<string, string>),
-        "content-type": "application/problem+json",
+        ...PROBLEM_HEADERS,
       };
     }
   }
