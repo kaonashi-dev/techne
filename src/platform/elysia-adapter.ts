@@ -51,9 +51,33 @@ interface CompiledCorsOptions {
   staticCorsHeaders?: Record<string, string>;
 }
 
-// Per-context-store flag used to dedupe inflight counter increment/decrement
-// without the cost of WeakSet add/has/delete on the `Request` object.
-const INFLIGHT_COUNTED_KEY = "__techneInflightCounted";
+/**
+ * Per-request store shape allocated at the top of the fused `onRequest`
+ * hook. Giving every request a single, monomorphic store object up-front
+ * lets V8 pin one hidden class for every `ctx.store.*` read/write across
+ * the hot hook paths, instead of the megamorphic `ctx.store ?? (ctx.store
+ * = {})` coalesce + dynamic property add that used to happen on first
+ * touch (Plan A6). `app.derive` was the original target, but Elysia runs
+ * derive as a transform *after* `onRequest`, so it can't pre-shape the
+ * store for our own first hook — we do the assignment inline instead.
+ */
+interface TechneRequestStore {
+  /**
+   * Request-id field. Stays `undefined` when nobody asks (no inbound header,
+   * no consumer reads it). When `needsRequestId` is on we either copy the
+   * inbound `x-request-id` here or install a lazy getter (see
+   * {@link ElysiaAdapter.installLazyRequestId}) that mints a UUID on first
+   * read and self-replaces with the materialized string.
+   */
+  requestId: string | undefined;
+  /**
+   * Dedup flag for the inflight counter so we increment in `onRequest` and
+   * decrement once in either `onAfterHandle` or `onError`, never both. Lives
+   * on the store (not a WeakSet keyed by `Request`) to avoid add/has/delete
+   * traffic on the global WeakMap.
+   */
+  inflightCounted: boolean;
+}
 
 // Hoisted to module scope so the validation error path doesn't allocate a
 // fresh headers object per request. Only the `set.headers == null` branch
@@ -180,6 +204,8 @@ export class ElysiaAdapter {
     const onAfterHandleActive = trackInflight || needsRequestId;
     const onErrorActive = true; // validation error mapping is always-on
 
+    const needsStore = trackInflight || needsRequestId;
+
     if (onRequestActive) {
       app.onRequest((ctx: any) => {
         if (this.isDraining) {
@@ -189,30 +215,47 @@ export class ElysiaAdapter {
           });
         }
 
-        // Inflight: increment counter on first sight of this ctx.
-        if (trackInflight) {
-          const store = ctx.store ?? (ctx.store = {});
-          if (!store[INFLIGHT_COUNTED_KEY]) {
-            store[INFLIGHT_COUNTED_KEY] = true;
+        // Pre-shape `ctx.store` once per request with the full Techne field
+        // set. Every downstream hook (this fused chain + any user plugins
+        // reading `ctx.store.requestId`) now sees the same monomorphic
+        // hidden class, instead of the historical `ctx.store ?? (ctx.store
+        // = {})` coalesce + dynamic property add that put the call sites
+        // into megamorphic land. `app.derive` runs as a transform after
+        // onRequest in Elysia's compose order, so the derive idiom can't
+        // pre-shape the store for *this* hook — we do it inline here.
+        // Skipped entirely when neither tracking flag is on (nothing reads
+        // the store in that case).
+        if (needsStore) {
+          const store: TechneRequestStore = {
+            requestId: undefined,
+            inflightCounted: false,
+          };
+          ctx.store = store;
+
+          if (trackInflight) {
+            // The fresh store starts with `inflightCounted: false`, so this
+            // is effectively unconditional. The explicit assignment keeps
+            // the increment paired with the flag write the way
+            // onAfterHandle/onError expect it.
+            store.inflightCounted = true;
             this.inflight++;
           }
-        }
 
-        // Request-id: lazily install the UUID accessor (or copy inbound
-        // header through) so consumers can read `ctx.store.requestId`
-        // without paying the UUID cost when nobody asks. Logging start
-        // time is captured here as well to keep the read paths together.
-        if (needsRequestId) {
-          const request = ctx.request;
-          const inbound = request.headers.get("x-request-id");
-          const store = ctx.store ?? (ctx.store = {});
-          if (typeof inbound === "string" && inbound.length > 0) {
-            store.requestId = inbound;
-          } else {
-            ElysiaAdapter.installLazyRequestId(store);
-          }
-          if (loggingEnabled) {
-            this.requestStartTimes.set(request, performance.now());
+          // Request-id: lazily install the UUID accessor (or copy inbound
+          // header through) so consumers can read `ctx.store.requestId`
+          // without paying the UUID cost when nobody asks. Logging start
+          // time is captured here as well to keep the read paths together.
+          if (needsRequestId) {
+            const request = ctx.request;
+            const inbound = request.headers.get("x-request-id");
+            if (typeof inbound === "string" && inbound.length > 0) {
+              store.requestId = inbound;
+            } else {
+              ElysiaAdapter.installLazyRequestId(store);
+            }
+            if (loggingEnabled) {
+              this.requestStartTimes.set(request, performance.now());
+            }
           }
         }
       });
@@ -221,9 +264,9 @@ export class ElysiaAdapter {
     if (onAfterHandleActive) {
       app.onAfterHandle((ctx: any) => {
         if (trackInflight) {
-          const store = ctx.store;
-          if (store && store[INFLIGHT_COUNTED_KEY]) {
-            store[INFLIGHT_COUNTED_KEY] = false;
+          const store = ctx.store as TechneRequestStore;
+          if (store.inflightCounted) {
+            store.inflightCounted = false;
             if (this.inflight > 0) this.inflight--;
           }
         }
@@ -234,7 +277,7 @@ export class ElysiaAdapter {
             const start = this.requestStartTimes.get(request) || performance.now();
             const duration = Math.round(performance.now() - start);
             const path = this.getRequestPath(request.url);
-            const requestId = ctx.store?.requestId as string | undefined;
+            const requestId = (ctx.store as TechneRequestStore).requestId;
             const requestLogger = requestId ? createRequestLogger(requestId, "HTTP") : this.logger;
             requestLogger.log(
               `${request.method} ${path} ${set.status || 200} +${duration}ms`,
@@ -256,9 +299,9 @@ export class ElysiaAdapter {
     if (onErrorActive) {
       app.onError((ctx: any) => {
         if (trackInflight) {
-          const store = ctx.store;
-          if (store && store[INFLIGHT_COUNTED_KEY]) {
-            store[INFLIGHT_COUNTED_KEY] = false;
+          const store = ctx.store as TechneRequestStore | undefined;
+          if (store && store.inflightCounted) {
+            store.inflightCounted = false;
             if (this.inflight > 0) this.inflight--;
           }
         }
@@ -270,7 +313,7 @@ export class ElysiaAdapter {
             const duration = Math.round(performance.now() - start);
             const path = this.getRequestPath(request.url);
             const stack = error instanceof Error ? error.stack : undefined;
-            const requestId = ctx.store?.requestId as string | undefined;
+            const requestId = (ctx.store as TechneRequestStore | undefined)?.requestId;
             const requestLogger = requestId ? createRequestLogger(requestId, "HTTP") : this.logger;
             requestLogger.error(
               `${request.method} ${path} ${set.status || 500} +${duration}ms (${code})`,
@@ -324,11 +367,15 @@ export class ElysiaAdapter {
   }
 
   /**
-   * Attaches a lazy `requestId` accessor to `store`. The UUID is generated
-   * on first read and the property is then replaced with a plain string so
-   * subsequent reads are a property lookup with no getter call.
+   * Attaches a lazy `requestId` accessor to the per-request store object
+   * allocated in the fused `onRequest` hook. The UUID is generated on
+   * first read and the property is then replaced with a plain string so
+   * subsequent reads are a property lookup with no getter call. We install
+   * via `defineProperty` on the same store reference rather than reshaping
+   * it, so the hidden class V8 pinned for `TechneRequestStore` stays
+   * intact.
    */
-  private static installLazyRequestId(store: Record<string, unknown>): void {
+  private static installLazyRequestId(store: TechneRequestStore): void {
     Object.defineProperty(store, "requestId", {
       configurable: true,
       enumerable: true,
