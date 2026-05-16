@@ -155,6 +155,93 @@ function createExtractor(
   }
 }
 
+/**
+ * Returns the per-param access expression for the emitted fast-handler
+ * codegen path, or `null` if the descriptor is not safe to inline (custom
+ * factories, file uploads with FormData branching, etc.). The caller falls
+ * back to {@link compileFastHandler} when this returns `null`.
+ *
+ * All property reads use bracketed `JSON.stringify`-encoded keys so user-
+ * provided param names (e.g. `@Query("page-size")`) can't escape into the
+ * source string and break parsing.
+ */
+function paramAccessExpression(param: ParamMetadata): string | null {
+  const name = param.name;
+  switch (param.type) {
+    case "body":
+      return name ? `(ctx.body==null?undefined:ctx.body[${JSON.stringify(name)}])` : `ctx.body`;
+    case "param":
+      return name
+        ? `(ctx.params==null?undefined:ctx.params[${JSON.stringify(name)}])`
+        : `ctx.params`;
+    case "query":
+      return name ? `(ctx.query==null?undefined:ctx.query[${JSON.stringify(name)}])` : `ctx.query`;
+    case "headers":
+      return name
+        ? `(ctx.headers==null?undefined:ctx.headers[${JSON.stringify(name)}])`
+        : `ctx.headers`;
+    case "request":
+      return `ctx.request`;
+    // `file` needs FormData branching; `custom` needs the factory invocation
+    // path with routeContext — both stay in the bind-based fast path.
+    default:
+      return null;
+  }
+}
+
+const COMPILED_HANDLERS_ENABLED = process.env.TECHNE_COMPILED_HANDLERS === "1";
+
+/**
+ * Compile-time codegen variant of {@link compileFastHandler} that emits a
+ * single specialized closure per route via `new Function(...)`, inlining
+ * literal property access (e.g. `instance.create(ctx.body, ctx.params["id"])`)
+ * instead of going through three bound extractor calls plus `.bind`.
+ *
+ * Returns `null` when any descriptor isn't safe to inline (file/custom params,
+ * non-contiguous indexes, malformed method name) — the caller then falls back
+ * to {@link compileFastHandler}.
+ */
+function compileFastHandlerEmitted(
+  instance: any,
+  methodName: string,
+  paramsMetadata: ParamMetadata[],
+  logger?: { debug?: (msg: string) => void },
+): ((ctx: any) => unknown) | null {
+  // Param indexes must be contiguous 0..n-1 (same constraint the bind-based
+  // fast path enforces).
+  for (let i = 0; i < paramsMetadata.length; i++) {
+    if (paramsMetadata[i].index !== i) return null;
+  }
+
+  // Reject anything we'd have to template into the source string as a raw
+  // identifier. JS identifiers are conservative on purpose — anything weird
+  // falls through to the bind-based path.
+  if (!/^[A-Za-z_$][\w$]*$/.test(methodName)) return null;
+
+  const accessors: string[] = [];
+  for (const param of paramsMetadata) {
+    const expr = paramAccessExpression(param);
+    if (expr === null) return null;
+    accessors.push(expr);
+  }
+
+  const source =
+    accessors.length === 0
+      ? `return function(ctx){return instance.${methodName}();};`
+      : `return function(ctx){return instance.${methodName}(${accessors.join(",")});};`;
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval
+    const factory = new Function("instance", source) as (i: any) => (ctx: any) => unknown;
+    return factory(instance);
+  } catch (err) {
+    logger?.debug?.(
+      `compileFastHandlerEmitted: new Function failed for ${methodName} (${(err as Error).message}); falling back`,
+    );
+    return null;
+  }
+}
+
 function compileFastHandler(
   instance: any,
   methodName: string,
@@ -351,9 +438,23 @@ export class RouterExecutionContext {
       const fastController = container.isStatic(controllerClass)
         ? container.get<any>(controllerClass)
         : undefined;
-      const fast = fastController
-        ? compileFastHandler(fastController, handlerName, paramsMetadata)
-        : null;
+      let fast: ((ctx: any) => unknown) | null = null;
+      if (fastController) {
+        // Opt-in compile-time codegen: emit a single per-route closure with
+        // literal property reads. Falls through to the bind-based path on any
+        // non-inlinable descriptor (file/custom) or a `new Function` failure.
+        if (COMPILED_HANDLERS_ENABLED) {
+          fast = compileFastHandlerEmitted(
+            fastController,
+            handlerName,
+            paramsMetadata,
+            this.logger,
+          );
+        }
+        if (!fast) {
+          fast = compileFastHandler(fastController, handlerName, paramsMetadata);
+        }
+      }
       if (fast) {
         return needsResponseWork
           ? this.createFastHandlerWithResponseWork(fast, cache)
