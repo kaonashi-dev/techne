@@ -15,14 +15,38 @@ Techne is a personal project focused on a decorator-first developer experience, 
 
 ## Installation
 
+Techne is not published to a registry yet. Install directly from GitHub:
+
 ```bash
-bun add @kaonashi-dev/techne
+bun add github:kaonashi-dev/techne
 ```
 
-To use the CLI without installing it globally:
+To pin to a specific tag or commit:
 
 ```bash
-bunx @kaonashi-dev/techne --help
+bun add "github:kaonashi-dev/techne#<tag-or-sha>"
+```
+
+After installation the CLI is available as:
+
+```bash
+bunx techne --help
+```
+
+To scaffold a new project without a prior install:
+
+```bash
+bunx github:kaonashi-dev/techne new my-project
+```
+
+Your project's `tsconfig.json` must enable decorator support:
+
+```json
+{
+  "compilerOptions": {
+    "experimentalDecorators": true
+  }
+}
 ```
 
 ## Quick Start
@@ -663,37 +687,37 @@ entirely.
 
 ```bash
 # Create a new project
-bunx @kaonashi-dev/techne new my-project
+bunx techne new my-project
 
 # Run with hot reload and an optional inspector
-bunx @kaonashi-dev/techne dev --port 3000 --inspect
+bunx techne dev --port 3000 --inspect
 
 # Run without hot reload (production-style)
-bunx @kaonashi-dev/techne start --port 3000
+bunx techne start --port 3000
 
 # Run the test suite
-bunx @kaonashi-dev/techne test tests/ --watch --coverage
+bunx techne test tests/ --watch --coverage
 
 # Diagnose tsconfig / project layout
-bunx @kaonashi-dev/techne doctor
+bunx techne doctor
 
 # Generate framework files
-bunx @kaonashi-dev/techne g module users
-bunx @kaonashi-dev/techne g controller users
-bunx @kaonashi-dev/techne g service users
-bunx @kaonashi-dev/techne g resource users
-bunx @kaonashi-dev/techne g middleware logger
-bunx @kaonashi-dev/techne g guard auth
-bunx @kaonashi-dev/techne g filter http-exception
-bunx @kaonashi-dev/techne g dto create-user
+bunx techne g module users
+bunx techne g controller users
+bunx techne g service users
+bunx techne g resource users
+bunx techne g middleware logger
+bunx techne g guard auth
+bunx techne g filter http-exception
+bunx techne g dto create-user
 
 # Scaffold a multi-stage Bun Dockerfile (+ .dockerignore)
-bunx @kaonashi-dev/techne g docker --port 3000
-bunx @kaonashi-dev/techne deploy --target docker --port 3000
+bunx techne g docker --port 3000
+bunx techne deploy --target docker --port 3000
 
 # Build an entrypoint with bun build
-bunx @kaonashi-dev/techne build src/main.ts --out dist/app.bun --minify
-bunx @kaonashi-dev/techne build src/main.ts --target node --out dist/app.js
+bunx techne build src/main.ts --out dist/app.bun --minify
+bunx techne build src/main.ts --target node --out dist/app.js
 ```
 
 Commands: `new`, `create`, `dev`, `start`, `build`, `test`, `deploy`,
