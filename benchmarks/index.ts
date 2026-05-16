@@ -25,6 +25,7 @@ async function main() {
   const { runResponseSchemaBench } = await import("./response-schema");
   const { runDiBench } = await import("./di");
   const { runColdStartBench } = await import("./cold-start");
+  const { runColdStartHandleBench } = await import("./cold-start-handle");
 
   const all: ScenarioResult[] = [];
   const sections: { title: string; results: ScenarioResult[] }[] = [];
@@ -36,6 +37,7 @@ async function main() {
     ["Response schema (stringifier)", runResponseSchemaBench],
     ["Dependency injection", runDiBench],
     ["Cold start", runColdStartBench],
+    ["Cold start (in-process)", runColdStartHandleBench],
   ] as const) {
     if (!isJson()) console.error(`-> running: ${title}`);
     const results = await run();
