@@ -25,5 +25,11 @@ jobs:
       - name: Test
         run: bun test tests/*.test.ts
 
+      - name: Bench smoke (quick matrix)
+        run: bun run benchmarks/index.ts --quick --json > bench/current.json
+
+      - name: Bench regression gate (vs bench/baseline-ci.json if present)
+        run: bun run scripts/bench-check.ts --baseline bench/baseline-ci.json --current bench/current.json --threshold 0.05
+
       - name: Build
         run: bun run build

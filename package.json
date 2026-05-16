@@ -92,7 +92,10 @@
     "test:nestjs": "bun test tests/nestjs/",
     "check": "bun run lint && bun run format:check",
     "check:fix": "bun run lint:fix && bun run format .",
-    "bench": "bun run benchmarks/http.ts",
+    "bench": "bun run benchmarks/index.ts",
+    "bench:http": "bun run benchmarks/http.ts",
+    "bench:quick": "bun run benchmarks/index.ts --quick",
+    "bench:check": "bun run scripts/bench-check.ts",
     "build": "tsc -p tsconfig.build.json",
     "prepublishOnly": "bun run build"
   },
