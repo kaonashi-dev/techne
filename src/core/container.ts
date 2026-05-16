@@ -87,14 +87,28 @@ export class Container {
   private resolutionStack = new Set<any>();
   private staticCache = new Map<any, boolean>();
   private providers = new Map<any, Provider>();
+  // C4: warm-path fast table. Holds only static-scoped + already-materialized
+  // instances. `get(token)` short-circuits to a single Map.get on hit.
+  // Invariant: every entry here must also live in `this.instances` and
+  // `isStatic(token)` must hold. Mutations to providers/instances delete
+  // the affected token from the table. Lazily repopulated on resolve().
+  private fastTable = new Map<any, any>();
 
   constructor() {
     this.instances.set(Reflector, new Reflector());
     this.instances.set(ModuleRef, new ModuleRef(this));
+    // Reflector is a static singleton; safe to seed.
+    // ModuleRef intentionally NOT seeded: resolve() returns a fresh
+    // ModuleRef per call (see ModuleRef branch in resolve()), so keeping
+    // it out of fastTable preserves that behavior.
+    this.fastTable.set(Reflector, this.instances.get(Reflector));
   }
 
   public set<T>(token: any, value: T): void {
     this.instances.set(token, value);
+    // Drop any prior snapshot for this token; get() will lazily re-add
+    // if subsequent resolution proves the entry is static.
+    this.fastTable.delete(token);
   }
 
   public has(token: any): boolean {
@@ -108,14 +122,65 @@ export class Container {
   public addProvider(provider: Provider): void {
     this.providers.set(provider.provide, provider);
     this.staticCache.delete(provider.provide);
+    this.fastTable.delete(provider.provide);
   }
 
   public registerController(controller: any): void {
     this.staticCache.delete(controller);
+    this.fastTable.delete(controller);
+  }
+
+  /**
+   * Walk every known token and snapshot static, already-cached entries into
+   * `fastTable`. Intended to run after `initializeStaticProviders` so the
+   * warm-path `get()` becomes a single `Map.get`. Idempotent; safe to call
+   * multiple times. Never inserts request/transient/contextual entries.
+   */
+  public primeFastTable(): void {
+    // Seed from provider definitions whose instances are already cached.
+    for (const token of this.providers.keys()) {
+      if (this.instances.has(token) && this.isStatic(token)) {
+        const inst = this.instances.get(token);
+        if (inst !== undefined) this.fastTable.set(token, inst);
+      }
+    }
+    // Seed from already-instantiated classes (no custom provider).
+    for (const [token, inst] of this.instances) {
+      if (this.fastTable.has(token)) continue;
+      // ModuleRef must stay out — resolve() returns a fresh one per call.
+      if (token === ModuleRef) continue;
+      // Non-class tokens registered only via `set()` have ambiguous scope.
+      // Leave them out; get() backfills lazily once their static-ness is
+      // confirmed against the provider/class metadata.
+      if (typeof token !== "function") continue;
+      if (inst === undefined) continue;
+      if (this.isStatic(token)) {
+        this.fastTable.set(token, inst);
+      }
+    }
   }
 
   public get<T>(target: any): T {
-    return this.resolve<T>(target);
+    // Warm-path: single Map.get. Map.get returning undefined falls through
+    // to the full resolution ladder so `useValue: undefined` and missing
+    // entries both still take the correct path.
+    const hit = this.fastTable.get(target);
+    if (hit !== undefined) return hit as T;
+    const resolved = this.resolve<T>(target);
+    // Backfill: if this turned out to be a static, cached entry, promote
+    // it so subsequent calls are fast. Skip undefined values, REQUEST /
+    // INQUIRER (never static), and ModuleRef (returns fresh per call).
+    if (
+      resolved !== undefined &&
+      target !== REQUEST &&
+      target !== INQUIRER &&
+      target !== ModuleRef &&
+      this.instances.has(target) &&
+      this.isStatic(target)
+    ) {
+      this.fastTable.set(target, resolved);
+    }
+    return resolved;
   }
 
   public createContextId(): symbol {
@@ -434,8 +499,10 @@ export class Container {
     this.resolutionStack.clear();
     this.staticCache.clear();
     this.providers.clear();
+    this.fastTable.clear();
     this.instances.set(Reflector, new Reflector());
     this.instances.set(ModuleRef, new ModuleRef(this));
+    this.fastTable.set(Reflector, this.instances.get(Reflector));
   }
 }
 

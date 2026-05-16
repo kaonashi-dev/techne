@@ -375,6 +375,9 @@ export class TechneFactory {
         }
       }
     }
+    // C4: snapshot static+cached entries so warm-path resolve becomes a
+    // single Map.get.
+    container.primeFastTable();
   }
 
   private static normalizeGlobalProvider<T>(container: Container, token: any): T[] {
