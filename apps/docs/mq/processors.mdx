@@ -1,22 +1,21 @@
 ---
 title: "Processors"
-description: "@MqProcessor, @MqProcess, and @InjectMq turn a class into a typed queue worker."
+description: "@Queue, @MqProcessor, @MqProcess, and @InjectMq turn a class into a typed queue worker."
 ---
 
-A processor is an `@Injectable()` class decorated with `@MqProcessor(name)`.
-Each `@MqProcess(jobName)` method handles one job name on the queue.
-`@InjectMq(name)` injects the typed `Queue` instance.
+A processor is an `@Injectable()` class decorated with `@Queue(name)`.
+The simplest case is a single `handle()` method — no method decorator required.
 
 ```ts
-import { InjectMq, Job, MqProcess, MqProcessor, Queue } from "@kaonashi-dev/techne/mq";
+import { Queue } from "@kaonashi-dev/techne/mq";
+import type { MqQueue, Job } from "@kaonashi-dev/techne/mq";
 
-@MqProcessor("emails")
+@Queue("emails")
 class EmailProcessor {
-  constructor(@InjectMq("emails") private readonly emails: Queue<{ email: string }>) {}
-
-  @MqProcess("send")
-  async send(job: Job<{ email: string }>) {
-    return { delivered: job.data.email };
+  // Auto-registered as the default handler for any job on this queue.
+  async handle(job: Job<{ to: string; subject: string }>) {
+    await sendEmail(job.data);
+    return { sent: true };
   }
 }
 ```
@@ -24,3 +23,57 @@ class EmailProcessor {
 Register the processor through your feature's `providers` (or the `providers`
 array on `TechneFactory.create()`) and declare the queue through the `mq()`
 plugin — see [MQ overview](/mq/overview).
+
+## Per-job-name dispatch
+
+Use `@MqProcess(jobName)` to route specific job names to dedicated methods.
+When a named handler exists it always takes precedence over `handle()`.
+
+```ts
+import { Queue, MqProcess } from "@kaonashi-dev/techne/mq";
+import type { Job } from "@kaonashi-dev/techne/mq";
+
+@Queue("emails")
+class EmailProcessor {
+  @MqProcess("welcome")
+  async sendWelcome(job: Job<{ to: string }>) {
+    await sendWelcomeEmail(job.data);
+  }
+
+  @MqProcess("reset")
+  async sendReset(job: Job<{ to: string; token: string }>) {
+    await sendPasswordReset(job.data);
+  }
+
+  // Falls through here for any job name not matched above.
+  async handle(job: Job) {
+    console.warn("Unhandled email job:", job.name);
+  }
+}
+```
+
+## Publishing
+
+Inject the typed queue into any provider with `@InjectMq(name)`:
+
+```ts
+import { InjectMq } from "@kaonashi-dev/techne/mq";
+import type { MqQueue } from "@kaonashi-dev/techne/mq";
+
+@Injectable()
+export class UsersService {
+  constructor(@InjectMq("emails") private readonly emails: MqQueue<{ to: string }>) {}
+
+  async signup(input: SignupInput) {
+    const user = await this.repo.create(input);
+    await this.emails.add("welcome", { to: user.email });
+    return user;
+  }
+}
+```
+
+## `@MqProcessor` — the lower-level alias
+
+`@Queue` is an alias for `@MqProcessor`. Both apply the same metadata and are
+interchangeable. Use `@MqProcessor` when you want to be explicit that a class
+is a low-level processor rather than a domain-layer queue handler.

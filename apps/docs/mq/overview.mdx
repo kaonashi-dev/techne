@@ -4,33 +4,56 @@ description: "BullMQ-style queues and workers under @kaonashi-dev/techne/mq."
 ---
 
 Queue utilities live under `./mq`. The legacy `./queue` subpath remains as a
-temporary core-only compatibility layer that re-exports `Queue`, `Worker`,
-`Job`, and `QueueEvents`.
+temporary core-only compatibility layer that re-exports the same primitives.
+
+## Quick start
+
+Declare a queue in the `mq()` plugin, write a processor class with a `handle()`
+method, and register it as a provider:
 
 ```ts
-import {
-  InjectMq,
-  Job,
-  mq,
-  MqProcess,
-  MqProcessor,
-  Queue,
-  Worker,
-} from "@kaonashi-dev/techne/mq";
+import { Queue } from "@kaonashi-dev/techne/mq";
+import type { Job } from "@kaonashi-dev/techne/mq";
 
-const queue = new Queue("emails");
-
-await queue.add("send", { email: "user@example.com" }, { attempts: 3, backoff: 1000 });
-
-@MqProcessor("emails")
+@Queue("emails")
 class EmailProcessor {
-  constructor(@InjectMq("emails") private readonly emails: Queue<{ email: string }>) {}
-
-  @MqProcess("send")
-  async send(job: Job<{ email: string }>) {
-    return { delivered: job.data.email };
+  async handle(job: Job<{ to: string }>) {
+    await sendEmail(job.data);
+    return { sent: true };
   }
 }
+
+const app = await TechneFactory.create({
+  plugins: [mq({ queues: [{ name: "emails" }] })],
+  providers: [EmailProcessor],
+});
+```
+
+## Framework integration
+
+The `mq()` plugin wires up DI tokens and starts workers for every declared
+queue. Processors are auto-discovered from the `providers` array.
+
+```ts
+import { mq } from "@kaonashi-dev/techne/mq";
+
+const app = await TechneFactory.create({
+  plugins: [mq({ queues: [{ name: "emails" }, { name: "notifications" }] })],
+  providers: [EmailProcessor, NotificationsProcessor],
+});
+```
+
+## Low-level usage
+
+You can also create queue instances and workers directly without the plugin:
+
+```ts
+import { Worker } from "@kaonashi-dev/techne/mq";
+import { Queue } from "@kaonashi-dev/techne/mq/queue";
+
+const queue = new Queue("reports");
+
+await queue.add("build", { reportId: 1 }, { attempts: 3, backoff: 1000 });
 
 const worker = new Worker(queue, async (job) => {
   console.log("Processing:", job.name, job.data);
@@ -40,17 +63,7 @@ const worker = new Worker(queue, async (job) => {
 await worker.run();
 ```
 
-## Framework integration
-
-Use the `mq()` plugin to declare queues at bootstrap and let Techne wire up
-their workers + DI tokens for you:
-
-```ts
-const app = await TechneFactory.create({
-  plugins: [mq({ queues: [{ name: "emails" }] })],
-  providers: [EmailProcessor],
-});
-```
-
-See [Processors](/mq/processors) for the decorator surface and
-[Drivers](/mq/drivers) for the Redis and in-memory backends.
+See [Processors](/mq/processors) for the full decorator surface,
+[Drivers](/mq/drivers) for the Redis and in-memory backends, and
+[Deployments](/mq/deployments) for running HTTP and workers in separate
+processes.

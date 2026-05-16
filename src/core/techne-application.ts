@@ -5,6 +5,7 @@ import type { CanActivate } from "../interfaces/can-activate.interface";
 import type { ExceptionFilter } from "../interfaces/exception-filter.interface";
 import { Logger } from "../services/logger.service";
 import type { MqRegistry } from "../mq/registry";
+import type { TechneMode } from "../common/mode";
 import type {
   CorsOptions,
   GlobalPrefixOptions,
@@ -42,6 +43,7 @@ export interface ReadinessReport {
 interface TechneApplicationInternalOptions {
   shutdown?: Partial<ShutdownOptions>;
   health?: Partial<HealthOptions>;
+  mode?: TechneMode;
   /**
    * Raw user-supplied options (cors, prefix, etc.). Made available to plugins
    * via `PluginContext.options` as a frozen, read-only view.
@@ -95,6 +97,7 @@ export class TechneApplication {
   private listenUrl?: string;
   private readonly shutdownOptions: ShutdownOptions;
   private readonly healthOptions: HealthOptions;
+  private readonly mode: TechneMode;
   private readonly userOptions: Readonly<Record<string, unknown>>;
   private readonly registered = new Map<string, RegisteredPlugin>();
   private readyHandlers: Array<() => void | Promise<void>> = [];
@@ -118,6 +121,7 @@ export class TechneApplication {
       ...options?.health,
       checks: options?.health?.checks ?? DEFAULT_HEALTH.checks,
     };
+    this.mode = options?.mode ?? "all";
     this.userOptions = Object.freeze({ ...options?.userOptions });
   }
 
@@ -166,7 +170,6 @@ export class TechneApplication {
   }
 
   async listen(port: number, callback?: () => void) {
-    const resolvedPort = port === 0 ? getEphemeralPort() : port;
     this.registerShutdownHandlers();
     // Fire bootstrap BEFORE accepting traffic so the app isn't reachable
     // until every onApplicationBootstrap hook has resolved.
@@ -175,6 +178,12 @@ export class TechneApplication {
     // plugins can depend on the bootstrap state and on each other.
     await this.fireReadyHandlers();
     this.isReady = true;
+    if (this.mode === "worker") {
+      // Workers keep the event loop alive; skip HTTP binding entirely.
+      callback?.();
+      return this;
+    }
+    const resolvedPort = port === 0 ? getEphemeralPort() : port;
     if (port === 0) {
       this.listenUrl = `http://localhost:${resolvedPort}`;
       callback?.();

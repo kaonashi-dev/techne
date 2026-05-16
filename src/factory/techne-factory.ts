@@ -1,4 +1,5 @@
 import { APP_FILTER, APP_GUARD } from "../common/constants";
+import { resolveTechneMode, type TechneMode } from "../common/mode";
 import { TechneApplicationContext } from "../core/application-context";
 import type { CorsOptions, GlobalPrefixOptions, VersioningOptions } from "../core/http-options";
 import { Scanner } from "../core/scanner";
@@ -161,6 +162,18 @@ export interface AppBootstrapConfig extends TechneApplicationOptions {
   providers?: any[];
   features?: Feature[];
   plugins?: PluginDefinition<any>[];
+  /**
+   * Determines which subsystems start. Defaults to `"all"`.
+   * Can also be set via the `TECHNE_MODE` environment variable;
+   * an explicit `mode` here takes precedence over the env var.
+   *
+   * - `"all"` — HTTP server + MQ workers (current default behavior).
+   * - `"server"` — HTTP only; MQ queues are DI-injectable for publishing but
+   *   no workers are started.
+   * - `"worker"` — MQ workers only; `listen()` is a no-op for HTTP so the
+   *   process stays alive via worker event loops.
+   */
+  mode?: TechneMode;
 }
 
 export class TechneFactory {
@@ -182,9 +195,11 @@ export class TechneFactory {
       providers: _pv,
       features: _f,
       plugins = [],
+      mode: modeOption,
       ...effectiveOptions
     } = merged as any;
 
+    const mode = resolveTechneMode(modeOption);
     const loggerEnabled = effectiveOptions?.logger !== false;
     Logger.setEnabled(loggerEnabled);
 
@@ -215,6 +230,7 @@ export class TechneFactory {
       {
         shutdown: effectiveOptions?.shutdown,
         health: effectiveOptions?.health,
+        mode,
         userOptions: (effectiveOptions ?? {}) as Record<string, unknown>,
       },
     );
@@ -233,7 +249,9 @@ export class TechneFactory {
     if (container.has(MQ_DRIVER)) {
       const mqRegistry = new MqRegistry(container, container.get(MQ_DRIVER));
       mqRegistry.register();
-      mqRegistry.registerFromClasses([...scanner.getProviders(), ...scanner.getControllers()]);
+      if (mode !== "server") {
+        mqRegistry.registerFromClasses([...scanner.getProviders(), ...scanner.getControllers()]);
+      }
       app.attachMqRegistry(mqRegistry);
     }
 
@@ -274,6 +292,7 @@ export class TechneFactory {
   public static async createApplicationContext(
     config: AppBootstrapConfig,
   ): Promise<TechneApplicationContext> {
+    const mode = resolveTechneMode(config?.mode);
     const loggerEnabled = config?.logger !== false;
     Logger.setEnabled(loggerEnabled);
 
@@ -290,7 +309,7 @@ export class TechneFactory {
       routesResolver,
       routesResolver.executionContext,
       undefined,
-      { userOptions: config as Record<string, unknown> },
+      { mode, userOptions: config as Record<string, unknown> },
     );
 
     for (const plugin of config.plugins ?? []) {
@@ -308,7 +327,9 @@ export class TechneFactory {
     if (container.has(MQ_DRIVER)) {
       mqRegistry = new MqRegistry(container, container.get(MQ_DRIVER));
       mqRegistry.register();
-      mqRegistry.registerFromClasses([...scanner.getProviders(), ...scanner.getControllers()]);
+      if (mode !== "server") {
+        mqRegistry.registerFromClasses([...scanner.getProviders(), ...scanner.getControllers()]);
+      }
     }
 
     return new TechneApplicationContext(scanner, container, mqRegistry).init();
