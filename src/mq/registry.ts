@@ -37,7 +37,9 @@ export class MqRegistry {
         queue,
         async (job) => {
           const handlerName =
-            this.findHandler(processMetadata, job.name) ?? this.findHandler(processMetadata);
+            this.findHandler(processMetadata, job.name) ??
+            this.findHandler(processMetadata) ??
+            (typeof instance.handle === "function" ? "handle" : undefined);
           if (!handlerName || typeof instance[handlerName] !== "function") {
             throw new Error(
               `No processor handler found for job '${job.name}' in queue '${processor.queueName}'`,

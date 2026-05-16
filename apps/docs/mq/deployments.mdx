@@ -1,0 +1,107 @@
+---
+title: "Deployments"
+description: "Running HTTP and MQ workers in the same process or in separate processes using TECHNE_MODE."
+---
+
+By default, `TechneFactory.create()` starts both the HTTP server and any
+registered MQ workers in a single process. For production, you often want a
+dedicated worker service that scales independently.
+
+## `TECHNE_MODE`
+
+Set the `TECHNE_MODE` environment variable to control which subsystems start:
+
+| Value | HTTP | Workers |
+|-------|------|---------|
+| `all` (default) | ✓ | ✓ |
+| `server` | ✓ | — |
+| `worker` | — | ✓ |
+
+```bash
+# HTTP only
+TECHNE_MODE=server bun run start
+
+# Workers only
+TECHNE_MODE=worker bun run start
+```
+
+## `mode` option
+
+You can also pass `mode` directly to `TechneFactory.create()`. The explicit
+option takes precedence over the environment variable.
+
+```ts
+TechneFactory.create({ mode: "worker", ... });
+```
+
+## Split deploy example
+
+A common pattern is a single Docker image with two entry-point commands:
+
+```yaml
+# docker-compose.yml
+services:
+  web:
+    image: my-app
+    command: bun run start
+    environment:
+      TECHNE_MODE: server
+
+  worker:
+    image: my-app
+    command: bun run start
+    environment:
+      TECHNE_MODE: worker
+    deploy:
+      replicas: 3
+```
+
+Both services share the same codebase. The web service handles HTTP traffic;
+worker replicas each pull jobs from the queue concurrently.
+
+## `server` mode: publish-only
+
+When `TECHNE_MODE=server`, queues are still registered in DI so controllers and
+services can publish jobs. No workers are started — the jobs accumulate in the
+queue until a worker process picks them up.
+
+```ts
+@Injectable()
+class ReportsService {
+  constructor(@InjectMq("reports") private readonly reports: MqQueue) {}
+
+  async requestReport(id: string) {
+    await this.reports.add("generate", { id });
+  }
+}
+```
+
+## `worker` mode: workers only
+
+When `TECHNE_MODE=worker`, `listen()` becomes a no-op for HTTP. Workers start
+normally and keep the event loop alive. `app.close()` performs a graceful
+shutdown — it waits for in-flight jobs before stopping.
+
+```ts
+const app = await TechneFactory.create({
+  mode: "worker",
+  plugins: [mq({ queues: [{ name: "reports" }] })],
+  providers: [ReportsProcessor],
+});
+
+// Call listen() as normal; HTTP binding is skipped automatically.
+await app.listen(3000);
+```
+
+## Development (zero config)
+
+In development, omit `mode` entirely. HTTP and workers run together in one
+process with no extra configuration needed.
+
+```ts
+// techne.config.ts — no mode field
+export default defineTechneConfig({
+  plugins: [mq({ queues: [{ name: "reports" }] })],
+  providers: [ReportsProcessor],
+});
+```

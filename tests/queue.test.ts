@@ -7,9 +7,12 @@ import {
   Queue,
   QueueEvents,
   Worker,
+  getMqToken,
   mq,
   type Job,
 } from "../src/mq";
+import { Queue as QueueClass } from "../src/mq/queue";
+import { MQ_PROCESSOR_METADATA } from "../src/common/constants";
 import { TechneFactory } from "../src/factory/techne-factory";
 import * as LegacyQueue from "../src/queue";
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -19,7 +22,7 @@ describe("mq", () => {
     await Promise.allSettled(closers.splice(0).map((close) => close()));
   });
   test("adds and retrieves jobs", async () => {
-    const queue = new Queue("emails");
+    const queue = new QueueClass("emails");
     closers.push(() => queue.close());
     const job = await queue.add("send-welcome", { email: "hello@example.com" });
     expect(await queue.getJobCounts("waiting")).toEqual({ waiting: 1 });
@@ -30,7 +33,7 @@ describe("mq", () => {
     expect(stored?.data).toEqual({ email: "hello@example.com" });
   });
   test("processes delayed and retried jobs", async () => {
-    const queue = new Queue("notifications");
+    const queue = new QueueClass("notifications");
     const attempts: number[] = [];
     const worker = new Worker(
       queue,
@@ -64,7 +67,7 @@ describe("mq", () => {
     });
   });
   test("emits queue events", async () => {
-    const queue = new Queue("reports");
+    const queue = new QueueClass("reports");
     const events = new QueueEvents("reports", {}, queue.driver);
     const seen: string[] = [];
     events.on("waiting", () => seen.push("waiting"));
@@ -125,7 +128,7 @@ describe("mq", () => {
     expect(audit.events).toEqual(["dev@example.com"]);
   });
   test("supports pause/resume and job counts", async () => {
-    const queue = new Queue("paused");
+    const queue = new QueueClass("paused");
     closers.push(() => queue.close());
     await queue.pause();
     await queue.add("one", { ok: 1 });
@@ -149,5 +152,63 @@ describe("mq", () => {
     expect(LegacyQueue.QueueEvents).toBe(QueueEvents);
     expect("InjectQueue" in LegacyQueue).toBe(false);
     expect("QueueModule" in LegacyQueue).toBe(false);
+  });
+  test("@Queue applies the same metadata as @MqProcessor", () => {
+    @Queue("equiv-test")
+    class WithQueue {}
+    @MqProcessor("equiv-test")
+    class WithMqProcessor {}
+    expect(Reflect.getMetadata(MQ_PROCESSOR_METADATA, WithQueue)).toEqual(
+      Reflect.getMetadata(MQ_PROCESSOR_METADATA, WithMqProcessor),
+    );
+  });
+  test("handle() on @Queue class is auto-discovered as default handler", async () => {
+    const processed: any[] = [];
+    @Queue("auto-handle", { blockTimeout: 10, lockDuration: 200 })
+    class AutoHandleProcessor {
+      async handle(job: Job) {
+        processed.push(job.data);
+        return "handled";
+      }
+    }
+    const ctx = await TechneFactory.createApplicationContext({
+      plugins: [mq({ queues: [{ name: "auto-handle" }] })],
+      providers: [AutoHandleProcessor],
+      logger: false,
+    });
+    closers.push(() => ctx.close());
+    const queue = ctx.get<any>(getMqToken("auto-handle"));
+    await queue.add("any-job-name", { n: 42 });
+    await sleep(40);
+    expect(processed).toHaveLength(1);
+    expect(processed[0]).toEqual({ n: 42 });
+  });
+  test("@MqProcess takes precedence over handle()", async () => {
+    const welcomed: any[] = [];
+    const handled: any[] = [];
+    @Queue("priority-test", { blockTimeout: 10, lockDuration: 200 })
+    class PriorityProcessor {
+      @MqProcess("welcome")
+      async sendWelcome(job: Job) {
+        welcomed.push(job.data);
+        return "welcomed";
+      }
+      async handle(job: Job) {
+        handled.push(job.data);
+        return "handled";
+      }
+    }
+    const ctx = await TechneFactory.createApplicationContext({
+      plugins: [mq({ queues: [{ name: "priority-test" }] })],
+      providers: [PriorityProcessor],
+      logger: false,
+    });
+    closers.push(() => ctx.close());
+    const queue = ctx.get<any>(getMqToken("priority-test"));
+    await queue.add("welcome", { user: "alice" });
+    await sleep(40);
+    expect(welcomed).toHaveLength(1);
+    expect(welcomed[0]).toEqual({ user: "alice" });
+    expect(handled).toHaveLength(0);
   });
 });

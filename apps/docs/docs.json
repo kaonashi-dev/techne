@@ -107,6 +107,7 @@
             "pages": [
               "mq/overview",
               "mq/processors",
+              "mq/deployments",
               "mq/drivers",
               "mq/legacy-queue"
             ]

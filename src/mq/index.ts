@@ -1,6 +1,6 @@
 export * from "./types";
 export * from "./driver";
-export * from "./queue";
+export type { Queue as MqQueue } from "./queue";
 export * from "./job";
 export * from "./worker";
 export * from "./queue-events";
@@ -14,3 +14,4 @@ export * from "./module/mq.module";
 export * from "./decorators/inject-mq.decorator";
 export * from "./decorators/mq-processor.decorator";
 export * from "./decorators/mq-process.decorator";
+export * from "./decorators/queue.decorator";
