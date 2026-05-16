@@ -23,6 +23,7 @@ async function main() {
   const { runSlowPathBench } = await import("./slow-path");
   const { runValidationBench } = await import("./validation");
   const { runResponseSchemaBench } = await import("./response-schema");
+  const { runCorsBench } = await import("./cors");
   const { runDiBench } = await import("./di");
   const { runColdStartBench } = await import("./cold-start");
   const { runColdStartHandleBench } = await import("./cold-start-handle");
@@ -35,6 +36,7 @@ async function main() {
     ["Slow path (static guard)", runSlowPathBench],
     ["Request validation", runValidationBench],
     ["Response schema (stringifier)", runResponseSchemaBench],
+    ["CORS", runCorsBench],
     ["Dependency injection", runDiBench],
     ["Cold start", runColdStartBench],
     ["Cold start (in-process)", runColdStartHandleBench],

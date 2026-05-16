@@ -49,6 +49,8 @@ interface CompiledCorsOptions {
   fallbackOrigin?: string;
   staticHeaders: Record<string, string>;
   staticCorsHeaders?: Record<string, string>;
+  dynamicHeadersCache?: Map<string, Record<string, string>>;
+  dynamicHeadersMaxEntries: number;
 }
 
 /**
@@ -71,6 +73,12 @@ interface TechneRequestStore {
    */
   requestId: string | undefined;
   /**
+   * Request start timestamp captured with `Bun.nanoseconds()` when HTTP
+   * logging is enabled. Lives on the request store so logging avoids a
+   * WeakMap set/get/delete on every request.
+   */
+  startUs: number | undefined;
+  /**
    * Dedup flag for the inflight counter so we increment in `onRequest` and
    * decrement once in either `onAfterHandle` or `onError`, never both. Lives
    * on the store (not a WeakSet keyed by `Request`) to avoid add/has/delete
@@ -91,7 +99,6 @@ export class ElysiaAdapter {
   private app: Elysia;
   private logger: Logger;
   private container: Container;
-  private requestStartTimes = new WeakMap<Request, number>();
   private compiledCorsOptions?: CompiledCorsOptions;
   private corsHooksInstalled = false;
   private inflight = 0;
@@ -228,6 +235,7 @@ export class ElysiaAdapter {
         if (needsStore) {
           const store: TechneRequestStore = {
             requestId: undefined,
+            startUs: undefined,
             inflightCounted: false,
           };
           ctx.store = store;
@@ -254,7 +262,7 @@ export class ElysiaAdapter {
               ElysiaAdapter.installLazyRequestId(store);
             }
             if (loggingEnabled) {
-              this.requestStartTimes.set(request, performance.now());
+              store.startUs = Bun.nanoseconds();
             }
           }
         }
@@ -274,17 +282,17 @@ export class ElysiaAdapter {
         if (needsRequestId) {
           if (loggingEnabled) {
             const { request, set } = ctx;
-            const start = this.requestStartTimes.get(request) || performance.now();
-            const duration = Math.round(performance.now() - start);
+            const store = ctx.store as TechneRequestStore;
+            const start = store.startUs ?? Bun.nanoseconds();
+            const duration = Math.round((Bun.nanoseconds() - start) / 1_000_000);
             const path = this.getRequestPath(request.url);
-            const requestId = (ctx.store as TechneRequestStore).requestId;
+            const requestId = store.requestId;
             const requestLogger = requestId ? createRequestLogger(requestId, "HTTP") : this.logger;
             requestLogger.log(
               `${request.method} ${path} ${set.status || 200} +${duration}ms`,
               "HTTP",
             );
             this.echoRequestId(ctx);
-            this.requestStartTimes.delete(request);
           } else {
             this.echoRequestId(ctx);
           }
@@ -309,11 +317,12 @@ export class ElysiaAdapter {
         if (needsRequestId) {
           if (loggingEnabled) {
             const { request, code, error, set } = ctx;
-            const start = this.requestStartTimes.get(request) || performance.now();
-            const duration = Math.round(performance.now() - start);
+            const store = ctx.store as TechneRequestStore | undefined;
+            const start = store?.startUs ?? Bun.nanoseconds();
+            const duration = Math.round((Bun.nanoseconds() - start) / 1_000_000);
             const path = this.getRequestPath(request.url);
             const stack = error instanceof Error ? error.stack : undefined;
-            const requestId = (ctx.store as TechneRequestStore | undefined)?.requestId;
+            const requestId = store?.requestId;
             const requestLogger = requestId ? createRequestLogger(requestId, "HTTP") : this.logger;
             requestLogger.error(
               `${request.method} ${path} ${set.status || 500} +${duration}ms (${code})`,
@@ -321,7 +330,6 @@ export class ElysiaAdapter {
               "HTTP",
             );
             this.echoRequestId(ctx);
-            this.requestStartTimes.delete(request);
           } else {
             this.echoRequestId(ctx);
           }
@@ -516,10 +524,34 @@ export class ElysiaAdapter {
           ? cors.origin
           : "*";
 
-    return {
-      "access-control-allow-origin": allowedOrigin ?? "*",
+    const resolvedOrigin = allowedOrigin ?? "*";
+    const cache = cors.dynamicHeadersCache;
+    if (!cache) {
+      return {
+        "access-control-allow-origin": resolvedOrigin,
+        ...cors.staticHeaders,
+      };
+    }
+
+    const cached = cache.get(resolvedOrigin);
+    if (cached) {
+      if (cors.dynamicHeadersMaxEntries === 64) {
+        cache.delete(resolvedOrigin);
+        cache.set(resolvedOrigin, cached);
+      }
+      return cached;
+    }
+
+    const headers = {
+      "access-control-allow-origin": resolvedOrigin,
       ...cors.staticHeaders,
     };
+    cache.set(resolvedOrigin, headers);
+    if (cors.dynamicHeadersMaxEntries > 0 && cache.size > cors.dynamicHeadersMaxEntries) {
+      const oldest = cache.keys().next().value;
+      if (oldest !== undefined) cache.delete(oldest);
+    }
+    return headers;
   }
 
   private compileCorsOptions(options: CorsOptions): CompiledCorsOptions {
@@ -556,12 +588,23 @@ export class ElysiaAdapter {
             ...staticHeaders,
           };
 
+    const allowedOrigins = Array.isArray(options.origin) ? new Set(options.origin) : undefined;
+    const dynamicHeadersMaxEntries = allowedOrigins
+      ? Math.max(allowedOrigins.size, 1)
+      : options.origin === true || options.origin === undefined
+        ? 64
+        : 0;
+
     return {
       origin: options.origin,
-      allowedOrigins: Array.isArray(options.origin) ? new Set(options.origin) : undefined,
+      allowedOrigins,
       fallbackOrigin: Array.isArray(options.origin) ? options.origin[0] : undefined,
       staticHeaders,
       staticCorsHeaders,
+      dynamicHeadersCache: staticCorsHeaders
+        ? undefined
+        : new Map<string, Record<string, string>>(),
+      dynamicHeadersMaxEntries,
     };
   }
 

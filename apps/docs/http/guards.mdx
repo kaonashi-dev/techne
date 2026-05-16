@@ -36,9 +36,7 @@ token. Useful for stacking authentication + authorization:
 import { APP_GUARD } from "@kaonashi-dev/techne/common";
 
 const app = await TechneFactory.create({
-  providers: [
-    { provide: APP_GUARD, useClass: AuthGuard },
-  ],
+  providers: [{ provide: APP_GUARD, useClass: AuthGuard }],
 });
 ```
 

@@ -9,7 +9,12 @@ with `appConfig(config)` so handlers can pull the same object out of
 DI via `@InjectConfig()`.
 
 ```ts
-import { appConfig as appConfigPlugin, defineConfig, InjectConfig, t } from "@kaonashi-dev/techne/config";
+import {
+  appConfig as appConfigPlugin,
+  defineConfig,
+  InjectConfig,
+  t,
+} from "@kaonashi-dev/techne/config";
 import { Controller, Get } from "@kaonashi-dev/techne/common";
 import { TechneFactory } from "@kaonashi-dev/techne/core";
 

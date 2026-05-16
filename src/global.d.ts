@@ -1,5 +1,14 @@
 declare namespace Reflect {
-  function metadata(key: string, value: any): ClassDecorator & MethodDecorator;
-  function defineMetadata(key: string, value: any, target: any, propertyKey?: string): void;
-  function getMetadata(key: string, target: any, propertyKey?: string): any;
+  function metadata(key: PropertyKey, value: any): ClassDecorator & MethodDecorator;
+  function defineMetadata(
+    key: PropertyKey,
+    value: any,
+    target: any,
+    propertyKey?: PropertyKey,
+  ): void;
+  function getMetadata(key: PropertyKey, target: any, propertyKey?: PropertyKey): any;
+}
+
+interface SymbolConstructor {
+  readonly metadata: symbol;
 }

@@ -6,6 +6,7 @@ import { Controller } from "../src/decorators/controller.decorator";
 import { Get } from "../src/decorators/routes.decorator";
 import { Injectable } from "../src/decorators/injectable.decorator";
 import { TechneFactory, __resetTechneConfigCache } from "../src/factory/techne-factory";
+import { precompileRoutes } from "../src/cli/precompile";
 import { defineTechneConfig, bnest, bootstrap } from "../src/core";
 import type { CanActivate } from "../src/interfaces/can-activate.interface";
 import { Logger } from "../src/services/logger.service";
@@ -139,6 +140,38 @@ export default { features: [AppFeature], logger: false };\n`,
     const res = await app.handle(new Request("http://localhost/ping"));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ping: true });
+  });
+  test("zero-arg create() can boot from a precompiled route table", async () => {
+    const modulePath = path.join(tempRoot, "precompiled.feature.ts");
+    await fs.writeFile(
+      modulePath,
+      `import { defineFeature } from "${path.join(originalCwd, "src", "core")}";
+import { Controller, Get } from "${path.join(originalCwd, "src", "common")}";
+
+@Controller("precompiled")
+class PrecompiledController {
+  @Get("/")
+  ping() { return { precompiled: true }; }
+}
+
+export const AppFeature = defineFeature({ controllers: [PrecompiledController] });
+`,
+    );
+    await writeConfig(
+      tempRoot,
+      `import { AppFeature } from "./precompiled.feature";
+export default { features: [AppFeature], logger: false };\n`,
+    );
+
+    const result = await precompileRoutes(tempRoot);
+    expect(result.routes).toBe(1);
+    expect(await Bun.file(path.join(tempRoot, ".techne", "routes.json")).exists()).toBe(true);
+
+    __resetTechneConfigCache();
+    const app = await TechneFactory.create();
+    const res = await app.handle(new Request("http://localhost/precompiled"));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ precompiled: true });
   });
   test("zero-arg create() accepts an empty flat config", async () => {
     await writeConfig(tempRoot, `export default { logger: false };\n`);

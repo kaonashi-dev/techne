@@ -18,10 +18,7 @@ class AuthService {
 }
 
 const app = await TechneFactory.create({
-  providers: [
-    AuthService,
-    { provide: API_KEY, useValue: process.env.API_KEY },
-  ],
+  providers: [AuthService, { provide: API_KEY, useValue: process.env.API_KEY }],
 });
 ```
 
