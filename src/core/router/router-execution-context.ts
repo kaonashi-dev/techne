@@ -395,6 +395,13 @@ export class RouterExecutionContext {
       }
     };
 
+    // Boot-time decision: a route with neither a response validator nor a
+    // response stringifier has nothing to do in `maybeStringify`. We emit a
+    // closure that skips the call entirely so the per-request hot path never
+    // touches the validator/stringifier fields on the cache.
+    const needsResponseWork =
+      cache.responseValidator !== undefined || cache.responseStringifier !== undefined;
+
     if (!cache.hasRuntimeEnhancers && !cache.hasRequestScopedDeps) {
       const fastController = container.isStatic(controllerClass)
         ? container.get<any>(controllerClass)
@@ -403,6 +410,26 @@ export class RouterExecutionContext {
         ? compileFastHandler(fastController, handlerName, paramsMetadata)
         : null;
       if (fast) {
+        if (needsResponseWork) {
+          return (context: RequestHandlerContext) => {
+            if (cache.hasRuntimeEnhancers || cache.hasRequestScopedDeps) {
+              return slow(context);
+            }
+            try {
+              const result = fast(context);
+              if (isPromiseLike(result)) {
+                return (result as Promise<unknown>).then(
+                  (resolved) => this.maybeStringify(context, cache, resolved),
+                  (err) => responseController.mapException(context, err),
+                );
+              }
+              return this.maybeStringify(context, cache, result);
+            } catch (error) {
+              return responseController.mapException(context, error);
+            }
+          };
+        }
+        // No response validator, no stringifier: skip `maybeStringify` entirely.
         return (context: RequestHandlerContext) => {
           if (cache.hasRuntimeEnhancers || cache.hasRequestScopedDeps) {
             return slow(context);
@@ -410,12 +437,11 @@ export class RouterExecutionContext {
           try {
             const result = fast(context);
             if (isPromiseLike(result)) {
-              return (result as Promise<unknown>).then(
-                (resolved) => this.maybeStringify(context, cache, resolved),
-                (err) => responseController.mapException(context, err),
+              return (result as Promise<unknown>).then(undefined, (err) =>
+                responseController.mapException(context, err),
               );
             }
-            return this.maybeStringify(context, cache, result);
+            return result;
           } catch (error) {
             return responseController.mapException(context, error);
           }
@@ -484,14 +510,19 @@ export class RouterExecutionContext {
     cache: RouteRuntimeCache,
     result: unknown,
   ): unknown {
-    if (
-      cache.responseValidator &&
-      result !== undefined &&
-      result !== null &&
-      !(result instanceof Response)
-    ) {
+    // Fast-path: nothing to wrap or validate for non-object results, nullish
+    // values, or pre-built Responses. Doing this before touching the validator
+    // avoids the try/catch frame for the common "controller returned a Response
+    // or a primitive" case.
+    if (result === undefined || result === null) return result;
+    if (result instanceof Response) return result;
+    const t = typeof result;
+    if (t !== "object") return result;
+
+    const validator = cache.responseValidator;
+    if (validator) {
       try {
-        if (!cache.responseValidator.Check(result)) {
+        if (!validator.Check(result)) {
           this.logger.warn("Response schema validation failed for route result.");
         }
       } catch {
@@ -501,10 +532,6 @@ export class RouterExecutionContext {
 
     const stringifier = cache.responseStringifier;
     if (!stringifier) return result;
-    if (result === undefined || result === null) return result;
-    if (result instanceof Response) return result;
-    const t = typeof result;
-    if (t !== "object") return result;
     try {
       const body = stringifier(result);
       const status = (context as any)?.set?.status;
