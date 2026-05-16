@@ -65,6 +65,17 @@ interface RouteRuntimeCache {
   handler: (context: RequestHandlerContext) => unknown;
   // Compile inputs retained so we can recompile when the cache flags change.
   recompile?: () => void;
+  // Version snapshots from the last `refreshRouteCache`. When the live
+  // `globalFiltersVersion`/`globalGuardsVersion` still match, the filter merge
+  // + partition is unchanged and we can reuse `staticFilters` /
+  // `contextualFilters` from the previous refresh. `-1` means "never refreshed
+  // yet" so the initial pass always runs.
+  lastGlobalFiltersVersion: number;
+  lastGlobalGuardsVersion: number;
+  // True once `partitionRouteInstances` has been run on `routeResponseHooks`.
+  // The per-route response hooks list is immutable after `create`, so a single
+  // partition is sufficient for the lifetime of the cache.
+  responseHooksPartitioned: boolean;
 }
 
 const EMPTY_ARRAY: readonly never[] = Object.freeze([]);
@@ -218,6 +229,12 @@ export class RouterExecutionContext {
   private readonly logger = new Logger("RouterExecutionContext");
   private globalFilters: ExceptionFilter[] = [];
   private globalGuards: any[] = [];
+  // Monotonically bumped whenever the corresponding `globalX` array reference
+  // is replaced via `setGlobalX`. `refreshRouteCache` compares against the
+  // per-cache snapshot to skip the filter merge + partition when nothing has
+  // changed since the last refresh (B3).
+  private globalFiltersVersion = 0;
+  private globalGuardsVersion = 0;
   private routesRegistered = false;
   private validateResponses = false;
 
@@ -229,6 +246,7 @@ export class RouterExecutionContext {
 
   public setGlobalFilters(filters: ExceptionFilter[]) {
     this.globalFilters = filters;
+    this.globalFiltersVersion++;
     for (const cache of this.routeCaches) {
       this.refreshRouteCache(cache);
       cache.recompile?.();
@@ -237,6 +255,7 @@ export class RouterExecutionContext {
 
   public setGlobalGuards(guards: any[]): boolean {
     this.globalGuards = guards;
+    this.globalGuardsVersion++;
     return !this.routesRegistered;
   }
 
@@ -278,6 +297,10 @@ export class RouterExecutionContext {
       guards: mergedGuards,
       // Placeholder; replaced before `create` returns.
       handler: () => undefined,
+      // -1 forces the first `refreshRouteCache` pass to run the full partition.
+      lastGlobalFiltersVersion: -1,
+      lastGlobalGuardsVersion: -1,
+      responseHooksPartitioned: false,
     };
 
     if (route.schema?.response) {
@@ -593,20 +616,51 @@ export class RouterExecutionContext {
   }
 
   private refreshRouteCache(cache: RouteRuntimeCache): void {
-    const filters = this.partitionRouteInstances<ExceptionFilter>(
-      mergeArrays(this.globalFilters, cache.routeFilters),
-      cache.container,
-    );
-    cache.staticFilters = filters.staticInstances;
-    cache.contextualFilters = filters.contextualTokens;
+    // B3: skip the filter merge + partition when neither the global filter set
+    // nor the global guard set has changed since the last refresh. `routeFilters`
+    // is captured from the immutable `route.filters` array in `create` and is
+    // never mutated afterward, so the previous partition output is still valid.
+    const versionsUnchanged =
+      cache.lastGlobalFiltersVersion === this.globalFiltersVersion &&
+      cache.lastGlobalGuardsVersion === this.globalGuardsVersion;
+    // Bonus bypass: when both inputs are empty AND the previously cached
+    // partition outputs are also empty, skip even on the first pass — there is
+    // demonstrably no work to do, and the next non-empty `setGlobalFilters`
+    // will bump the version and force a recompute.
+    const bothInputsEmpty = this.globalFilters.length === 0 && cache.routeFilters.length === 0;
+    const bothOutputsEmpty =
+      cache.staticFilters.length === 0 && cache.contextualFilters.length === 0;
+    const initialPassDone = cache.lastGlobalFiltersVersion !== -1;
+    const canSkipFilterPartition =
+      (initialPassDone && versionsUnchanged) || (bothInputsEmpty && bothOutputsEmpty);
 
-    const responseHooks = this.partitionRouteInstances<ResponseHook>(
-      cache.routeResponseHooks,
-      cache.container,
-    );
-    cache.staticResponseHooks = responseHooks.staticInstances;
-    cache.contextualResponseHooks = responseHooks.contextualTokens;
+    if (!canSkipFilterPartition) {
+      const filters = this.partitionRouteInstances<ExceptionFilter>(
+        mergeArrays(this.globalFilters, cache.routeFilters),
+        cache.container,
+      );
+      cache.staticFilters = filters.staticInstances;
+      cache.contextualFilters = filters.contextualTokens;
+    }
+    // Stamp the version snapshot whether we ran the partition or short-circuited
+    // — both paths leave the cache consistent with the current global state.
+    cache.lastGlobalFiltersVersion = this.globalFiltersVersion;
+    cache.lastGlobalGuardsVersion = this.globalGuardsVersion;
 
+    // `routeResponseHooks` is also immutable post-create, so the partition
+    // result is reusable for the lifetime of the cache.
+    if (!cache.responseHooksPartitioned) {
+      const responseHooks = this.partitionRouteInstances<ResponseHook>(
+        cache.routeResponseHooks,
+        cache.container,
+      );
+      cache.staticResponseHooks = responseHooks.staticInstances;
+      cache.contextualResponseHooks = responseHooks.contextualTokens;
+      cache.responseHooksPartitioned = true;
+    }
+
+    // Always recompute the boolean flags + request-scoped-deps check. These
+    // are cheap and they read from fields that may have just been refreshed.
     cache.hasFilters = cache.staticFilters.length > 0 || cache.contextualFilters.length > 0;
     cache.hasResponseHooks =
       cache.staticResponseHooks.length > 0 || cache.contextualResponseHooks.length > 0;
