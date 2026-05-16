@@ -21,6 +21,11 @@ type CompiledArgsBinder = (
   routeContext: RouteContextInfo | undefined,
 ) => any[];
 
+interface GuardEntry {
+  readonly guard: any;
+  readonly contextual: boolean;
+}
+
 export interface CompiledRouteDefinition {
   method: DiscoveredRouteDefinition["method"];
   fullPath: string;
@@ -361,11 +366,12 @@ export class RouterExecutionContext {
     const handlerRef = route.controller.prototype[route.handlerName] as Function;
     const mergedGuards =
       this.globalGuards.length === 0 ? route.guards : [...this.globalGuards, ...route.guards];
-    const guardHooks = this.createGuardHooks(mergedGuards, container, controllerClass, handlerRef);
-    const beforeHandle =
-      guardHooks.length === 0 && route.middlewares.length === 0
+    const guardHook = this.createGuardHook(mergedGuards, container, controllerClass, handlerRef);
+    const beforeHandle = guardHook
+      ? [guardHook, ...route.middlewares]
+      : route.middlewares.length === 0
         ? undefined
-        : [...guardHooks, ...route.middlewares];
+        : route.middlewares;
 
     const cache: RouteRuntimeCache = {
       container,
@@ -909,13 +915,15 @@ export class RouterExecutionContext {
     };
   }
 
-  private createGuardHooks(
+  private createGuardHook(
     guards: any[],
     container: ContainerLike,
     controllerClass: any,
     handlerRef: Function,
-  ) {
-    return guards.map((guardClass: any) => {
+  ): ((context: RequestHandlerContext) => unknown) | undefined {
+    if (guards.length === 0) return undefined;
+
+    const entries: GuardEntry[] = guards.map((guardClass: any) => {
       const isClassToken = typeof guardClass === "function";
       const isStaticGuard =
         !isClassToken ||
@@ -923,71 +931,114 @@ export class RouterExecutionContext {
           (!container.hasContextualDeps || !container.hasContextualDeps(guardClass)));
 
       if (isStaticGuard) {
-        const guardInstance = isClassToken ? container.get<any>(guardClass) : guardClass;
-
-        return (context: RequestHandlerContext) => {
-          const routeContext: RouteContextInfo = {
-            ctx: context,
-            controller: controllerClass,
-            handler: handlerRef,
-          };
-          try {
-            const result = guardInstance.canActivate(routeContext as any);
-
-            if (isPromiseLike<boolean>(result)) {
-              return result
-                .then((canActivate) => {
-                  if (!canActivate) {
-                    return this.responseController.mapException(context, new ForbiddenException());
-                  }
-                })
-                .catch((error: unknown) => this.responseController.mapException(context, error));
-            }
-
-            if (!result) {
-              return this.responseController.mapException(context, new ForbiddenException());
-            }
-          } catch (error) {
-            return this.responseController.mapException(context, error);
-          }
+        return {
+          guard: isClassToken ? container.get<any>(guardClass) : guardClass,
+          contextual: false,
         };
       }
 
-      return (context: RequestHandlerContext) => {
-        const guardInstance = this.resolveInstance<any>(guardClass, container, {
-          request: context,
-        });
-        const routeContext: RouteContextInfo = {
-          ctx: context,
-          controller: controllerClass,
-          handler: handlerRef,
-        };
+      return { guard: guardClass, contextual: true };
+    });
+
+    return (context: RequestHandlerContext) => {
+      const routeContext: RouteContextInfo = {
+        ctx: context,
+        controller: controllerClass,
+        handler: handlerRef,
+      };
+      let touchedContextual = false;
+
+      for (let i = 0; i < entries.length; i++) {
+        const entry = entries[i];
+        const guardInstance = entry.contextual
+          ? this.resolveGuardInstance(entry.guard, container, context)
+          : entry.guard;
+        if (entry.contextual) touchedContextual = true;
+
         try {
           const result = guardInstance.canActivate(routeContext as any);
 
           if (isPromiseLike<boolean>(result)) {
             return result
-              .then((canActivate) => {
-                if (!canActivate) {
-                  container.clearContext(context);
-                  return this.responseController.mapException(context, new ForbiddenException());
-                }
-              })
-              .catch((error: unknown) => {
-                container.clearContext(context);
-                return this.responseController.mapException(context, error);
-              });
+              .then((canActivate) =>
+                canActivate
+                  ? this.continueGuardEntries(
+                      entries,
+                      i + 1,
+                      context,
+                      routeContext,
+                      container,
+                      touchedContextual,
+                    )
+                  : this.denyGuard(context, container, touchedContextual),
+              )
+              .catch((error: unknown) =>
+                this.guardError(context, container, touchedContextual, error),
+              );
           }
 
           if (!result) {
-            container.clearContext(context);
-            return this.responseController.mapException(context, new ForbiddenException());
+            return this.denyGuard(context, container, touchedContextual);
           }
         } catch (error) {
-          container.clearContext(context);
-          return this.responseController.mapException(context, error);
+          return this.guardError(context, container, touchedContextual, error);
         }
-      };
-    });
+      }
+    };
+  }
+
+  private async continueGuardEntries(
+    entries: GuardEntry[],
+    start: number,
+    context: RequestHandlerContext,
+    routeContext: RouteContextInfo,
+    container: ContainerLike,
+    touchedContextual: boolean,
+  ): Promise<unknown> {
+    let hasContextual = touchedContextual;
+
+    for (let i = start; i < entries.length; i++) {
+      const entry = entries[i];
+      const guardInstance = entry.contextual
+        ? this.resolveGuardInstance(entry.guard, container, context)
+        : entry.guard;
+      if (entry.contextual) hasContextual = true;
+
+      try {
+        const canActivate = await guardInstance.canActivate(routeContext as any);
+        if (!canActivate) {
+          return this.denyGuard(context, container, hasContextual);
+        }
+      } catch (error) {
+        return this.guardError(context, container, hasContextual, error);
+      }
+    }
+  }
+
+  private resolveGuardInstance(
+    guardClass: any,
+    container: ContainerLike,
+    context: RequestHandlerContext,
+  ): any {
+    return this.resolveInstance<any>(guardClass, container, { request: context });
+  }
+
+  private denyGuard(
+    context: RequestHandlerContext,
+    container: ContainerLike,
+    touchedContextual: boolean,
+  ): unknown {
+    if (touchedContextual) container.clearContext(context);
+    return this.responseController.mapException(context, new ForbiddenException());
+  }
+
+  private guardError(
+    context: RequestHandlerContext,
+    container: ContainerLike,
+    touchedContextual: boolean,
+    error: unknown,
+  ): unknown {
+    if (touchedContextual) container.clearContext(context);
+    return this.responseController.mapException(context, error);
   }
 }

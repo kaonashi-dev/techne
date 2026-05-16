@@ -1,6 +1,7 @@
 import { test, expect, describe } from "bun:test";
 import { Scanner } from "../src/core/scanner";
 import { RouterExplorer } from "../src/core/router/router-explorer";
+import { getControllerDescriptor } from "../src/core/metadata-store";
 import { Controller } from "../src/decorators/controller.decorator";
 import { Get, Post } from "../src/decorators/routes.decorator";
 describe("Scanner", () => {
@@ -30,5 +31,17 @@ describe("Scanner", () => {
     // Check Post routes
     const postGetRoutes = routes.filter((r) => r.method === "GET" && r.fullPath === "/posts/:id");
     expect(postGetRoutes).toHaveLength(1);
+  });
+  test("stores controller descriptors under Symbol.metadata", () => {
+    @Controller("meta")
+    class MetadataController {
+      @Get("/")
+      ok() {}
+    }
+
+    const descriptor = getControllerDescriptor(MetadataController);
+    expect(descriptor?.prefix).toBe("meta");
+    expect(descriptor?.routes).toHaveLength(1);
+    expect((MetadataController as any)[Symbol.metadata]?.techne?.controller).toBe(descriptor);
   });
 });

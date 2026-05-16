@@ -37,5 +37,7 @@ Combine middleware with `@UseGuards()` to stack cross-cutting concerns:
 @Controller("admin")
 @UseGuards(AuthGuard)
 @Middleware(logMiddleware)
-class AdminController { /* ... */ }
+class AdminController {
+  /* ... */
+}
 ```

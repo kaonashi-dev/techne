@@ -16,6 +16,7 @@ import type { CanActivate } from "../interfaces/can-activate.interface";
 import type { TechneConfig } from "../core/define-techne-config";
 import type { Feature } from "../core/define-feature";
 import type { PluginDefinition } from "../core/plugins/define-plugin";
+import { loadPrecompiledRoutesForScanner } from "../cli/precompile";
 
 /**
  * Config file lookup order: `techne.config.{ts,js,mjs}` is canonical;
@@ -246,7 +247,10 @@ export class TechneFactory {
       hasProblemFilter: true,
       requestId: (effectiveOptions as { requestId?: boolean })?.requestId,
     });
-    const routesResolver = new RoutesResolver(scanner);
+    const precompiledRoutes = config
+      ? undefined
+      : await loadPrecompiledRoutesForScanner(scanner, process.cwd(), logger);
+    const routesResolver = new RoutesResolver(scanner, precompiledRoutes);
     routesResolver.executionContext.setValidateResponses(
       effectiveOptions?.validateResponses === true,
     );

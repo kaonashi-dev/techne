@@ -12,32 +12,32 @@ bunx @kaonashi-dev/techne --help
 
 ## Commands
 
-| Command | Purpose |
-| --- | --- |
-| [`new` / `create`](/cli/new) | Scaffold a new Techne project |
-| [`dev`](/cli/dev) | Run with hot reload (and an optional inspector) |
-| [`start`](/cli/start) | Run without hot reload |
-| [`build`](/cli/build) | Produce a Bun (or Node / browser) entrypoint |
-| [`test`](/cli/test) | Run the test suite |
-| [`deploy`](/cli/deploy) | Emit deployment scaffolding (currently `--target docker`) |
-| [`doctor`](/cli/doctor) | Diagnose `tsconfig` / project layout |
-| [`generate` / `g`](/cli/generate) | Scaffold framework files |
+| Command                           | Purpose                                                   |
+| --------------------------------- | --------------------------------------------------------- |
+| [`new` / `create`](/cli/new)      | Scaffold a new Techne project                             |
+| [`dev`](/cli/dev)                 | Run with hot reload (and an optional inspector)           |
+| [`start`](/cli/start)             | Run without hot reload                                    |
+| [`build`](/cli/build)             | Produce a Bun (or Node / browser) entrypoint              |
+| [`test`](/cli/test)               | Run the test suite                                        |
+| [`deploy`](/cli/deploy)           | Emit deployment scaffolding (currently `--target docker`) |
+| [`doctor`](/cli/doctor)           | Diagnose `tsconfig` / project layout                      |
+| [`generate` / `g`](/cli/generate) | Scaffold framework files                                  |
 
 ## Generators
 
-| Type | Result |
-| --- | --- |
-| `module` | A feature with empty controller + service stubs |
-| `controller` | A controller class + spec |
-| `service` | An `@Injectable()` service |
-| `resource` | Feature + controller + service + DTO bundle |
-| `middleware` | A standalone middleware function |
-| `guard` | A `CanActivate` guard skeleton |
-| `filter` | An exception filter |
-| `hook` | A `ResponseHook` skeleton |
-| `dto` | A typed DTO class |
-| `docker` | Multi-stage Bun Dockerfile + `.dockerignore` |
-| `client` | A typed contract client (`Routes` + `createClient`) |
+| Type         | Result                                              |
+| ------------ | --------------------------------------------------- |
+| `module`     | A feature with empty controller + service stubs     |
+| `controller` | A controller class + spec                           |
+| `service`    | An `@Injectable()` service                          |
+| `resource`   | Feature + controller + service + DTO bundle         |
+| `middleware` | A standalone middleware function                    |
+| `guard`      | A `CanActivate` guard skeleton                      |
+| `filter`     | An exception filter                                 |
+| `hook`       | A `ResponseHook` skeleton                           |
+| `dto`        | A typed DTO class                                   |
+| `docker`     | Multi-stage Bun Dockerfile + `.dockerignore`        |
+| `client`     | A typed contract client (`Routes` + `createClient`) |
 
 Generated starters use `@kaonashi-dev/techne/common` and
 `@kaonashi-dev/techne/core` and emit a `bootstrap()` + `techne.config.ts`
