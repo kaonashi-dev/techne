@@ -32,15 +32,29 @@ export function compileStringifier(schema: TSchema): Stringifier {
   // Build via a recursive expression generator. We accumulate expressions
   // that, concatenated, produce the JSON text for the given value.
   let counter = 0;
-  const helpers: Stringifier[] = [];
+  const helpers: Function[] = [];
   const helperNames: string[] = [];
 
-  const addHelper = (fn: Stringifier): string => {
+  const addHelper = (fn: Function): string => {
     const name = `__h${helpers.length}`;
     helpers.push(fn);
     helperNames.push(name);
     return name;
   };
+
+  // ASCII fast-path predicate: true iff every code unit is a printable
+  // ASCII character that does not require JSON escaping (no `"`, no `\`,
+  // no control chars < 0x20, no DEL 0x7F, no chars >= 0x80 including
+  // either half of a surrogate pair). When true, the value can be emitted
+  // as `'"' + s + '"'` without scanning for escapes.
+  const __isAsciiSafe = (s: string): boolean => {
+    for (let i = 0; i < s.length; i++) {
+      const c = s.charCodeAt(i);
+      if (c < 0x20 || c >= 0x7f || c === 0x22 || c === 0x5c) return false;
+    }
+    return true;
+  };
+  const asciiSafeName = addHelper(__isAsciiSafe);
 
   const fallbackAccess = (accessor: string): string => {
     const name = addHelper(FALLBACK);
@@ -58,7 +72,9 @@ export function compileStringifier(schema: TSchema): Stringifier {
 
     switch (node.type) {
       case "string":
-        return `JSON.stringify(${accessor})`;
+        // Fast path: ASCII-safe strings (no escapes needed) can skip the
+        // per-character scan inside JSON.stringify and just wrap quotes.
+        return `(typeof ${accessor}==="string"&&${asciiSafeName}(${accessor})?'"'+${accessor}+'"':JSON.stringify(${accessor}))`;
       case "boolean":
         return `(${accessor}?"true":"false")`;
       case "integer":
