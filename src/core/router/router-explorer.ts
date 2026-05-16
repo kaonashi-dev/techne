@@ -12,6 +12,11 @@ import type { ParamMetadata } from "../../decorators/params.decorator";
 import type { RouteMetadata } from "../../decorators/routes.decorator";
 import { getOrCreateDtoSchema } from "../../schema/dto";
 import { Logger } from "../../services/logger.service";
+import {
+  type ControllerDescriptor,
+  getControllerDescriptor,
+  type HandlerDescriptor,
+} from "../metadata-store";
 import type { Scanner } from "../scanner";
 
 export interface DiscoveredRouteDefinition extends RouteMetadata {
@@ -23,6 +28,35 @@ export interface DiscoveredRouteDefinition extends RouteMetadata {
   responseHooks: any[];
   paramsMetadata: ParamMetadata[];
   versions: string[];
+}
+
+interface AggregateMeta {
+  prefix: string;
+  versions: string[];
+  routes: RouteMetadata[];
+  middlewares: any[];
+  guards: any[];
+  filters: any[];
+  responseHooks: any[];
+  paramsByHandler: Record<string, ParamMetadata[]>;
+  getHandler: (name: string) => HandlerDescriptor;
+}
+
+const EMPTY_HANDLER: HandlerDescriptor = Object.freeze({
+  middlewares: [],
+  guards: [],
+  filters: [],
+  responseHooks: [],
+}) as unknown as HandlerDescriptor;
+
+function readLegacyHandler(routeHandler: Function): HandlerDescriptor {
+  return {
+    middlewares: Reflect.getMetadata(MIDDLEWARE_METADATA, routeHandler) || [],
+    guards: Reflect.getMetadata(GUARDS_METADATA, routeHandler) || [],
+    filters: Reflect.getMetadata(EXCEPTION_FILTERS_METADATA, routeHandler) || [],
+    responseHooks: Reflect.getMetadata(ON_RESPONSE_METADATA, routeHandler) || [],
+    versions: Reflect.getMetadata(VERSION_METADATA, routeHandler) as string[] | undefined,
+  };
 }
 
 export class RouterExplorer {
@@ -41,38 +75,23 @@ export class RouterExplorer {
         continue;
       }
 
-      const prefix = (Reflect.getMetadata(CONTROLLER_METADATA, controller) as string) || "";
-      const controllerVersions =
-        (Reflect.getMetadata(VERSION_METADATA, controller) as string[]) || [];
-      const routeMetadata: RouteMetadata[] = Reflect.getMetadata(ROUTES_METADATA, controller) || [];
-      const controllerMiddlewares: any[] =
-        Reflect.getMetadata(MIDDLEWARE_METADATA, controller) || [];
-      const controllerGuards: any[] = Reflect.getMetadata(GUARDS_METADATA, controller) || [];
-      const controllerFilters: any[] =
-        Reflect.getMetadata(EXCEPTION_FILTERS_METADATA, controller) || [];
-      const controllerResponseHooks: any[] =
-        Reflect.getMetadata(ON_RESPONSE_METADATA, controller) || [];
-      const paramsByHandler: Record<string, ParamMetadata[]> =
-        Reflect.getMetadata(PARAMS_METADATA, controller) || {};
+      // Fast path: read everything from the symbol-keyed descriptor populated
+      // by decorators.  Falls back to per-key reads for legacy/third-party
+      // decorators that only invoke `Reflect.defineMetadata`.
+      const descriptor = getControllerDescriptor(controller);
+      const aggregate = descriptor
+        ? this.readFromDescriptor(controller, descriptor)
+        : this.readFromMetadata(controller);
+
       const controllerRoutes: DiscoveredRouteDefinition[] = [];
 
-      for (const route of routeMetadata) {
-        const routeHandler = controller.prototype[route.handlerName];
-        const routeVersions =
-          (Reflect.getMetadata(VERSION_METADATA, routeHandler) as string[] | undefined) ??
-          controllerVersions;
+      for (const route of aggregate.routes) {
+        const handler = aggregate.getHandler(route.handlerName);
         const paramTypes =
           (Reflect.getMetadata("design:paramtypes", controller.prototype, route.handlerName) as
             | Function[]
             | undefined) ?? [];
-        const routeMiddlewares: any[] =
-          Reflect.getMetadata(MIDDLEWARE_METADATA, routeHandler) || [];
-        const routeGuards: any[] = Reflect.getMetadata(GUARDS_METADATA, routeHandler) || [];
-        const routeFilters: any[] =
-          Reflect.getMetadata(EXCEPTION_FILTERS_METADATA, routeHandler) || [];
-        const routeResponseHooks: any[] =
-          Reflect.getMetadata(ON_RESPONSE_METADATA, routeHandler) || [];
-        const methodParams = paramsByHandler[route.handlerName] || [];
+        const methodParams = aggregate.paramsByHandler[route.handlerName] || [];
         const paramsMetadata =
           methodParams.length === 0
             ? []
@@ -89,13 +108,13 @@ export class RouterExplorer {
           ...route,
           schema,
           controller,
-          fullPath: this.normalizePath(prefix, route.path),
-          middlewares: [...controllerMiddlewares, ...routeMiddlewares],
-          guards: [...controllerGuards, ...routeGuards],
-          filters: [...controllerFilters, ...routeFilters],
-          responseHooks: [...controllerResponseHooks, ...routeResponseHooks],
+          fullPath: this.normalizePath(aggregate.prefix, route.path),
+          middlewares: [...aggregate.middlewares, ...handler.middlewares],
+          guards: [...aggregate.guards, ...handler.guards],
+          filters: [...aggregate.filters, ...handler.filters],
+          responseHooks: [...aggregate.responseHooks, ...handler.responseHooks],
           paramsMetadata,
-          versions: routeVersions,
+          versions: handler.versions ?? aggregate.versions,
         });
       }
 
@@ -104,6 +123,67 @@ export class RouterExplorer {
     }
 
     return routes;
+  }
+
+  /**
+   * Symbol-keyed fast path: one property read replaces 9 controller-level and
+   * 6 handler-level `Reflect.getMetadata` lookups.
+   */
+  private readFromDescriptor(controller: any, descriptor: ControllerDescriptor): AggregateMeta {
+    return {
+      prefix: descriptor.prefix ?? "",
+      versions: descriptor.versions ?? [],
+      routes: descriptor.routes,
+      middlewares: descriptor.middlewares,
+      guards: descriptor.guards,
+      filters: descriptor.filters,
+      responseHooks: descriptor.responseHooks,
+      paramsByHandler: descriptor.paramsByHandler,
+      getHandler: (name) => {
+        // Per-handler descriptors are sparse — only created for handlers that
+        // had at least one method decorator.  Fall back to an empty struct.
+        const existing = descriptor.handlers[name];
+        if (existing) return existing;
+        // Some method decorators (e.g. third-party ones, or pre-descriptor
+        // legacy code) may only have written via `Reflect.defineMetadata`.
+        // Pick those up from the function reference.
+        const routeHandler = controller.prototype[name];
+        if (!routeHandler) return EMPTY_HANDLER;
+        return readLegacyHandler(routeHandler);
+      },
+    };
+  }
+
+  /**
+   * Legacy fall-through: every metadata key read explicitly.  Used when no
+   * descriptor was attached (third-party decorator chain that wrote via
+   * `Reflect.defineMetadata` only).
+   */
+  private readFromMetadata(controller: any): AggregateMeta {
+    const prefix = (Reflect.getMetadata(CONTROLLER_METADATA, controller) as string) || "";
+    const versions = (Reflect.getMetadata(VERSION_METADATA, controller) as string[]) || [];
+    const routes: RouteMetadata[] = Reflect.getMetadata(ROUTES_METADATA, controller) || [];
+    const middlewares: any[] = Reflect.getMetadata(MIDDLEWARE_METADATA, controller) || [];
+    const guards: any[] = Reflect.getMetadata(GUARDS_METADATA, controller) || [];
+    const filters: any[] = Reflect.getMetadata(EXCEPTION_FILTERS_METADATA, controller) || [];
+    const responseHooks: any[] = Reflect.getMetadata(ON_RESPONSE_METADATA, controller) || [];
+    const paramsByHandler: Record<string, ParamMetadata[]> =
+      Reflect.getMetadata(PARAMS_METADATA, controller) || {};
+    return {
+      prefix,
+      versions,
+      routes,
+      middlewares,
+      guards,
+      filters,
+      responseHooks,
+      paramsByHandler,
+      getHandler: (name) => {
+        const routeHandler = controller.prototype[name];
+        if (!routeHandler) return EMPTY_HANDLER;
+        return readLegacyHandler(routeHandler);
+      },
+    };
   }
 
   private resolveSchema(

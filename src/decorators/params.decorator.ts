@@ -1,5 +1,6 @@
 import "../reflect-setup";
 import { PARAMS_METADATA } from "../common/constants";
+import { getOrCreateControllerDescriptor } from "../core/metadata-store";
 import type { ResponseHookContext } from "../interfaces/response-hook.interface";
 
 export type ParamType = "body" | "param" | "query" | "headers" | "request" | "file" | "custom";
@@ -49,6 +50,9 @@ function _addParam(
   params[propertyKey] = methodParams;
 
   Reflect.defineMetadata(PARAMS_METADATA, params, (target as any).constructor);
+  // Keep the same map reference on the descriptor so subsequent param
+  // decorators on the same handler append in place.
+  getOrCreateControllerDescriptor((target as any).constructor).paramsByHandler = params;
 }
 
 const createBuiltinParamDecorator = (type: ParamType) => {

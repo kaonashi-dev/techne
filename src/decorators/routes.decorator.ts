@@ -1,5 +1,6 @@
 import "../reflect-setup";
 import { ROUTES_METADATA } from "../common/constants";
+import { getOrCreateControllerDescriptor } from "../core/metadata-store";
 
 export type RequestMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -20,15 +21,20 @@ export interface RouteMetadata {
 const createRouteDecorator = (method: RequestMethod) => {
   return (path: string = "/", schema?: RouteMetadata["schema"]): any => {
     return (target: any, propertyKey: string, _descriptor: PropertyDescriptor) => {
-      const routes: RouteMetadata[] =
-        Reflect.getMetadata(ROUTES_METADATA, target.constructor) || [];
-      routes.push({
+      const route: RouteMetadata = {
         path,
         method,
         handlerName: String(propertyKey),
         schema,
-      });
+      };
+      const routes: RouteMetadata[] =
+        Reflect.getMetadata(ROUTES_METADATA, target.constructor) || [];
+      routes.push(route);
       Reflect.defineMetadata(ROUTES_METADATA, routes, target.constructor);
+      // Mirror onto the controller descriptor.  Other decorators on the same
+      // method push into the same `handlers[name]` slot — keep them aligned.
+      const descriptor = getOrCreateControllerDescriptor(target.constructor);
+      descriptor.routes.push(route);
     };
   };
 };
