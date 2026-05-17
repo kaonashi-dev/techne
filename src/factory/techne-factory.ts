@@ -7,7 +7,8 @@ import { Container, getClassScope, getProviderScope, isCustomProvider } from "..
 import { Scope } from "../core/scope";
 import { RoutesResolver } from "../core/router/routes-resolver";
 import { ElysiaAdapter } from "../platform/elysia-adapter";
-import { Logger } from "../services/logger.service";
+import { Logger, type LogLevel, type LoggerMode } from "../services/logger.service";
+import { loggerTokens } from "../decorators/inject-logger.decorator";
 import { BusRegistry } from "../cqrs/bus";
 import { TechneApplication } from "../core/techne-application";
 import { MqRegistry } from "../mq/registry";
@@ -127,8 +128,22 @@ export interface TechneHealthOptions {
   checks?: Array<() => Promise<{ healthy: boolean; name: string; detail?: any }>>;
 }
 
+/**
+ * Structured logger configuration. Passed as the `logger` option in
+ * {@link TechneApplicationOptions}. `mode` controls output format;
+ * `minLevel` filters records below the given priority; `redact` masks
+ * the listed dotted-path fields in JSON output.
+ */
+export interface TechneLoggerOptions {
+  mode?: LoggerMode;
+  minLevel?: LogLevel;
+  redact?: string[];
+}
+
 export interface TechneApplicationOptions {
-  logger?: boolean | string[];
+  /** `false` disables all log output. A {@link LoggerMode} string sets the format.
+   *  A {@link TechneLoggerOptions} object gives full control. */
+  logger?: boolean | LoggerMode | TechneLoggerOptions;
   container?: Container;
   validateResponses?: boolean;
   /**
@@ -225,6 +240,7 @@ export class TechneFactory {
     const mode = resolveTechneMode(modeOption);
     const loggerEnabled = effectiveOptions?.logger !== false;
     Logger.setEnabled(loggerEnabled);
+    TechneFactory.applyLoggerConfig(effectiveOptions?.logger);
 
     const logger = new Logger("TechneFactory");
     logger.log("Starting application initialization...");
@@ -233,6 +249,7 @@ export class TechneFactory {
     const scanner = new Scanner({ logger: loggerEnabled, container });
 
     scanner.scanFlat(this.flattenBootstrapConfig(merged));
+    TechneFactory.registerLoggerProviders(container);
 
     const adapter = new ElysiaAdapter({
       logger: loggerEnabled,
@@ -327,10 +344,12 @@ export class TechneFactory {
     const mode = resolveTechneMode(config?.mode);
     const loggerEnabled = config?.logger !== false;
     Logger.setEnabled(loggerEnabled);
+    TechneFactory.applyLoggerConfig(config?.logger);
 
     const container = config?.container || new Container();
     const scanner = new Scanner({ logger: loggerEnabled, container });
     scanner.scanFlat(this.flattenBootstrapConfig(config));
+    TechneFactory.registerLoggerProviders(container);
 
     const adapter = new ElysiaAdapter({
       logger: loggerEnabled,
@@ -531,6 +550,41 @@ export class TechneFactory {
     // C4: snapshot static+cached entries so warm-path resolve becomes a
     // single Map.get.
     container.primeFastTable();
+  }
+
+  /**
+   * Apply logger configuration from the `logger` option. Handles all three
+   * accepted shapes: `false` (disable), a {@link LoggerMode} string, or a
+   * {@link TechneLoggerOptions} object.
+   */
+  private static applyLoggerConfig(logger: TechneApplicationOptions["logger"]): void {
+    if (logger === false) {
+      Logger.setMode(false);
+      return;
+    }
+    if (logger === true || logger === undefined) return;
+    if (typeof logger === "string") {
+      Logger.setMode(logger as LoggerMode);
+      return;
+    }
+    // TechneLoggerOptions object
+    if (logger.mode !== undefined) Logger.setMode(logger.mode);
+    if (logger.minLevel !== undefined) Logger.setMinLevel(logger.minLevel);
+    if (logger.redact !== undefined) Logger.setRedact(logger.redact);
+  }
+
+  /**
+   * Register factory providers for every context collected by `@InjectLogger`
+   * decorators. Called after `scanFlat` so all classes have been processed but
+   * before `initializeStaticProviders` materialises them.
+   */
+  private static registerLoggerProviders(container: Container): void {
+    for (const [context, token] of loggerTokens) {
+      if (!container.has(token)) {
+        const ctx = context; // capture for closure
+        container.addProvider({ provide: token, useFactory: () => new Logger(ctx) });
+      }
+    }
   }
 
   private static normalizeGlobalProvider<T>(container: Container, token: any): T[] {
