@@ -478,11 +478,17 @@ async function main() {
     const compile = !target || flag("--compile");
 
     if (flag("--compile") && target) {
-      warn("--target is ignored when --compile is set (Bun standalone binaries are always bun-target)");
+      warn(
+        "--target is ignored when --compile is set (Bun standalone binaries are always bun-target)",
+      );
     }
 
     const ext = path.extname(entry);
-    const outDefault = compile ? "dist/app" : (ext === ".ts" ? "dist/app.bun" : entry.replace(ext, ".bun"));
+    const outDefault = compile
+      ? "dist/app"
+      : ext === ".ts"
+        ? "dist/app.bun"
+        : entry.replace(ext, ".bun");
 
     await buildApp(entry, {
       out: out ?? outDefault,

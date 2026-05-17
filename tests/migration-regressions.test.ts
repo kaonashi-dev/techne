@@ -5,7 +5,7 @@ import * as path from "node:path";
 import { TechneFactory, __resetTechneConfigCache } from "../src/factory/techne-factory";
 import { RedisQueueDriver as QueueRedisDriver } from "../src/queue/drivers/redis";
 import { RedisQueueDriver as MqRedisDriver } from "../src/mq/drivers/redis";
-import { Logger } from "../src/services/logger.service";
+import { Logger, BufferSink } from "../src/services/logger.service";
 import { emitOpenApiDocument, typeboxToOpenApi } from "../src/swagger";
 describe("Techne migration regressions", () => {
   test("Redis-backed defaults use Techne key prefixes", () => {
@@ -15,22 +15,20 @@ describe("Techne migration regressions", () => {
     expect(mqDriver.waitKey("emails")).toBe("techne:mq:emails:wait");
   });
   test("logger emits Techne in pretty and JSON modes", () => {
+    const prevSink = Logger.getSink();
     const prevMode = Logger.getMode();
-    const prevLog = console.log;
-    const lines: string[] = [];
-    console.log = (line?: unknown) => lines.push(String(line));
+    const buf = new BufferSink();
+    Logger.setSink(buf);
+    Logger.setMode("pretty");
     try {
-      Logger.setEnabled(true);
-      Logger.setMode("pretty");
       new Logger("Test").log("hello");
-      expect(lines.at(-1)).toContain("[Techne]");
+      expect(buf.lines.at(-1)).toContain("[Techne]");
       Logger.setMode("json");
       new Logger("Test").log("hello");
-      expect(JSON.parse(lines.at(-1) ?? "{}").name).toBe("Techne");
+      expect(JSON.parse(buf.lines.at(-1) ?? "{}").name).toBe("Techne");
     } finally {
-      console.log = prevLog;
+      Logger.setSink(prevSink);
       Logger.setMode(prevMode);
-      Logger.setEnabled(false);
     }
   });
   test("OpenAPI defaults use Techne title and unknown-kind marker", async () => {

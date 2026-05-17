@@ -1,5 +1,5 @@
 import { Elysia } from "elysia";
-import { Logger, createRequestLogger } from "../services/logger.service";
+import { Logger, requestContext, type RequestContext } from "../services/logger.service";
 import { Container, globalContainer } from "../core/container";
 import type { CompiledRouteDefinition } from "../core/router/router-execution-context";
 import type { CorsOptions } from "../core/http-options";
@@ -67,9 +67,10 @@ interface TechneRequestStore {
   /**
    * Request-id field. Stays `undefined` when nobody asks (no inbound header,
    * no consumer reads it). When `needsRequestId` is on we either copy the
-   * inbound `x-request-id` here or install a lazy getter (see
-   * {@link ElysiaAdapter.installLazyRequestId}) that mints a UUID on first
-   * read and self-replaces with the materialized string.
+   * inbound `x-request-id` here or install a lazy getter that mints a UUID
+   * on first read and self-replaces with the materialized string. The lazy
+   * getter also syncs the id into the ALS request context so loggers that
+   * read from ALS pick it up without a per-request Logger allocation (L11).
    */
   requestId: string | undefined;
   /**
@@ -85,6 +86,10 @@ interface TechneRequestStore {
    * traffic on the global WeakMap.
    */
   inflightCounted: boolean;
+  /** W3C traceparent trace-id (32 hex chars), if the inbound header was present (L12). */
+  traceId: string | undefined;
+  /** W3C traceparent parent-id / span-id (16 hex chars) (L12). */
+  spanId: string | undefined;
 }
 
 // Hoisted to module scope so the validation error path doesn't allocate a
@@ -94,6 +99,20 @@ interface TechneRequestStore {
 const PROBLEM_JSON_HEADERS: Record<string, string> = {
   "content-type": "application/problem+json",
 };
+
+/**
+ * Parse a W3C `traceparent` header into traceId + spanId (L12).
+ * Format: `version-traceId-parentId-flags` where version="00",
+ * traceId=32 hex chars, parentId=16 hex chars.
+ */
+function parseTraceparent(header: string | null): { traceId?: string; spanId?: string } {
+  if (!header) return {};
+  const parts = header.split("-");
+  if (parts.length !== 4 || parts[0] !== "00") return {};
+  const [, traceId, spanId] = parts;
+  if (!/^[0-9a-f]{32}$/.test(traceId) || !/^[0-9a-f]{16}$/.test(spanId)) return {};
+  return { traceId, spanId };
+}
 
 export class ElysiaAdapter {
   private app: Elysia;
@@ -233,34 +252,71 @@ export class ElysiaAdapter {
         // Skipped entirely when neither tracking flag is on (nothing reads
         // the store in that case).
         if (needsStore) {
+          const request = ctx.request;
+
+          // L12: parse W3C traceparent before building the store so traceId
+          // and spanId are available when we enter the ALS context below.
+          const { traceId, spanId } = parseTraceparent(request.headers.get("traceparent"));
+
           const store: TechneRequestStore = {
             requestId: undefined,
             startUs: undefined,
             inflightCounted: false,
+            traceId,
+            spanId,
           };
           ctx.store = store;
 
           if (trackInflight) {
-            // The fresh store starts with `inflightCounted: false`, so this
-            // is effectively unconditional. The explicit assignment keeps
-            // the increment paired with the flag write the way
-            // onAfterHandle/onError expect it.
             store.inflightCounted = true;
             this.inflight++;
           }
 
-          // Request-id: lazily install the UUID accessor (or copy inbound
-          // header through) so consumers can read `ctx.store.requestId`
-          // without paying the UUID cost when nobody asks. Logging start
-          // time is captured here as well to keep the read paths together.
+          // L5: enter the ALS request context so loggers running anywhere in
+          // this async execution chain can read requestId/traceId without
+          // a per-request Logger allocation.
           if (needsRequestId) {
-            const request = ctx.request;
             const inbound = request.headers.get("x-request-id");
+            // Mutable context object — the lazy getter below writes requestId
+            // into it the first time the id is read anywhere in the request.
+            const reqCtx: RequestContext = {
+              requestId: undefined,
+              traceId,
+              spanId,
+            };
+            requestContext.enterWith(reqCtx);
+
             if (typeof inbound === "string" && inbound.length > 0) {
               store.requestId = inbound;
+              reqCtx.requestId = inbound;
             } else {
-              ElysiaAdapter.installLazyRequestId(store);
+              // Lazy UUID: generate on first read, then self-replace both on
+              // the store and in the ALS context so the id is visible everywhere.
+              Object.defineProperty(store, "requestId", {
+                configurable: true,
+                enumerable: true,
+                get() {
+                  const id = randomUUIDv7();
+                  Object.defineProperty(store, "requestId", {
+                    configurable: true,
+                    enumerable: true,
+                    writable: true,
+                    value: id,
+                  });
+                  reqCtx.requestId = id;
+                  return id;
+                },
+                set(value: unknown) {
+                  Object.defineProperty(store, "requestId", {
+                    configurable: true,
+                    enumerable: true,
+                    writable: true,
+                    value,
+                  });
+                },
+              });
             }
+
             if (loggingEnabled) {
               store.startUs = Bun.nanoseconds();
             }
@@ -286,9 +342,13 @@ export class ElysiaAdapter {
             const start = store.startUs ?? Bun.nanoseconds();
             const duration = Math.round((Bun.nanoseconds() - start) / 1_000_000);
             const path = this.getRequestPath(request.url);
+            // L11: read store.requestId to trigger lazy UUID generation and sync
+            // to ALS context; this.logger.log() then picks up requestId from ALS
+            // instead of requiring a per-request Logger allocation.
             const requestId = store.requestId;
-            const requestLogger = requestId ? createRequestLogger(requestId, "HTTP") : this.logger;
-            requestLogger.log(
+            const als = requestContext.getStore();
+            if (als && requestId && !als.requestId) als.requestId = requestId;
+            this.logger.log(
               `${request.method} ${path} ${set.status || 200} +${duration}ms`,
               "HTTP",
             );
@@ -322,9 +382,11 @@ export class ElysiaAdapter {
             const duration = Math.round((Bun.nanoseconds() - start) / 1_000_000);
             const path = this.getRequestPath(request.url);
             const stack = error instanceof Error ? error.stack : undefined;
+            // L11: sync requestId to ALS context so this.logger picks it up.
             const requestId = store?.requestId;
-            const requestLogger = requestId ? createRequestLogger(requestId, "HTTP") : this.logger;
-            requestLogger.error(
+            const als = requestContext.getStore();
+            if (als && requestId && !als.requestId) als.requestId = requestId;
+            this.logger.error(
               `${request.method} ${path} ${set.status || 500} +${duration}ms (${code})`,
               stack,
               "HTTP",
@@ -372,40 +434,6 @@ export class ElysiaAdapter {
         };
       });
     }
-  }
-
-  /**
-   * Attaches a lazy `requestId` accessor to the per-request store object
-   * allocated in the fused `onRequest` hook. The UUID is generated on
-   * first read and the property is then replaced with a plain string so
-   * subsequent reads are a property lookup with no getter call. We install
-   * via `defineProperty` on the same store reference rather than reshaping
-   * it, so the hidden class V8 pinned for `TechneRequestStore` stays
-   * intact.
-   */
-  private static installLazyRequestId(store: TechneRequestStore): void {
-    Object.defineProperty(store, "requestId", {
-      configurable: true,
-      enumerable: true,
-      get() {
-        const id = randomUUIDv7();
-        Object.defineProperty(store, "requestId", {
-          configurable: true,
-          enumerable: true,
-          writable: true,
-          value: id,
-        });
-        return id;
-      },
-      set(value: unknown) {
-        Object.defineProperty(store, "requestId", {
-          configurable: true,
-          enumerable: true,
-          writable: true,
-          value,
-        });
-      },
-    });
   }
 
   /**
