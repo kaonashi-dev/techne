@@ -1,7 +1,7 @@
 import "../reflect-setup";
 import { Container, type Provider, isCustomProvider } from "../core/container";
 import { Scanner } from "../core/scanner";
-import { Logger } from "../services/logger.service";
+import { Logger, NullSink, BufferSink } from "../services/logger.service";
 import { MqRegistry } from "../mq/registry";
 import { MQ_DRIVER } from "../mq/tokens";
 
@@ -43,7 +43,10 @@ export class TestingModuleBuilder {
   }
 
   async compile(): Promise<TestingModule> {
-    Logger.setEnabled(false);
+    // Install a null sink so tests never pollute stdout even if internal code
+    // enables logging. Tests that need to assert on log output should install a
+    // BufferSink via Logger.setSink() and restore the previous sink afterward.
+    Logger.setSink(new NullSink());
 
     const container = new Container();
 
