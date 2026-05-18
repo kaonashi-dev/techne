@@ -1,7 +1,7 @@
 import "../reflect-setup";
 import { Container, type Provider, isCustomProvider } from "../core/container";
 import { Scanner } from "../core/scanner";
-import { Logger, NullSink, BufferSink } from "../services/logger.service";
+import { Logger, NullSink } from "../services/logger.service";
 import { MqRegistry } from "../mq/registry";
 import { MQ_DRIVER } from "../mq/tokens";
 
