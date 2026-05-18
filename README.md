@@ -126,7 +126,7 @@ app.listen(3000, () => {
 
 The recommended mental model is:
 
-- `@kaonashi-dev/techne/common` for decorators, exceptions, DTO/schema helpers, and request lifecycle interfaces.
+- `@kaonashi-dev/techne/common` for decorators, exceptions, DTO/schema helpers, logging, and request lifecycle interfaces.
 - `@kaonashi-dev/techne/core` for bootstrap and infrastructure APIs.
 - `@kaonashi-dev/techne/config`, `/jwt`, `/swagger`, `/health`, `/testing`, `/cqrs`, and `/mq` for specialized features.
 
@@ -134,7 +134,7 @@ The recommended mental model is:
 
 | Area | Package |
 | --- | --- |
-| Decorators, exceptions, schemas | `@kaonashi-dev/techne/common` |
+| Decorators, exceptions, schemas, logging | `@kaonashi-dev/techne/common` |
 | Bootstrap, DI container, reflector, config loader | `@kaonashi-dev/techne/core` |
 | Testing utilities | `@kaonashi-dev/techne/testing` |
 | CQRS buses and event store | `@kaonashi-dev/techne/cqrs` |
@@ -281,7 +281,7 @@ const typedConfig = defineConfig({
   schema: t.Object({
     PORT: t.Integer({ minimum: 1, maximum: 65535 }),
     DATABASE_URL: t.String({ minLength: 1 }),
-    LOG_LEVEL: t.Optional(t.Union([t.Literal("debug"), t.Literal("info")])),
+    LOG_LEVEL: t.Optional(t.Union([t.Literal("debug"), t.Literal("log")])),
   }),
 });
 
@@ -354,6 +354,80 @@ export default defineTechneConfig({
 provider graphs without HTTP. Request-scoped providers share a stable context
 across guards and handlers within the same request through `ContextIdFactory`
 from `@kaonashi-dev/techne/core`.
+
+## Logging
+
+Techne ships with a lightweight structured `Logger` exported from
+`@kaonashi-dev/techne/common`. By default it uses pretty output locally and JSON
+output when `NODE_ENV=production`; `LOG_LEVEL` sets the minimum level and
+defaults to `verbose`.
+
+Configure logging from `techne.config.ts` with the `logger` option:
+
+```ts
+import { defineTechneConfig } from "@kaonashi-dev/techne/core";
+import { AppFeature } from "./src/app.module";
+
+export default defineTechneConfig({
+  features: [AppFeature],
+  logger: {
+    mode: "json", // "pretty" | "json" | false
+    minLevel: "log", // "error" | "warn" | "log" | "debug" | "verbose"
+    redact: ["password", "auth.token"], // JSON output only
+  },
+});
+```
+
+Use `logger: false` to disable all `Logger` output, including framework and
+HTTP request logs, or pass `logger: "pretty"` / `logger: "json"` for a simple
+format override.
+
+Inject a context-bound logger with `@InjectLogger()`:
+
+```ts
+import { InjectLogger, Injectable, Logger } from "@kaonashi-dev/techne/common";
+
+@Injectable()
+class UsersService {
+  constructor(@InjectLogger("UsersService") private readonly logger: Logger) {}
+
+  create(userId: string) {
+    this.logger.log("creating user", { userId });
+  }
+
+  reportFailure(error: Error, userId: string) {
+    this.logger.error(error, { userId });
+  }
+}
+```
+
+The logger supports `log`, `warn`, `error`, `debug`, and `verbose`. Structured
+metadata is appended as `key=value` in pretty mode and merged into the JSON
+record in JSON mode. During HTTP requests, log records automatically pick up the
+request id from `x-request-id` or Techne's generated id; W3C `traceparent`
+headers are exposed as `traceId` / `spanId` in JSON output.
+
+For tests, swap the global sink and restore it afterward:
+
+```ts
+import { Logger } from "@kaonashi-dev/techne/common";
+import { BufferSink } from "@kaonashi-dev/techne/testing";
+
+const previous = Logger.getSink();
+const sink = new BufferSink();
+
+Logger.setSink(sink);
+try {
+  new Logger("Test").log("hello");
+  expect(sink.lines[0]).toContain("hello");
+} finally {
+  Logger.setSink(previous);
+}
+```
+
+Import `NullSink` from `@kaonashi-dev/techne/testing` and use it with the same
+save/restore pattern when you only need to silence output and do not need
+assertions.
 
 ## Plugins
 
@@ -738,12 +812,12 @@ project skeleton.
 
 ```ts
 import { TechneFactory } from "@kaonashi-dev/techne/core";
-import { Controller, Dto, IsString } from "@kaonashi-dev/techne/common";
+import { Controller, Dto, InjectLogger, IsString, Logger } from "@kaonashi-dev/techne/common";
 import { appConfig, config, ConfigService } from "@kaonashi-dev/techne/config";
 import { jwt, JwtAuthGuard, JwtService } from "@kaonashi-dev/techne/jwt";
 import { SwaggerModule } from "@kaonashi-dev/techne/swagger";
 import { HealthCheckService } from "@kaonashi-dev/techne/health";
-import { Test } from "@kaonashi-dev/techne/testing";
+import { BufferSink, NullSink, Test } from "@kaonashi-dev/techne/testing";
 import { CommandBus } from "@kaonashi-dev/techne/cqrs";
 import { mq, Queue } from "@kaonashi-dev/techne/mq";
 ```
