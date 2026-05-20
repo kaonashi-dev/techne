@@ -82,9 +82,9 @@ describe("RolesGuard (unit)", () => {
 
     const guard = new RolesGuard(new Reflector());
     // user.roles is not an array — guard normalizes to []
-    expect(
-      guard.canActivate(makeContext(handler, Controller, { sub: "u3", roles: "admin" })),
-    ).toBe(false);
+    expect(guard.canActivate(makeContext(handler, Controller, { sub: "u3", roles: "admin" }))).toBe(
+      false,
+    );
     expect(guard.canActivate(makeContext(handler, Controller, { sub: "u4" }))).toBe(false);
   });
 

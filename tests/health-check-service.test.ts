@@ -1,8 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  HealthCheckService,
-  type HealthIndicator,
-} from "../src/health/health-check.service";
+import { HealthCheckService, type HealthIndicator } from "../src/health/health-check.service";
 
 /**
  * Direct unit tests on `HealthCheckService.check()`. The HTTP-level

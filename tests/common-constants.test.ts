@@ -15,17 +15,13 @@ describe("common/constants", () => {
   });
 
   test("string-valued constants are unique within the set", () => {
-    const strings = entries
-      .filter(([, v]) => typeof v === "string")
-      .map(([, v]) => v as string);
+    const strings = entries.filter(([, v]) => typeof v === "string").map(([, v]) => v as string);
     const unique = new Set(strings);
     expect(unique.size).toBe(strings.length);
   });
 
   test("symbol-valued constants are unique by reference", () => {
-    const symbols = entries
-      .filter(([, v]) => typeof v === "symbol")
-      .map(([, v]) => v as symbol);
+    const symbols = entries.filter(([, v]) => typeof v === "symbol").map(([, v]) => v as symbol);
     const unique = new Set(symbols);
     expect(unique.size).toBe(symbols.length);
     // sanity: there is at least one symbol token (APP_GUARD, APP_FILTER, REQUEST, INQUIRER)

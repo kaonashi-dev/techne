@@ -23,8 +23,18 @@ const cases: Array<{
   defaultMessage: string;
 }> = [
   { ctor: BadRequestException, status: 400, reason: "Bad Request", defaultMessage: "Bad Request" },
-  { ctor: UnauthorizedException, status: 401, reason: "Unauthorized", defaultMessage: "Unauthorized" },
-  { ctor: ForbiddenException, status: 403, reason: "Forbidden", defaultMessage: "Forbidden resource" },
+  {
+    ctor: UnauthorizedException,
+    status: 401,
+    reason: "Unauthorized",
+    defaultMessage: "Unauthorized",
+  },
+  {
+    ctor: ForbiddenException,
+    status: 403,
+    reason: "Forbidden",
+    defaultMessage: "Forbidden resource",
+  },
   { ctor: NotFoundException, status: 404, reason: "Not Found", defaultMessage: "Not Found" },
   { ctor: ConflictException, status: 409, reason: "Conflict", defaultMessage: "Conflict" },
   { ctor: GoneException, status: 410, reason: "Gone", defaultMessage: "Gone" },

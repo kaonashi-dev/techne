@@ -63,10 +63,7 @@ describe("JwtService (unit)", () => {
 
   test("issuer/audience claims are enforced on verify", async () => {
     const jwt = new JwtService({ secret: "test-secret" });
-    const token = await jwt.signAsync(
-      { sub: "user-1" },
-      { issuer: "iss-1", audience: "aud-1" },
-    );
+    const token = await jwt.signAsync({ sub: "user-1" }, { issuer: "iss-1", audience: "aud-1" });
     const ok = await jwt.verifyAsync<{ iss: string; aud: string }>(token, {
       issuer: "iss-1",
       audience: "aud-1",
