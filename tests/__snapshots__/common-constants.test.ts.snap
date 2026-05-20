@@ -1,0 +1,146 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`common/constants snapshot of the public constant surface 1`] = `
+[
+  {
+    "name": "APP_FILTER",
+    "typeOf": "symbol",
+    "value": null,
+  },
+  {
+    "name": "APP_GUARD",
+    "typeOf": "symbol",
+    "value": null,
+  },
+  {
+    "name": "CATCH_METADATA",
+    "typeOf": "string",
+    "value": "__catch__",
+  },
+  {
+    "name": "COMMAND_HANDLER_METADATA",
+    "typeOf": "string",
+    "value": "command_handler",
+  },
+  {
+    "name": "CONTROLLER_METADATA",
+    "typeOf": "string",
+    "value": "controller_prefix",
+  },
+  {
+    "name": "EVENT_HANDLER_METADATA",
+    "typeOf": "string",
+    "value": "event_handler",
+  },
+  {
+    "name": "EXCEPTION_FILTERS_METADATA",
+    "typeOf": "string",
+    "value": "exception_filters",
+  },
+  {
+    "name": "GUARDS_METADATA",
+    "typeOf": "string",
+    "value": "guards",
+  },
+  {
+    "name": "INJECT_METADATA",
+    "typeOf": "string",
+    "value": "inject_metadata",
+  },
+  {
+    "name": "INJECTABLE_METADATA",
+    "typeOf": "string",
+    "value": "injectable",
+  },
+  {
+    "name": "INQUIRER",
+    "typeOf": "symbol",
+    "value": null,
+  },
+  {
+    "name": "MIDDLEWARE_METADATA",
+    "typeOf": "string",
+    "value": "middleware",
+  },
+  {
+    "name": "MQ_PROCESS_METADATA",
+    "typeOf": "string",
+    "value": "mq_process",
+  },
+  {
+    "name": "MQ_PROCESSOR_METADATA",
+    "typeOf": "string",
+    "value": "mq_processor",
+  },
+  {
+    "name": "ON_APPLICATION_BOOTSTRAP",
+    "typeOf": "string",
+    "value": "onApplicationBootstrap",
+  },
+  {
+    "name": "ON_MODULE_DESTROY",
+    "typeOf": "string",
+    "value": "onModuleDestroy",
+  },
+  {
+    "name": "ON_MODULE_INIT",
+    "typeOf": "string",
+    "value": "onModuleInit",
+  },
+  {
+    "name": "ON_RESPONSE_METADATA",
+    "typeOf": "string",
+    "value": "techne:on_response",
+  },
+  {
+    "name": "PARAMS_METADATA",
+    "typeOf": "string",
+    "value": "params",
+  },
+  {
+    "name": "PUBLIC_METADATA",
+    "typeOf": "string",
+    "value": "__public__",
+  },
+  {
+    "name": "QUERY_HANDLER_METADATA",
+    "typeOf": "string",
+    "value": "query_handler",
+  },
+  {
+    "name": "QUEUE_PROCESS_METADATA",
+    "typeOf": "string",
+    "value": "queue_process",
+  },
+  {
+    "name": "QUEUE_PROCESSOR_METADATA",
+    "typeOf": "string",
+    "value": "queue_processor",
+  },
+  {
+    "name": "REQUEST",
+    "typeOf": "symbol",
+    "value": null,
+  },
+  {
+    "name": "ROLES_METADATA",
+    "typeOf": "string",
+    "value": "__roles__",
+  },
+  {
+    "name": "ROUTES_METADATA",
+    "typeOf": "string",
+    "value": "routes",
+  },
+  {
+    "name": "SCOPE_OPTIONS_METADATA",
+    "typeOf": "string",
+    "value": "scope_options",
+  },
+  {
+    "name": "VERSION_METADATA",
+    "typeOf": "string",
+    "value": "__version__",
+  },
+]
+`;
