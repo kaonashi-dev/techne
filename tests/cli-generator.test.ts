@@ -34,7 +34,9 @@ describe("CLI project generator", () => {
     const techneConfig = await fs.readFile(path.join(projectDir, "techne.config.ts"), "utf8");
     const gitignore = await fs.readFile(path.join(projectDir, ".gitignore"), "utf8");
     expect(packageJson.dependencies["@kaonashi-dev/techne"]).toBe("latest");
-    expect(packageJson.scripts.build).toContain("bun build src/main.ts");
+    expect(packageJson.scripts.build).toBe("techne build");
+    expect(packageJson.scripts["build:bundle"]).toContain("techne build");
+    expect(packageJson.scripts["build:node"]).toContain("techne build");
     expect(packageJson.scripts.check).toBe("bun run lint && bun run format:check");
     expect(packageJson.devDependencies.oxlint).toBe("^1.56.0");
     expect(tsconfig.compilerOptions.noEmit).toBe(true);
