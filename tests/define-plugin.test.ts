@@ -1,8 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  definePlugin,
-  type PluginDefinition,
-} from "../src/core/plugins/define-plugin";
+import { definePlugin, type PluginDefinition } from "../src/core/plugins/define-plugin";
 
 /**
  * `definePlugin` is intentionally an identity helper — its only job is to
