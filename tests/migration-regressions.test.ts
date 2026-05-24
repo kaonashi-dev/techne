@@ -40,7 +40,6 @@ describe("Techne migration regressions", () => {
       custom: true,
     });
     expect(unknown["x-techne-unknown-kind"]).toBe("CustomKind");
-    expect("x-bnest-unknown-kind" in unknown).toBe(false);
   });
   test("missing zero-arg config message points to techne.config.ts", async () => {
     const originalCwd = process.cwd();
@@ -71,17 +70,5 @@ describe("Techne migration regressions", () => {
     expect(stdout).toContain("techne new <project-name>");
     expect(stdout).toContain("techne dev [--port N] [--inspect]");
     expect(stdout).not.toContain("technenew");
-  });
-  test("legacy bnest shim declares Techne re-export paths and CLI forwarder", async () => {
-    const shimRoot = path.resolve(import.meta.dir, "..", "packages/bnest");
-    const manifest = JSON.parse(await fs.readFile(path.join(shimRoot, "package.json"), "utf8"));
-    const coreShim = await fs.readFile(path.join(shimRoot, "core.js"), "utf8");
-    const cliShim = await fs.readFile(path.join(shimRoot, "bin/bnest.js"), "utf8");
-    expect(manifest.name).toBe("@kaonashi-dev/bnest");
-    expect(manifest.dependencies["@kaonashi-dev/techne"]).toBe("0.4.0");
-    expect(manifest.exports["./core"].import).toBe("./core.js");
-    expect(manifest.bin.bnest).toBe("./bin/bnest.js");
-    expect(coreShim).toContain('export * from "@kaonashi-dev/techne/core"');
-    expect(cliShim).toContain('Bun.spawn(["techne"');
   });
 });

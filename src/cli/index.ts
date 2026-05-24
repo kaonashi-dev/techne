@@ -190,11 +190,9 @@ async function doctor() {
     hasError = true;
   }
 
-  // techne.config.ts (informational; legacy bnest.config.ts also recognized)
+  // techne.config.ts (informational)
   if (await exists(path.join(process.cwd(), "techne.config.ts"))) {
     ok(`techne.config.ts present`);
-  } else if (await exists(path.join(process.cwd(), "bnest.config.ts"))) {
-    warn(`bnest.config.ts present (deprecated — rename to techne.config.ts)`);
   } else {
     warn(`techne.config.ts not found (optional)`);
   }
@@ -264,15 +262,7 @@ async function runGenerateClient() {
   const cwd = process.cwd();
 
   // Find a techne.config.{ts,js,mjs} so we know how to boot the user's app.
-  // Falls back to the deprecated bnest.config.* name through v0.4.x.
-  const CANDIDATES = [
-    "techne.config.ts",
-    "techne.config.js",
-    "techne.config.mjs",
-    "bnest.config.ts",
-    "bnest.config.js",
-    "bnest.config.mjs",
-  ];
+  const CANDIDATES = ["techne.config.ts", "techne.config.js", "techne.config.mjs"];
   let configPath: string | undefined;
   for (const name of CANDIDATES) {
     const candidate = path.join(cwd, name);
