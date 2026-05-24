@@ -20,3 +20,6 @@ export * from "./queue-bag";
 export * from "./decorators/processor.decorator";
 export * from "./decorators/on.decorator";
 export * from "./decorators/inject-queue.decorator";
+export * from "./dispatcher";
+export * from "./pending-dispatch";
+export * from "./dispatchable";
