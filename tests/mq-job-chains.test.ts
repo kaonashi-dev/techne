@@ -244,11 +244,7 @@ describe("mq job chains", () => {
     class FirstJob extends Dispatchable<{ id: string }> {
       static override queue = Q;
       static override jobName = "first";
-<<<<<<< HEAD
       async handle() {
-=======
-      async handle({ id }: { id: string }) {
->>>>>>> 9cda9d2 (feat(mq): forward-compat scaffolding — chain/batch primitives, job.state getter, driver side-channel fields)
         timestamps.push({ step: "first", at: Date.now() });
       }
     }
@@ -257,11 +253,7 @@ describe("mq job chains", () => {
     class SecondJob extends Dispatchable<{ id: string }> {
       static override queue = Q;
       static override jobName = "second";
-<<<<<<< HEAD
       async handle() {
-=======
-      async handle({ id }: { id: string }) {
->>>>>>> 9cda9d2 (feat(mq): forward-compat scaffolding — chain/batch primitives, job.state getter, driver side-channel fields)
         timestamps.push({ step: "second", at: Date.now() });
       }
     }
@@ -285,11 +277,7 @@ describe("mq job chains", () => {
     expect(timestamps).toHaveLength(2);
     expect(timestamps[0]!.step).toBe("first");
     expect(timestamps[1]!.step).toBe("second");
-<<<<<<< HEAD
     // Second step should have been delayed by at least delayMs after being enqueued.
-=======
-    // Second step should have been delayed by at least delayMs after enqueue.
->>>>>>> 9cda9d2 (feat(mq): forward-compat scaffolding — chain/batch primitives, job.state getter, driver side-channel fields)
     const gap = timestamps[1]!.at - timestamps[0]!.at;
     expect(gap).toBeGreaterThanOrEqual(delayMs - 20); // small tolerance
   });
@@ -325,12 +313,8 @@ describe("mq job chains", () => {
       }
     }
 
-<<<<<<< HEAD
     // Spy to suppress noise in output.
     const consoleErrorSpy = spyOn(console, "error").mockImplementation(() => {});
-=======
-    const consoleErrorSpy = spyOn(console, "error");
->>>>>>> 9cda9d2 (feat(mq): forward-compat scaffolding — chain/batch primitives, job.state getter, driver side-channel fields)
 
     const ctx = await TechneFactory.createApplicationContext({
       plugins: [mq({ queues: [Q] })],
@@ -343,20 +327,10 @@ describe("mq job chains", () => {
       .catch(BadCatchJob.dispatch({ id: "e" }))
       .dispatch();
 
-<<<<<<< HEAD
     // Allow time to settle — no infinite loop should occur.
     await sleep(500);
 
     // Test passes if no error is thrown and the process doesn't hang.
-=======
-    await sleep(600);
-
-    // The registry should have dispatched the catch handler; even if it fails
-    // internally, it should not produce an infinite loop. Since the catch
-    // handler is dispatched without a chain context, it just fails normally.
-    // No assertion about console.error — the catch handler failure is handled
-    // by the normal failure path, not the chain error path.
->>>>>>> 9cda9d2 (feat(mq): forward-compat scaffolding — chain/batch primitives, job.state getter, driver side-channel fields)
     consoleErrorSpy.mockRestore();
   });
 });
