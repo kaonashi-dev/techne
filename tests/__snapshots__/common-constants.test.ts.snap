@@ -63,6 +63,11 @@ exports[`common/constants snapshot of the public constant surface 1`] = `
     "value": "middleware",
   },
   {
+    "name": "MQ_ON_FAILURE_METADATA",
+    "typeOf": "string",
+    "value": "mq_on_failure",
+  },
+  {
     "name": "MQ_PROCESS_METADATA",
     "typeOf": "string",
     "value": "mq_process",
@@ -71,6 +76,16 @@ exports[`common/constants snapshot of the public constant surface 1`] = `
     "name": "MQ_PROCESSOR_METADATA",
     "typeOf": "string",
     "value": "mq_processor",
+  },
+  {
+    "name": "MQ_UNIQUE_METADATA",
+    "typeOf": "string",
+    "value": "mq_unique",
+  },
+  {
+    "name": "MQ_UNIQUE_UNTIL_PROCESSING_METADATA",
+    "typeOf": "string",
+    "value": "mq_unique_until_processing",
   },
   {
     "name": "ON_APPLICATION_BOOTSTRAP",

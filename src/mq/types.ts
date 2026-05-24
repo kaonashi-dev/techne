@@ -53,6 +53,35 @@ export interface JobsOptions {
    * worker claims the job (before `handle()` runs) rather than after completion.
    */
   lockUntilProcessing?: boolean;
+  /** Internal: chain correlation id — set by chain().dispatch(). */
+  __chainId?: string;
+  /** Internal: zero-based position of this job in its chain. */
+  __chainStepIndex?: number;
+  /** Internal: batch correlation id — set by batch().dispatch(). */
+  __batchId?: string;
+}
+
+/**
+ * A single step spec extracted from a PendingDispatch for use inside a chain or batch.
+ */
+export interface ChainStepSpec {
+  queueName: string;
+  jobName: string;
+  payload: unknown;
+  options: JobsOptions;
+}
+
+/**
+ * Callback specs attached to a batch. Each spec is dispatched when the batch
+ * reaches its terminal state (all jobs completed or failed).
+ */
+export interface BatchCallbacks {
+  /** Dispatched only if every job in the batch succeeded (failed === 0). */
+  then?: ChainStepSpec;
+  /** Dispatched only if at least one job failed (failed > 0). */
+  catch?: ChainStepSpec;
+  /** Always dispatched when the batch is done, regardless of outcome. */
+  finally?: ChainStepSpec;
 }
 
 export interface QueueOptions {

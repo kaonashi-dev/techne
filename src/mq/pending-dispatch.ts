@@ -1,5 +1,5 @@
 import { dispatchToQueue, getDispatcherContext, type DispatchUniqueOptions } from "./dispatcher";
-import type { BackoffOptions, JobsOptions } from "./types";
+import type { BackoffOptions, ChainStepSpec, JobsOptions } from "./types";
 
 /**
  * Inline handler used by `.dispatchSync()`. The registry registers one
@@ -55,6 +55,8 @@ export class PendingDispatch<TPayload = unknown, TResult = unknown>
   private enabled: boolean;
   private readonly options: JobsOptions;
   private readonly uniqueOptions?: DispatchUniqueOptions;
+  /** When true, awaiting this builder is a no-op (used by batch() to park jobs). */
+  _parked = false;
 
   constructor(init: PendingDispatchInit<TPayload, TResult>) {
     this.queueName = init.queueName;
@@ -145,9 +147,30 @@ export class PendingDispatch<TPayload = unknown, TResult = unknown>
     onFulfilled?: ((value: unknown) => TFulfilled | PromiseLike<TFulfilled>) | null,
     onRejected?: ((reason: unknown) => TRejected | PromiseLike<TRejected>) | null,
   ): PromiseLike<TFulfilled | TRejected> {
-    const promise = this.enabled
-      ? dispatchToQueue(this.queueName, this.jobName, this.payload, this.options, this.uniqueOptions)
-      : Promise.resolve(undefined);
+    const promise =
+      this._parked || !this.enabled
+        ? Promise.resolve(undefined)
+        : dispatchToQueue(
+            this.queueName,
+            this.jobName,
+            this.payload,
+            this.options,
+            this.uniqueOptions,
+          );
     return promise.then(onFulfilled, onRejected);
   }
+}
+
+/**
+ * Extract a serialisable spec from a PendingDispatch for use in chain/batch
+ * stores. Package-internal — not exported from the public index.
+ */
+export function toPendingDispatchSpec(pd: PendingDispatch): ChainStepSpec {
+  const p = pd as any;
+  return {
+    queueName: p.queueName,
+    jobName: p.jobName,
+    payload: p.payload,
+    options: { ...p.options },
+  };
 }

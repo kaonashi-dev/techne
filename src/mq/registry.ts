@@ -1,10 +1,12 @@
 import { MQ_PROCESSOR_METADATA, MQ_PROCESS_METADATA } from "../common/constants";
 import type { Container } from "../core/container";
 import { isCustomProvider } from "../core/container";
+import { getChainStore } from "./chain-context";
 import {
   isDispatchableClass,
   type DispatchableConstructor,
 } from "./dispatchable";
+import { dispatchToQueue } from "./dispatcher";
 import type { Job } from "./job";
 import { registerSyncHandler } from "./pending-dispatch";
 import { Queue } from "./queue";
@@ -58,6 +60,8 @@ export class MqRegistry {
           autorun: false,
         },
       );
+
+      this.attachChainListeners(worker);
 
       this.workers.push(worker);
       void worker.run();
@@ -120,6 +124,8 @@ export class MqRegistry {
         { ...workerOptions, autorun: false },
       );
 
+      this.attachChainListeners(worker);
+
       // Release the @Unique lock when the job reaches a terminal state.
       worker.on("completed", (job: Job) => {
         if (job.opts.lockKey && !job.opts.lockUntilProcessing) {
@@ -138,6 +144,59 @@ export class MqRegistry {
       this.workers.push(worker);
       void worker.run();
     }
+  }
+
+  /**
+   * Wire chain-advancement event listeners onto a worker. Called for both
+   * Processor workers and Dispatchable workers so chains work across both
+   * job styles.
+   *
+   * On "completed": advance to the next step.
+   * On "failed" (final): dispatch the catch handler if present, then cleanup.
+   */
+  private attachChainListeners(worker: Worker): void {
+    worker.on("completed", (job: Job) => {
+      const chainId = job.opts.__chainId;
+      if (!chainId) return;
+      const store = getChainStore();
+      if (!store) return;
+      void (async () => {
+        const next = await store.next(chainId);
+        if (!next) {
+          await store.cleanup(chainId);
+          return;
+        }
+        await dispatchToQueue(next.queueName, next.jobName, next.payload, {
+          ...next.options,
+          __chainId: chainId,
+          __chainStepIndex: (job.opts.__chainStepIndex ?? 0) + 1,
+        });
+      })();
+    });
+
+    worker.on("failed", (job: Job) => {
+      const chainId = job.opts.__chainId;
+      if (!chainId) return;
+      if (job.state !== "failed") return; // not final failure — retry pending
+      const store = getChainStore();
+      if (!store) return;
+      void (async () => {
+        const catchSpec = await store.catch(chainId);
+        await store.cleanup(chainId);
+        if (catchSpec) {
+          try {
+            await dispatchToQueue(
+              catchSpec.queueName,
+              catchSpec.jobName,
+              catchSpec.payload,
+              catchSpec.options,
+            );
+          } catch (err) {
+            console.error(`[MqRegistry] Chain catch handler dispatch failed for chain '${chainId}':`, err);
+          }
+        }
+      })();
+    });
   }
 
   private async releaseLock(lockKey: string): Promise<void> {
