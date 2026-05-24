@@ -6,6 +6,11 @@ import {
   type QueueBagDef,
   type QueueDef,
 } from "../define-queue";
+import {
+  clearDispatcherContext,
+  createResolverFromContainer,
+  setDispatcherContext,
+} from "../dispatcher";
 import { createMqDriver } from "../driver";
 import { Queue } from "../queue";
 import { createQueueBag } from "../queue-bag";
@@ -47,6 +52,10 @@ export function mq(options: MqPluginOptions = {}) {
         MQ_QUEUE_BAG,
         createQueueBag((token) => ctx.resolve(token)),
       );
+
+      const resolver = createResolverFromContainer((token) => ctx.resolve(token));
+      setDispatcherContext(resolver);
+      ctx.onShutdown(() => clearDispatcherContext());
 
       const registered = new Set<string>();
       const bags: QueueBagDef[] = [];

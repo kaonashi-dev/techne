@@ -1,4 +1,5 @@
 import type { Job } from "./job";
+import { PendingDispatch } from "./pending-dispatch";
 import type { Queue } from "./queue";
 import type { JobsOptions, WorkerOptions } from "./types";
 
@@ -9,11 +10,33 @@ export interface QueueDefInput<N extends string, T extends JobMap> {
   jobs: T;
 }
 
+/**
+ * Per-job fluent dispatcher attached to a `QueueDef.dispatchers` map.
+ * Each call returns a `PendingDispatch` builder — awaiting enqueues.
+ */
+export type DispatcherFn<TPayload> = (
+  ...args: TPayload extends void | Record<string, never> ? [] : [payload: TPayload]
+) => PendingDispatch<TPayload>;
+
+export type DispatchersOf<T extends JobMap> = {
+  readonly [K in keyof T & string]: DispatcherFn<T[K]>;
+};
+
 export interface QueueDef<N extends string = string, T extends JobMap = JobMap> {
   readonly name: N;
   readonly jobs: T;
   /** Default worker options applied when this def is used with `@Processor(def)`. */
   readonly workerOptions?: WorkerOptions;
+  /**
+   * Per-job fluent dispatchers, keyed by job name. Each is a function
+   * returning a `PendingDispatch` builder. Awaiting enqueues via the
+   * dispatcher context registered by `mq()`.
+   *
+   * @example
+   *   const { initiatePayin } = PayinsQueueDef.dispatchers;
+   *   await initiatePayin({ payinId }).delay(60_000).tries(3);
+   */
+  readonly dispatchers: DispatchersOf<T>;
 }
 
 /**
@@ -131,16 +154,26 @@ export function defineQueue(
       if (typeof proto[key] !== "function") continue;
       jobs[key] = undefined;
     }
-    return Object.freeze({
-      name,
-      jobs: Object.freeze(jobs) as JobMap,
-      workerOptions: options.worker,
-    }) as QueueDef;
+    return finalizeQueueDef(name, jobs, options.worker);
+  }
+  return finalizeQueueDef(input.name, input.jobs, options.worker);
+}
+
+function finalizeQueueDef(name: string, jobs: JobMap, workerOptions?: WorkerOptions): QueueDef {
+  const dispatchers: Record<string, DispatcherFn<unknown>> = {};
+  for (const jobName of Object.keys(jobs)) {
+    dispatchers[jobName] = ((payload?: unknown) =>
+      new PendingDispatch({
+        queueName: name,
+        jobName,
+        payload: payload as unknown,
+      })) as DispatcherFn<unknown>;
   }
   return Object.freeze({
-    name: input.name,
-    jobs: input.jobs,
-    workerOptions: options.worker,
+    name,
+    jobs: Object.freeze({ ...jobs }) as JobMap,
+    workerOptions,
+    dispatchers: Object.freeze(dispatchers) as DispatchersOf<JobMap>,
   }) as QueueDef;
 }
 
