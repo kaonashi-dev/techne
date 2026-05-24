@@ -2,14 +2,24 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { Injectable } from "../src/common";
 import {
   InjectMq,
+  InjectQueue,
   MqProcess,
   MqProcessor,
+  On,
+  Processor,
   Queue,
   QueueEvents,
   Worker,
+  defineQueue,
+  defineQueueBag,
   getMqToken,
   mq,
+  onFor,
+  type BagOf,
   type Job,
+  type JobOf,
+  type QueueBagOf,
+  type QueueOf,
 } from "../src/mq";
 import { Queue as QueueClass } from "../src/mq/queue";
 import { MQ_PROCESSOR_METADATA } from "../src/common/constants";
@@ -183,6 +193,268 @@ describe("mq", () => {
     expect(processed).toHaveLength(1);
     expect(processed[0]).toEqual({ n: 42 });
   });
+  test("defineQueue + @Processor + @On wire end-to-end via the mq plugin", async () => {
+    const PayinsQueue = defineQueue({
+      name: "payins-contract",
+      jobs: {
+        "initiate-payin": {} as { payinId: string },
+        "settle-payins": {} as Record<string, never>,
+      },
+    });
+
+    const initiated: string[] = [];
+    const settled: number[] = [];
+
+    const PayinsOn = onFor(PayinsQueue);
+
+    @Injectable()
+    class PayinsService {
+      constructor(
+        @InjectQueue(PayinsQueue)
+        readonly queue: QueueOf<typeof PayinsQueue>,
+      ) {}
+      enqueue(payinId: string) {
+        return this.queue.add("initiate-payin", { payinId });
+      }
+    }
+
+    @Processor(PayinsQueue, { blockTimeout: 10, lockDuration: 200 })
+    class PayinsProcessor {
+      @PayinsOn("initiate-payin")
+      initiate(job: JobOf<typeof PayinsQueue, "initiate-payin">) {
+        initiated.push(job.data.payinId);
+      }
+      @On("settle-payins")
+      settle(_job: Job) {
+        settled.push(Date.now());
+      }
+    }
+
+    const ctx = await TechneFactory.createApplicationContext({
+      plugins: [mq({ queues: [PayinsQueue] })],
+      providers: [PayinsService, PayinsProcessor],
+      logger: false,
+    });
+    closers.push(() => ctx.close());
+
+    const service = ctx.get<PayinsService>(PayinsService);
+    await service.enqueue("pi_123");
+    await service.queue.add("settle-payins", {});
+    await sleep(40);
+
+    expect(initiated).toEqual(["pi_123"]);
+    expect(settled).toHaveLength(1);
+  });
+
+  test("defineQueue produces a frozen def usable as @InjectQueue token", async () => {
+    const Notifications = defineQueue({
+      name: "notifications-contract",
+      jobs: { ping: {} as { id: number } },
+    });
+
+    expect(Notifications.name).toBe("notifications-contract");
+    expect(Object.isFrozen(Notifications)).toBe(true);
+
+    @Injectable()
+    class Producer {
+      constructor(
+        @InjectQueue(Notifications)
+        readonly queue: QueueOf<typeof Notifications>,
+      ) {}
+    }
+
+    const ctx = await TechneFactory.createApplicationContext({
+      plugins: [mq({ queues: [Notifications] })],
+      providers: [Producer],
+      logger: false,
+    });
+    closers.push(() => ctx.close());
+
+    const producer = ctx.get<Producer>(Producer);
+    const injected = ctx.get<unknown>(getMqToken(Notifications.name));
+    expect(producer.queue).toBe(injected);
+
+    const job = await producer.queue.add("ping", { id: 7 });
+    expect(job.data).toEqual({ id: 7 });
+  });
+
+  test("InjectQueue rejects an empty token", () => {
+    expect(() => InjectQueue("")).toThrow(/non-empty queue name/);
+  });
+
+  test("@InjectQueue([A, B]) yields a name-keyed bag of typed queues", async () => {
+    const Payins = defineQueue({
+      name: "payins-bag",
+      jobs: { "initiate-payin": {} as { payinId: string } },
+    });
+    const Alerts = defineQueue({
+      name: "alerts-bag",
+      jobs: { warn: {} as { msg: string } },
+    });
+
+    @Injectable()
+    class Producer {
+      constructor(
+        @InjectQueue([Payins, Alerts])
+        readonly queues: QueueBagOf<[typeof Payins, typeof Alerts]>,
+      ) {}
+      async fire() {
+        await this.queues["payins-bag"].add("initiate-payin", { payinId: "pi_99" });
+        await this.queues["alerts-bag"].add("warn", { msg: "ok" });
+      }
+    }
+
+    const ctx = await TechneFactory.createApplicationContext({
+      plugins: [mq({ queues: [Payins, Alerts] })],
+      providers: [Producer],
+      logger: false,
+    });
+    closers.push(() => ctx.close());
+
+    const producer = ctx.get<Producer>(Producer);
+    await producer.fire();
+
+    expect(producer.queues["payins-bag"]).toBe(ctx.get(getMqToken("payins-bag")));
+    expect(producer.queues["alerts-bag"]).toBe(ctx.get(getMqToken("alerts-bag")));
+    expect(await producer.queues["payins-bag"].getJobCounts("waiting")).toEqual({ waiting: 1 });
+  });
+
+  test("defineQueueBag + @InjectQueue(bag) derives the param type from the bag", async () => {
+    const Payins = defineQueue({
+      name: "payins-named-bag",
+      jobs: { "initiate-payin": {} as { payinId: string } },
+    });
+    const Alerts = defineQueue({
+      name: "alerts-named-bag",
+      jobs: { warn: {} as { msg: string } },
+    });
+
+    // Single source of truth — keys are user-chosen identifiers (no hyphens).
+    const MyBag = defineQueueBag({
+      payins: Payins,
+      alerts: Alerts,
+    });
+
+    @Injectable()
+    class Producer {
+      constructor(
+        @InjectQueue(MyBag)
+        readonly queues: BagOf<typeof MyBag>,
+      ) {}
+      async fire() {
+        await this.queues.payins.add("initiate-payin", { payinId: "pi_77" });
+        await this.queues.alerts.add("warn", { msg: "x" });
+      }
+    }
+
+    const ctx = await TechneFactory.createApplicationContext({
+      // Only the bag is passed — the plugin auto-registers its queues.
+      plugins: [mq({ queues: [MyBag] })],
+      providers: [Producer],
+      logger: false,
+    });
+    closers.push(() => ctx.close());
+
+    const producer = ctx.get<Producer>(Producer);
+    await producer.fire();
+
+    expect(producer.queues.payins).toBe(ctx.get(getMqToken("payins-named-bag")));
+    expect(producer.queues.alerts).toBe(ctx.get(getMqToken("alerts-named-bag")));
+    expect(await producer.queues.payins.getJobCounts("waiting")).toEqual({ waiting: 1 });
+    expect(await producer.queues.alerts.getJobCounts("waiting")).toEqual({ waiting: 1 });
+  });
+
+  test("defineQueue(class) derives queue name + jobs from method signatures", async () => {
+    class PayinsQueueClass {
+      initiatePayin(_: { payinId: string }) {}
+      postProcessPayin(_: { payinId: string; newStatus: string }) {}
+      settle() {}
+    }
+
+    const PayinsDef = defineQueue(PayinsQueueClass, { name: "payins-from-class" });
+
+    expect(PayinsDef.name).toBe("payins-from-class");
+    expect(Object.keys(PayinsDef.jobs).sort()).toEqual([
+      "initiatePayin",
+      "postProcessPayin",
+      "settle",
+    ]);
+
+    const processed: Array<{ name: string; data: unknown }> = [];
+
+    @Injectable()
+    class Producer {
+      constructor(
+        @InjectQueue(PayinsDef)
+        readonly queue: QueueOf<typeof PayinsDef>,
+      ) {}
+      async kickoff(id: string) {
+        await this.queue.add("initiatePayin", { payinId: id });
+        await this.queue.add("postProcessPayin", { payinId: id, newStatus: "OK" });
+        await this.queue.add("settle", {});
+      }
+    }
+
+    @Processor(PayinsDef, { blockTimeout: 10, lockDuration: 200 })
+    class PayinsProcessor {
+      @On("initiatePayin")
+      onInitiate(job: JobOf<typeof PayinsDef, "initiatePayin">) {
+        processed.push({ name: "initiatePayin", data: job.data });
+      }
+      @On("postProcessPayin")
+      onPost(job: JobOf<typeof PayinsDef, "postProcessPayin">) {
+        processed.push({ name: "postProcessPayin", data: job.data });
+      }
+      @On("settle")
+      onSettle(_job: Job) {
+        processed.push({ name: "settle", data: null });
+      }
+    }
+
+    const ctx = await TechneFactory.createApplicationContext({
+      plugins: [mq({ queues: [PayinsDef] })],
+      providers: [Producer, PayinsProcessor],
+      logger: false,
+    });
+    closers.push(() => ctx.close());
+
+    const producer = ctx.get<Producer>(Producer);
+    await producer.kickoff("pi_42");
+    await sleep(60);
+
+    const names = processed.map((p) => p.name).sort();
+    expect(names).toEqual(["initiatePayin", "postProcessPayin", "settle"]);
+  });
+
+  test("defineQueue(class) defaults the queue name to the class's runtime name", () => {
+    class NotificationsQueue {
+      ping(_: { id: number }) {}
+    }
+    const def = defineQueue(NotificationsQueue);
+    expect(def.name).toBe("NotificationsQueue");
+    expect(Object.keys(def.jobs)).toEqual(["ping"]);
+  });
+
+  test("queue bag throws a clear error for unregistered queues", async () => {
+    @Injectable()
+    class BadConsumer {
+      constructor(
+        @InjectQueue([] as readonly any[])
+        readonly queues: Record<string, Queue>,
+      ) {}
+    }
+
+    const ctx = await TechneFactory.createApplicationContext({
+      plugins: [mq({ queues: [] })],
+      providers: [BadConsumer],
+      logger: false,
+    });
+    closers.push(() => ctx.close());
+
+    const consumer = ctx.get<BadConsumer>(BadConsumer);
+    expect(() => consumer.queues["missing"]).toThrow(/not registered/);
+  });
+
   test("@MqProcess takes precedence over handle()", async () => {
     const welcomed: any[] = [];
     const handled: any[] = [];

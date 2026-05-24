@@ -15,3 +15,8 @@ export * from "./decorators/inject-mq.decorator";
 export * from "./decorators/mq-processor.decorator";
 export * from "./decorators/mq-process.decorator";
 export * from "./decorators/queue.decorator";
+export * from "./define-queue";
+export * from "./queue-bag";
+export * from "./decorators/processor.decorator";
+export * from "./decorators/on.decorator";
+export * from "./decorators/inject-queue.decorator";
