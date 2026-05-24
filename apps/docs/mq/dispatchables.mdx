@@ -1,0 +1,161 @@
+---
+title: "Dispatchables"
+description: "Dispatchable base class, @Queueable, the fluent PendingDispatch builder, and class-level defaults."
+---
+
+A **Dispatchable** is one job per class. The class owns its payload type,
+points at a queue contract, and implements `handle(payload)`. Dispatching is
+a single statement.
+
+## The pattern
+
+```ts
+import { Dispatchable, Queueable } from "@kaonashi-dev/techne/mq";
+
+@Queueable()
+class InitiatePayin extends Dispatchable<{ payinId: string }> {
+  static queue = PayinsQueueDef;
+  static jobName = "initiate-payin";        // optional; defaults to class name
+
+  constructor(private readonly exec: CoPayinsExecutionService) {
+    super();
+  }
+
+  async handle({ payinId }: { payinId: string }) {
+    await this.exec.initiatePayin(payinId);
+  }
+}
+
+// Register as a normal provider:
+await TechneFactory.create({
+  plugins: [mq({ queues: [PayinsQueueDef] })],
+  providers: [InitiatePayin],
+});
+
+// Dispatch from anywhere:
+await InitiatePayin.dispatch({ payinId: "pi_123" })
+  .delay(60_000)
+  .tries(3);
+```
+
+**`@Queueable()`** applies `@Injectable()` (so the container DI-resolves
+constructor dependencies) and stamps an internal marker so `MqRegistry`
+discovers the class during provider scan.
+
+**`static queue`** is required. **`static jobName`** is optional — defaults
+to the class name.
+
+## Fluent dispatch — `PendingDispatch`
+
+Every dispatch entry point returns a `PendingDispatch` builder. Awaiting it
+enqueues. Chain methods refine the options first.
+
+```ts
+await InitiatePayin.dispatch({ payinId })
+  .onQueue("payins-priority")     // override destination queue
+  .delay(60_000)                   // ms
+  .tries(5)                        // max attempts
+  .backoff([10_000, 30_000, 60_000])
+  .timeout(120_000)                // ms
+  .withId("idempotency-key-1")     // driver-level dedupe
+  .dispatchIf(condition)           // skip if false
+  .dispatchUnless(condition);      // skip if true
+```
+
+### Inline execution — `.dispatchSync()`
+
+Run the handler in-process without going through the driver. Useful for
+tests and explicit "do this now" call sites.
+
+```ts
+const result = await InitiatePayin.dispatchSync({ payinId: "pi_test" });
+//    ^ instance.handle() ran synchronously; no enqueue happened
+```
+
+Requires the Dispatchable to be registered as a provider — the registry wires
+a sync handler at the same time it spins up the worker.
+
+### Conditional dispatch
+
+```ts
+await InitiatePayin.dispatchIf(user.optedIn, { payinId });   // shorthand
+await InitiatePayin.dispatchUnless(skip, { payinId });
+```
+
+## Class-level defaults
+
+Declare the job's retry/timeout/queue policy once on the class, override
+per-call as needed.
+
+```ts
+import { Tries, Backoff, Timeout, OnQueue } from "@kaonashi-dev/techne/mq";
+
+@Queueable()
+@Tries(3)
+@Backoff([10_000, 30_000, 60_000])
+@Timeout(120_000)
+@OnQueue("payins-priority")           // dispatch-time queue override
+class InitiatePayin extends Dispatchable<{ payinId: string }> {
+  static queue = PayinsQueueDef;
+  async handle({ payinId }) { /* … */ }
+}
+
+await InitiatePayin.dispatch({ payinId });             // tries=3, backoff applied
+await InitiatePayin.dispatch({ payinId }).tries(5);    // per-call wins → tries=5
+```
+
+| Decorator | Effect |
+|---|---|
+| `@Tries(n)` | Default `attempts`. Per-call `.tries()` overrides. |
+| `@Backoff(number \| number[] \| BackoffOptions)` | Default backoff strategy. |
+| `@Timeout(ms)` | Default per-job timeout. |
+| `@OnQueue(name)` | Routes dispatches from this class to `name` instead of `static queue.name`. |
+
+Per-call methods on the builder **overwrite** rather than merge — predictable.
+
+## Dispatching outside an HTTP request
+
+The dispatcher reads from a module-level context set during `mq()` plugin
+setup. Any code running after `bootstrap()` can dispatch — controllers,
+workers, scheduled jobs, scripts. No DI ceremony required.
+
+```ts
+// CLI script, after bootstrap:
+await SendDailyReport.dispatch();
+```
+
+For tests, use `withDispatcherContext(resolver, fn)` to install a temporary
+resolver. See [Testing](#testing) below.
+
+## Testing
+
+Isolate dispatch in tests without spinning up the whole app:
+
+```ts
+import { withDispatcherContext } from "@kaonashi-dev/techne/mq";
+
+test("emits one job", async () => {
+  const enqueued: any[] = [];
+  await withDispatcherContext(
+    () => ({ add: async (name, data) => { enqueued.push({ name, data }); return {}; } } as any),
+    async () => {
+      await InitiatePayin.dispatch({ payinId: "pi_test" });
+    },
+  );
+  expect(enqueued).toEqual([{ name: "initiate-payin", data: { payinId: "pi_test" } }]);
+});
+```
+
+For unit-level handler tests, `await Job.dispatchSync(payload)` runs
+`handle()` directly so you can assert side effects in-process.
+
+## Gotchas
+
+- **An un-awaited `PendingDispatch` is a no-op.** Always `await`. There is no
+  lint rule for this today; it's the most common footgun.
+- **`@Queueable()` is required on Dispatchable subclasses.** Without it,
+  TypeScript can't emit `design:paramtypes` for the constructor, and the
+  DI container can't inject dependencies.
+- **`static queue` must reference a `QueueDef`** that's registered with
+  `mq({ queues: [...] })`. The plugin throws on startup if a Dispatchable
+  references an unregistered queue.

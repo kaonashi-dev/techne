@@ -1,0 +1,99 @@
+---
+title: "Failure lifecycle"
+description: "failed() method on Dispatchable and @OnFailure on Processor — runs after the final retry."
+---
+
+When a job exhausts its retries, `MqRegistry` fires a per-job failure hook
+so you can run cleanup, notify ops, or push to a DLQ. Two surfaces, one
+mechanism.
+
+## On a `Dispatchable` — `failed()` method
+
+```ts
+@Queueable()
+class InitiatePayin extends Dispatchable<{ payinId: string }> {
+  static queue = PayinsQueueDef;
+
+  async handle({ payinId }: { payinId: string }) {
+    await this.exec.initiatePayin(payinId);
+  }
+
+  async failed({ payinId }: { payinId: string }, error: Error) {
+    // Final attempt failed. Cleanup goes here.
+    await this.payinsDao.markFailed(payinId, error.message);
+    await NotifyOps.dispatch({ event: "payin-final-failure", payinId });
+  }
+}
+```
+
+The method is optional. When present, the registry resolves the same
+DI-injected instance and invokes `failed(payload, error)` once.
+
+## On a `@Processor` — `@OnFailure(jobName)`
+
+```ts
+import { OnFailure } from "@kaonashi-dev/techne/mq";
+
+@Processor(PayinsQueueDef)
+class PayinsProcessor {
+  @On("initiate-payin")
+  init(job: Job<{ payinId: string }>) { /* … */ }
+
+  @OnFailure("initiate-payin")
+  async onInitiateFailed(payload: { payinId: string }, error: Error) {
+    await this.payinsDao.markFailed(payload.payinId, error.message);
+  }
+}
+```
+
+Bind a method by job name. Receives `(payload, error)` — note this is the
+raw payload, not a runtime `Job` wrapper.
+
+## When does it fire?
+
+Only when **all retries are exhausted**. Intermediate failures during retry
+do NOT trigger the hook — those go through the worker's normal retry path.
+
+Worker emits `failed` → registry inspects `job.state === "failed"` → fires
+the hook.
+
+## Error handling inside the hook
+
+Exceptions thrown by `failed()` or `@OnFailure` methods are caught and
+logged via `console.error`. They do **not** re-enter the retry loop —
+the job stays in the failed state.
+
+If your failure handler can itself fail in interesting ways (e.g., a
+notification API is down), dispatch a separate job for it rather than doing
+the work inline:
+
+```ts
+async failed(payload, error) {
+  // Don't await; let the dispatch retry on its own queue.
+  NotifyOps.dispatch({ event: "payin-failed", payload, error: error.message });
+}
+```
+
+## Duplicate-handler guard
+
+A startup error is raised if the same `(queueName, jobName)` has both a
+`Dispatchable.failed()` method AND an `@OnFailure(jobName)` handler.
+Pick one mechanism per job.
+
+## Pairing with retries
+
+The hook fires after retries are exhausted, so the retry policy controls
+how soon it runs:
+
+```ts
+@Queueable()
+@Tries(5)                                       // 5 attempts before failed() fires
+@Backoff([1_000, 5_000, 30_000, 60_000])
+class InitiatePayin extends Dispatchable<...> {
+  async handle(payload) { /* … */ }
+  async failed(payload, error) { /* … */ }     // runs after 5th attempt fails
+}
+```
+
+See [Dispatchables → class-level defaults](/mq/dispatchables#class-level-defaults)
+for the full retry knobs.

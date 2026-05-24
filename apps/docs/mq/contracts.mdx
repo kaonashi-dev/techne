@@ -1,0 +1,143 @@
+---
+title: "Contracts"
+description: "defineQueue, defineQueueBag, and the typed .dispatchers map."
+---
+
+A **queue contract** is the single source of truth for a queue's name and the
+shape of each job payload. Producers and consumers both reference the
+contract — rename a job name in one place and TypeScript surfaces every
+caller that needs updating.
+
+## `defineQueue`
+
+Two forms, same return shape.
+
+### Object form (explicit job map)
+
+```ts
+import { defineQueue } from "@kaonashi-dev/techne/mq";
+
+export const PayinsQueueDef = defineQueue({
+  name: "payins",
+  jobs: {
+    "initiate-payin":         {} as { payinId: string },
+    "post-process-payin":     {} as { payinId: string; newStatus: string },
+    "payin-expiration-check": {} as { payinId: string },
+    "settle-payins":          {} as Record<string, never>,
+  },
+});
+```
+
+### Class form (methods become job names)
+
+```ts
+class PayinsQueue {
+  initiatePayin(_: { payinId: string }) {}
+  postProcessPayin(_: { payinId: string; newStatus: string }) {}
+  payinExpirationCheck(_: { payinId: string }) {}
+  settle() {}                    // no payload → Record<string, never>
+}
+
+export const PayinsQueueDef = defineQueue(PayinsQueue, { name: "payins" });
+// queue name = "payins" (override) — defaults to "PayinsQueue" if omitted.
+// jobs = { initiatePayin, postProcessPayin, payinExpirationCheck, settle }
+```
+
+Method bodies don't run; they only carry the parameter type. Method names
+become job names verbatim — use the object form if you need kebab-cased job
+names.
+
+## Registering with the `mq()` plugin
+
+```ts
+import { mq } from "@kaonashi-dev/techne/mq";
+
+await TechneFactory.create({
+  plugins: [mq({ queues: [PayinsQueueDef, AlertsQueueDef] })],
+  providers: [...],
+});
+```
+
+The plugin auto-registers each queue's DI token and starts a worker per queue.
+
+## The `.dispatchers` map
+
+Every `QueueDef` exposes a per-job-name dispatcher map, typed from its job
+list. No new class hierarchy needed:
+
+```ts
+const { initiatePayin, settle } = PayinsQueueDef.dispatchers;
+
+await initiatePayin({ payinId: "pi_123" })
+  .delay(60_000)
+  .tries(3);
+
+await settle().onQueue("payins-priority");
+```
+
+Each entry returns a `PendingDispatch` builder — see
+[Dispatchables](/mq/dispatchables) for the full fluent surface
+(`.delay`, `.tries`, `.backoff`, `.timeout`, `.withId`, `.dispatchSync`,
+`.dispatchIf`, `.dispatchUnless`, `.afterResponse`).
+
+## Bags — group queues under user-chosen keys
+
+`defineQueueBag` collects related queues into a single injectable bag.
+Useful when one provider needs to dispatch into several queues.
+
+```ts
+import { defineQueueBag, InjectQueue, type BagOf } from "@kaonashi-dev/techne/mq";
+
+export const AppQueues = defineQueueBag({
+  payins:  PayinsQueueDef,
+  alerts:  AlertsQueueDef,
+  reports: ReportsQueueDef,
+});
+
+@Injectable()
+class OrchestratorService {
+  constructor(
+    @InjectQueue(AppQueues)
+    private readonly queues: BagOf<typeof AppQueues>,
+  ) {}
+
+  async kickoff(payinId: string) {
+    await this.queues.payins.add("initiate-payin", { payinId });
+    await this.queues.alerts.add("warn", { msg: "started" });
+  }
+}
+
+await TechneFactory.create({
+  plugins: [mq({ queues: [AppQueues] })],   // auto-registers all 3 queues
+  providers: [OrchestratorService],
+});
+```
+
+Keys (`payins`, `alerts`, `reports`) are yours to pick — always valid
+identifiers, never hyphenated, dot-accessible without bracket notation.
+
+## Injecting one queue
+
+For single-queue injection, `@InjectQueue` accepts a def, a name, or a list:
+
+```ts
+import { InjectQueue, type QueueOf } from "@kaonashi-dev/techne/mq";
+
+// (a) one def, typed
+constructor(
+  @InjectQueue(PayinsQueueDef)
+  private readonly q: QueueOf<typeof PayinsQueueDef>,
+) {}
+
+// (b) raw name (back-compat)
+constructor(@InjectQueue("legacy") private readonly q: Queue) {}
+```
+
+## Types reference
+
+| Helper | What it gives you |
+|---|---|
+| `QueueOf<typeof def>` | Typed `add(name, data)` for a single queue. |
+| `JobOf<typeof def, "name">` | Runtime `Job<payload>` for a specific job. |
+| `BagOf<typeof bag>` | `{ [userKey]: QueueOf<def> }` for a bag. |
+| `QueueBagOf<[typeof a, typeof b]>` | `{ [def.name]: QueueOf<def> }` for an ad-hoc list. |

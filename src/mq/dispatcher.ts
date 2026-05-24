@@ -177,9 +177,7 @@ export async function dispatchToQueue<T>(
   uniqueOptions?: DispatchUniqueOptions,
 ): Promise<unknown> {
   if (uniqueOptions && activeDriver) {
-    const keyStr = uniqueOptions.key
-      ? uniqueOptions.key(payload)
-      : JSON.stringify(payload);
+    const keyStr = uniqueOptions.key ? uniqueOptions.key(payload) : JSON.stringify(payload);
     const lockKey = `${queueName}:${jobName}:${keyStr}`;
     const acquired = await activeDriver.acquireUniqueLock(lockKey, uniqueOptions.for);
     if (!acquired) {
@@ -204,9 +202,7 @@ export async function dispatchToQueue<T>(
 }
 
 /** Helper that the mq plugin uses to wire its container-based resolver. */
-export function createResolverFromContainer(
-  resolve: (token: unknown) => unknown,
-): QueueResolver {
+export function createResolverFromContainer(resolve: (token: unknown) => unknown): QueueResolver {
   return (queueName: string) => {
     const queue = resolve(getMqToken(queueName)) as Queue | undefined;
     if (!queue) {

@@ -1,79 +1,112 @@
 ---
 title: "Processors"
-description: "@Queue, @MqProcessor, @MqProcess, and @InjectMq turn a class into a typed queue worker."
+description: "@Processor + @On for grouping handlers in one class. The contract-API counterpart to Dispatchables."
 ---
 
-A processor is an `@Injectable()` class decorated with `@Queue(name)`.
-The simplest case is a single `handle()` method — no method decorator required.
+The **processor style** keeps all handlers for a queue in one class.
+Decorators bind methods to job names. It's the equivalent of the
+[Dispatchable](/mq/dispatchables) style for codebases that prefer fewer
+files and more methods per class.
+
+## The pattern
+
+```ts
+import { Processor, On, type Job } from "@kaonashi-dev/techne/mq";
+
+@Processor(PayinsQueueDef)
+class PayinsProcessor {
+  constructor(
+    private readonly execution: CoPayinsExecutionService,
+    private readonly payinsDao: PayinsDao,
+  ) {}
+
+  @On("initiate-payin")
+  init(job: Job<{ payinId: string }>) {
+    return this.execution.initiatePayin(job.data.payinId);
+  }
+
+  @On("payin-expiration-check")
+  async checkExpiration(job: Job<{ payinId: string }>) {
+    /* … */
+  }
+}
+
+await TechneFactory.create({
+  plugins: [mq({ queues: [PayinsQueueDef] })],
+  providers: [PayinsProcessor],
+});
+```
+
+**`@Processor(def)`** binds the class to a `QueueDef`. **`@On(name)`** binds
+a method to a job name on that queue.
+
+## Typed `@On` with `onFor(def)`
+
+For full type safety against the queue's job names (typo → TS error), use
+the typed factory:
+
+```ts
+import { onFor, type JobOf } from "@kaonashi-dev/techne/mq";
+
+const PayinsOn = onFor(PayinsQueueDef);
+
+@Processor(PayinsQueueDef)
+class PayinsProcessor {
+  @PayinsOn("initiate-payin")           // ✓ TS-checked against the def
+  init(job: JobOf<typeof PayinsQueueDef, "initiate-payin">) { /* … */ }
+
+  @PayinsOn("not-a-real-job")           // ✗ TS error
+  bad() {}
+}
+```
+
+## Dispatching to a `@Processor`
+
+The contract-API dispatchers map is what producers use:
+
+```ts
+const { initiatePayin } = PayinsQueueDef.dispatchers;
+
+await initiatePayin({ payinId }).delay(60_000).tries(3);
+```
+
+See [Contracts](/mq/contracts#the-dispatchers-map) for the full surface.
+
+## Auto `handle()` fallback
+
+For single-job-type queues, you can skip `@On` and write a `handle()`
+method — it's auto-registered as the default for any job name on the queue.
 
 ```ts
 import { Queue } from "@kaonashi-dev/techne/mq";
-import type { MqQueue, Job } from "@kaonashi-dev/techne/mq";
 
 @Queue("emails")
 class EmailProcessor {
-  // Auto-registered as the default handler for any job on this queue.
-  async handle(job: Job<{ to: string; subject: string }>) {
+  async handle(job: Job<{ to: string }>) {
     await sendEmail(job.data);
-    return { sent: true };
   }
 }
 ```
 
-Register the processor through your feature's `providers` (or the `providers`
-array on `TechneFactory.create()`) and declare the queue through the `mq()`
-plugin — see [MQ overview](/mq/overview).
+`@Queue(name)` is an alias for `@Processor`/`@MqProcessor`. If both `@On(name)`
+handlers and `handle()` exist, named handlers win.
 
-## Per-job-name dispatch
+## When to use Processors vs Dispatchables
 
-Use `@MqProcess(jobName)` to route specific job names to dedicated methods.
-When a named handler exists it always takes precedence over `handle()`.
+| | Processor | Dispatchable |
+|---|---|---|
+| Handlers per class | Many | One |
+| File count | Fewer | More |
+| Pairs naturally with | Contract API + dispatchers map | Class-level decorators (`@Tries`, `@Backoff`, etc.) |
+| Failure lifecycle | `@OnFailure(name)` | `failed()` method |
+| Per-job middleware | (not directly — wrap the body manually) | `middleware()` method |
 
-```ts
-import { Queue, MqProcess } from "@kaonashi-dev/techne/mq";
-import type { Job } from "@kaonashi-dev/techne/mq";
+Both styles coexist on the same queue, **but each job name must have
+exactly one handler**. Duplicates throw at startup.
 
-@Queue("emails")
-class EmailProcessor {
-  @MqProcess("welcome")
-  async sendWelcome(job: Job<{ to: string }>) {
-    await sendWelcomeEmail(job.data);
-  }
+## Legacy aliases
 
-  @MqProcess("reset")
-  async sendReset(job: Job<{ to: string; token: string }>) {
-    await sendPasswordReset(job.data);
-  }
-
-  // Falls through here for any job name not matched above.
-  async handle(job: Job) {
-    console.warn("Unhandled email job:", job.name);
-  }
-}
-```
-
-## Publishing
-
-Inject the typed queue into any provider with `@InjectMq(name)`:
-
-```ts
-import { InjectMq } from "@kaonashi-dev/techne/mq";
-import type { MqQueue } from "@kaonashi-dev/techne/mq";
-
-@Injectable()
-export class UsersService {
-  constructor(@InjectMq("emails") private readonly emails: MqQueue<{ to: string }>) {}
-
-  async signup(input: SignupInput) {
-    const user = await this.repo.create(input);
-    await this.emails.add("welcome", { to: user.email });
-    return user;
-  }
-}
-```
-
-## `@MqProcessor` — the lower-level alias
-
-`@Queue` is an alias for `@MqProcessor`. Both apply the same metadata and are
-interchangeable. Use `@MqProcessor` when you want to be explicit that a class
-is a low-level processor rather than a domain-layer queue handler.
+`@MqProcessor(name)`, `@MqProcess(jobName)`, and `@InjectMq(name)` are the
+older, string-keyed forms. Functionally equivalent — the new decorators are
+thin wrappers. Prefer `@Processor(def)`, `@On(name)`, and `@InjectQueue(def)`
+because they're tied to the typed `QueueDef`.

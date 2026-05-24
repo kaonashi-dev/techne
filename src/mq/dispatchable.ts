@@ -142,9 +142,7 @@ function buildPendingDispatch<C extends DispatchableConstructor<unknown, unknown
   payload: unknown,
 ): PendingDispatch<PayloadOf<C>, ResultOf<C>> {
   if (!cls.queue) {
-    throw new TypeError(
-      `${cls.name}.dispatch(): missing 'static queue' — point it at a QueueDef.`,
-    );
+    throw new TypeError(`${cls.name}.dispatch(): missing 'static queue' — point it at a QueueDef.`);
   }
 
   const options: JobsOptions & { timeout?: number } = {};
@@ -199,7 +197,9 @@ type PayloadOf<C> = C extends DispatchableConstructor<infer P, unknown> ? P : ne
 type ResultOf<C> = C extends DispatchableConstructor<unknown, infer R> ? R : never;
 type PayloadArgs<C> = PayloadOf<C> extends void ? [] : [payload: PayloadOf<C>];
 
-export function isDispatchableClass(value: unknown): value is DispatchableConstructor<unknown, unknown> {
+export function isDispatchableClass(
+  value: unknown,
+): value is DispatchableConstructor<unknown, unknown> {
   return (
     typeof value === "function" &&
     (value as { [DISPATCHABLE_MARKER]?: unknown })[DISPATCHABLE_MARKER] === true

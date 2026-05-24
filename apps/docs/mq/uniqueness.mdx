@@ -1,0 +1,115 @@
+---
+title: "Uniqueness"
+description: "@Unique and @UniqueUntilProcessing enforce at-most-one-in-flight by payload key."
+---
+
+Apply `@Unique` to a `Dispatchable` to prevent the same logical job from
+being queued more than once within a TTL window. A duplicate dispatch is
+silently dropped (or throws, configurable).
+
+## `@Unique`
+
+```ts
+import { Unique } from "@kaonashi-dev/techne/mq";
+
+@Queueable()
+@Unique({ for: 60_000 })                      // TTL in ms
+class SendWelcomeEmail extends Dispatchable<{ userId: string }> {
+  static queue = NotificationsQueueDef;
+  async handle({ userId }) { /* … */ }
+}
+
+await SendWelcomeEmail.dispatch({ userId: "u1" });   // enqueues
+await SendWelcomeEmail.dispatch({ userId: "u1" });   // dropped — same key, lock held
+```
+
+The lock is acquired at **dispatch time** and released when the job
+completes or permanently fails.
+
+## Custom key
+
+By default the dedup key is `JSON.stringify(payload)`. Pass `key` to compute
+a more specific identifier:
+
+```ts
+@Queueable()
+@Unique({ for: 60_000, key: (p) => p.userId })
+class GenerateMonthlyReport extends Dispatchable<{ userId: string; month: string }> {
+  static queue = ReportsQueueDef;
+  async handle({ userId, month }) { /* … */ }
+}
+
+// Both dispatches dedupe on userId alone — the second is dropped:
+await GenerateMonthlyReport.dispatch({ userId: "u1", month: "2026-04" });
+await GenerateMonthlyReport.dispatch({ userId: "u1", month: "2026-05" });
+```
+
+## Throw on duplicate
+
+```ts
+@Unique({ for: 60_000, throwIfLocked: true })
+class …
+```
+
+Now a duplicate dispatch throws `JobNotUniqueError` instead of silently
+dropping. Useful when the caller needs to react to "already in flight".
+
+## `@UniqueUntilProcessing`
+
+The lock is released as soon as the worker **claims** the job (before
+`handle()` runs) rather than when it completes. Allows a fresh dispatch to
+be enqueued while the previous execution is still in progress.
+
+```ts
+import { UniqueUntilProcessing } from "@kaonashi-dev/techne/mq";
+
+@Queueable()
+@UniqueUntilProcessing({ for: 30_000 })
+class SyncInventory extends Dispatchable<void> {
+  static queue = InventoryQueueDef;
+  async handle() { /* long-running */ }
+}
+```
+
+Use this when you want "no two enqueued at once" but it's fine to enqueue
+a fresh one while the previous one is still processing.
+
+## How it works
+
+- `dispatchToQueue` computes
+  `lockKey = ${queueName}:${jobName}:${keyFn(payload)}`.
+- Calls `driver.acquireUniqueLock(lockKey, ttlMs)`.
+- On `true`: proceeds with normal enqueue, persists `lockKey` on the job's
+  `JobsOptions` so the worker knows what to release.
+- On `false`: drops (or throws `JobNotUniqueError`).
+- Worker releases the lock on completion / failure. For `untilProcessing`
+  mode, the release happens on dequeue (before `handle()`).
+
+## Driver interface
+
+```ts
+interface QueueDriver {
+  acquireUniqueLock(lockKey: string, ttlMs: number): Promise<boolean>;
+  releaseUniqueLock(lockKey: string): Promise<void>;
+}
+```
+
+- **Memory driver**: `Map<lockKey, expireAt>` with lazy expiration.
+- **Redis driver**: `SET lockKey 1 NX PX ttlMs` — single round-trip,
+  atomic.
+
+## Pitfalls
+
+- **`for` is milliseconds**, not seconds. Easy to misread — pick a TTL
+  longer than the maximum expected job duration + total retry-backoff
+  budget.
+- **`JSON.stringify` default key is forgiving**. Two dispatches with
+  identical payloads dedupe even if you didn't mean them to. Always pass
+  an explicit `key` when the payload might vary in inert fields (timestamps,
+  request IDs).
+- **Lock release on crash** — Redis locks expire naturally via `PX`. Memory
+  locks evict lazily. Either way, a worker crash mid-job releases the lock
+  on TTL expiry, not immediately.
+- **Not a primary-key constraint** — uniqueness is best-effort across the
+  TTL window, not a guarantee about job inputs. If you need strong
+  exactly-once semantics, combine with idempotency keys in your handler.

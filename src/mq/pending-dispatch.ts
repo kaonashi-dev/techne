@@ -1,4 +1,9 @@
-import { dispatchToQueue, getDeferredBuffer, getDispatcherContext, type DispatchUniqueOptions } from "./dispatcher";
+import {
+  dispatchToQueue,
+  getDeferredBuffer,
+  getDispatcherContext,
+  type DispatchUniqueOptions,
+} from "./dispatcher";
 import type { BackoffOptions, ChainStepSpec, JobsOptions } from "./types";
 
 /**
@@ -46,9 +51,10 @@ interface PendingDispatchInit<TPayload, TResult> {
  * `await`ed (or `.then`ed). An un-awaited builder is a no-op; treat that
  * as a usage bug and surface via lint.
  */
-export class PendingDispatch<TPayload = unknown, TResult = unknown>
-  implements PromiseLike<unknown>
-{
+export class PendingDispatch<
+  TPayload = unknown,
+  TResult = unknown,
+> implements PromiseLike<unknown> {
   private queueName: string;
   private readonly jobName: string;
   private readonly payload: TPayload;
@@ -184,7 +190,13 @@ export class PendingDispatch<TPayload = unknown, TResult = unknown>
     const promise =
       this._parked || !this.enabled
         ? Promise.resolve(undefined)
-        : dispatchToQueue(this.queueName, this.jobName, this.payload, this.options, this.uniqueOptions);
+        : dispatchToQueue(
+            this.queueName,
+            this.jobName,
+            this.payload,
+            this.options,
+            this.uniqueOptions,
+          );
     return promise.then(onFulfilled, onRejected);
   }
 }

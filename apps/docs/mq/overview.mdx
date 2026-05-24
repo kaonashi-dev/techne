@@ -1,69 +1,96 @@
 ---
 title: "MQ overview"
-description: "BullMQ-style queues and workers under @kaonashi-dev/techne/mq."
+description: "Typed queues, fluent dispatch, chains, batches, uniqueness, and middleware under @kaonashi-dev/techne/mq."
 ---
 
-Queue utilities live under `./mq`. The legacy `./queue` subpath remains as a
-temporary core-only compatibility layer that re-exports the same primitives.
+The MQ module gives you typed queue contracts, two styles of dispatching, and
+a full set of Laravel-grade primitives (chains, batches, uniqueness, per-job
+middleware, deferred dispatch) on top of pluggable drivers.
 
-## Quick start
-
-Declare a queue in the `mq()` plugin, write a processor class with a `handle()`
-method, and register it as a provider:
+## Quick start — the Dispatchable class
 
 ```ts
-import { Queue } from "@kaonashi-dev/techne/mq";
-import type { Job } from "@kaonashi-dev/techne/mq";
+import { Dispatchable, Queueable, defineQueue, mq } from "@kaonashi-dev/techne/mq";
+import { TechneFactory } from "@kaonashi-dev/techne";
 
-@Queue("emails")
-class EmailProcessor {
-  async handle(job: Job<{ to: string }>) {
-    await sendEmail(job.data);
-    return { sent: true };
+export const EmailsQueueDef = defineQueue({
+  name: "emails",
+  jobs: { sendWelcome: {} as { to: string } },
+});
+
+@Queueable()
+class SendWelcome extends Dispatchable<{ to: string }> {
+  static queue = EmailsQueueDef;
+  async handle({ to }: { to: string }) {
+    await sendWelcomeEmail(to);
   }
 }
 
 const app = await TechneFactory.create({
-  plugins: [mq({ queues: [{ name: "emails" }] })],
-  providers: [EmailProcessor],
+  plugins: [mq({ queues: [EmailsQueueDef] })],
+  providers: [SendWelcome],
 });
+
+// Dispatch from anywhere — single statement, fully typed:
+await SendWelcome.dispatch({ to: "alice@example.com" })
+  .delay(60_000)
+  .tries(3);
 ```
 
-## Framework integration
+That's the whole minimum loop: declare the queue contract, mark the job class
+with `@Queueable()`, dispatch with the fluent builder.
 
-The `mq()` plugin wires up DI tokens and starts workers for every declared
-queue. Processors are auto-discovered from the `providers` array.
+## Two styles, one core
 
-```ts
-import { mq } from "@kaonashi-dev/techne/mq";
+Pick the style that fits your codebase. They interoperate freely.
 
-const app = await TechneFactory.create({
-  plugins: [mq({ queues: [{ name: "emails" }, { name: "notifications" }] })],
-  providers: [EmailProcessor, NotificationsProcessor],
-});
-```
+| Style | When to use | Pages |
+|---|---|---|
+| **Dispatchable class** (Laravel-style) | One class per job. Co-locates payload type, queue, and handler body. | [Dispatchables](/mq/dispatchables) |
+| **Contract API** (`@Processor` + `@On`) | Multiple handlers grouped in one processor class. Mirrors NestJS patterns. | [Contracts](/mq/contracts), [Processors](/mq/processors) |
+
+Both share the same fluent dispatch builder, the same lifecycle hooks, the
+same chain/batch/uniqueness/middleware primitives, and the same drivers.
+
+## What's in the box
+
+- **[Contracts](/mq/contracts)** — `defineQueue`, `defineQueueBag`, the
+  typed `.dispatchers` map.
+- **[Dispatchables](/mq/dispatchables)** — `Dispatchable` base class,
+  `@Queueable`, fluent dispatch, class-level defaults
+  (`@Tries`, `@Backoff`, `@Timeout`, `@OnQueue`).
+- **[Processors](/mq/processors)** — `@Processor` + `@On` for the
+  contract-API style.
+- **[Lifecycle hooks](/mq/lifecycle)** — `failed()` method + `@OnFailure`
+  for cleanup after final retry.
+- **[Chains](/mq/chains)** — sequential pipelines via `chain([...]).dispatch()`.
+- **[Batches](/mq/batches)** — fan-out + barrier callbacks via
+  `batch([...]).then().catch().finally().dispatch()`.
+- **[Uniqueness](/mq/uniqueness)** — at-most-one-in-flight via
+  `@Unique` / `@UniqueUntilProcessing`.
+- **[Job middleware](/mq/middleware)** — `RateLimited`,
+  `WithoutOverlapping`, `ThrottlesExceptions`, plus custom middleware.
+- **[Deferred dispatch](/mq/after-response)** — `dispatchAfterResponse`
+  fires after the HTTP response flushes.
+- **[Drivers](/mq/drivers)** — `MemoryDriver` and `RedisDriver`.
+- **[Deployments](/mq/deployments)** — running HTTP and workers in
+  separate processes.
+- **[Legacy `./queue`](/mq/legacy-queue)** — back-compat barrel for
+  pre-`./mq` code.
 
 ## Low-level usage
 
-You can also create queue instances and workers directly without the plugin:
+You can drive `Queue` and `Worker` directly without the plugin layer when you
+need it (tests, scripts, custom integrations):
 
 ```ts
-import { Worker } from "@kaonashi-dev/techne/mq";
-import { Queue } from "@kaonashi-dev/techne/mq/queue";
+import { Queue, Worker } from "@kaonashi-dev/techne/mq";
 
 const queue = new Queue("reports");
-
 await queue.add("build", { reportId: 1 }, { attempts: 3, backoff: 1000 });
 
 const worker = new Worker(queue, async (job) => {
-  console.log("Processing:", job.name, job.data);
   return { ok: true };
 });
-
 await worker.run();
 ```
-
-See [Processors](/mq/processors) for the full decorator surface,
-[Drivers](/mq/drivers) for the Redis and in-memory backends, and
-[Deployments](/mq/deployments) for running HTTP and workers in separate
-processes.
