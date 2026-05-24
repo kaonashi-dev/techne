@@ -25,6 +25,11 @@ export function clearDriverContext(): void {
   activeDriver = undefined;
 }
 
+/** Read the active driver. Returns `undefined` when called before `mq()` bootstraps (e.g. dispatchSync). */
+export function getDriverContext(): QueueDriver | undefined {
+  return activeDriver;
+}
+
 /**
  * Options controlling job uniqueness. Mirrors the `UniqueOptions` interface
  * on the decorators — duplicated here so `dispatchToQueue` has no decorator dep.
