@@ -1,0 +1,107 @@
+---
+title: "Chains"
+description: "Sequential job pipelines with chain([...]).catch(...).dispatch()."
+---
+
+A **chain** runs jobs one after another — step N+1 starts only after step N
+completes successfully. If any step fails permanently, the chain stops and
+an optional catch handler is dispatched.
+
+## Basic chain
+
+```ts
+import { chain } from "@kaonashi-dev/techne/mq";
+
+await chain([
+  InitiatePayin.dispatch({ payinId }),
+  PostProcessPayin.dispatch({ payinId, newStatus: "OK" }),
+  PublishReceipt.dispatch({ payinId }),
+]).dispatch();
+```
+
+Each element is a `PendingDispatch` — exactly what `Job.dispatch(payload)`
+or `def.dispatchers.x(payload)` returns. The chain *parks* each builder
+internally so awaiting them individually is a no-op; only
+`chain(...).dispatch()` actually enqueues anything.
+
+## Catch handler
+
+Register a job to run if any step in the chain fails permanently (after all
+retries on that step are exhausted). The catch handler receives no special
+context — it's just a normal `PendingDispatch`.
+
+```ts
+await chain([
+  InitiatePayin.dispatch({ payinId }),
+  PostProcessPayin.dispatch({ payinId, newStatus: "OK" }),
+])
+  .catch(NotifyOps.dispatch({ payinId, reason: "chain failed" }))
+  .dispatch();
+```
+
+The chain stops at the failed step — remaining steps are NOT enqueued.
+
+## Per-step options
+
+Each step is its own `PendingDispatch`, so the full fluent surface applies:
+
+```ts
+await chain([
+  InitiatePayin.dispatch({ payinId }).tries(3),
+  PostProcessPayin.dispatch({ payinId, newStatus: "OK" }).delay(60_000),
+  PublishReceipt.dispatch({ payinId }).onQueue("priority"),
+]).dispatch();
+```
+
+## How it works
+
+1. `chain([...])` sets `_parked = true` on every builder so accidental
+   `await` doesn't enqueue.
+2. `.dispatch()` generates a `chainId`, calls
+   `ChainStore.save(chainId, remainingSteps, catchSpec)`, then enqueues
+   step 0 with `__chainId` and `__chainStepIndex` embedded in `JobsOptions`.
+3. On successful completion of any chained job, the registry reads
+   `__chainId`, asks `ChainStore.next(chainId)` for the next step, and
+   enqueues it.
+4. On final failure, the registry asks `ChainStore.catch(chainId)` for the
+   catch handler, dispatches it, then calls `ChainStore.cleanup(chainId)`.
+
+Steps are stored as **pure data** — `{ queueName, jobName, payload, options }`.
+No closures or function references are serialized; the catch handler is
+itself a `PendingDispatch` that carries the same tuple.
+
+## Stores
+
+`ChainStore` is a driver-level primitive with both implementations shipped:
+
+```ts
+interface ChainStore {
+  save(chainId, remainingSteps, catchSpec?): Promise<void>;
+  next(chainId): Promise<ChainStepSpec | null>;
+  catch(chainId): Promise<ChainStepSpec | null>;
+  cleanup(chainId): Promise<void>;
+}
+```
+
+- **`MemoryChainStore`** — in-process `Map<chainId, …>`.
+- **`RedisChainStore`** — single key `chain:{id}` holding a JSON-encoded
+  entry; `DEL` on cleanup.
+
+The `mq()` plugin installs the memory store by default. Swap to the Redis
+store via `setChainStore(new RedisChainStore(client))` after bootstrap if
+you need cross-process persistence.
+
+## Edge cases
+
+- **Empty chain** (`chain([])`) — no-op, returns immediately.
+- **Single-step chain** (`chain([x])`) — bypasses the store; equivalent to
+  awaiting `x` directly.
+- **A step's `failed()` hook** runs *outside* the chain context (the catch
+  handler dispatches independently). It won't re-enter the chain.
+- **Catch handler that itself fails** — its own retry/`failed()` policy
+  applies. The chain is already considered done.
+
+## Pairing with batches
+
+A chain can be one element of a batch and vice-versa — both are just
+`PendingDispatch` producers under the hood. See [Batches](/mq/batches).

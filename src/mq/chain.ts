@@ -55,9 +55,7 @@ export class ChainBuilder {
     const chainId = crypto.randomUUID();
     const store = getChainStore();
     if (!store) {
-      throw new Error(
-        "No ChainStore registered. Is the mq() plugin installed?",
-      );
+      throw new Error("No ChainStore registered. Is the mq() plugin installed?");
     }
 
     await store.save(chainId, specs.slice(1), this._catchSpec);

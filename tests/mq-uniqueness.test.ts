@@ -118,7 +118,9 @@ describe("mq job uniqueness", () => {
 
     // Second dispatch should throw JobNotUniqueError.
     await expect(
-      (async () => { await UniqueThrowJob.dispatch({ userId: "u2" }); })(),
+      (async () => {
+        await UniqueThrowJob.dispatch({ userId: "u2" });
+      })(),
     ).rejects.toBeInstanceOf(JobNotUniqueError);
   });
 
@@ -134,7 +136,9 @@ describe("mq job uniqueness", () => {
 
     // A latch that keeps the job running until we release it.
     let releaseSignal!: () => void;
-    const holdSignal = new Promise<void>((r) => { releaseSignal = r; });
+    const holdSignal = new Promise<void>((r) => {
+      releaseSignal = r;
+    });
     let jobStarted = false;
 
     @UniqueUntilProcessing({ for: 60_000 })

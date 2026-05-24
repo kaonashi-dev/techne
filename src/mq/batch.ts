@@ -107,7 +107,12 @@ export class BatchHandle {
   ) {}
 
   /** Current progress snapshot. */
-  async progress(): Promise<{ total: number; completed: number; failed: number; cancelled: boolean }> {
+  async progress(): Promise<{
+    total: number;
+    completed: number;
+    failed: number;
+    cancelled: boolean;
+  }> {
     const state = await this.store.getState(this.id);
     return state ?? { total: 0, completed: 0, failed: 0, cancelled: false };
   }

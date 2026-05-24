@@ -1,0 +1,105 @@
+---
+title: "Deferred dispatch"
+description: "dispatchAfterResponse fires the job after the HTTP response is flushed."
+---
+
+`dispatchAfterResponse` defers a job until **after** the HTTP response has
+been sent to the client. Use it for fire-and-forget side effects that
+shouldn't add to request latency — analytics, audit trails, push
+notifications.
+
+## Two entry points
+
+### Static on `Dispatchable`
+
+```ts
+import { Dispatchable, Queueable } from "@kaonashi-dev/techne/mq";
+
+@Queueable()
+class ViewedProfile extends Dispatchable<{ userId: string }> {
+  static queue = AnalyticsQueueDef;
+  async handle({ userId }) { /* track event */ }
+}
+
+@Get("/users/:id")
+async show(id: string) {
+  const user = await this.users.findById(id);
+  ViewedProfile.dispatchAfterResponse({ userId: id });   // returns void; no await
+  return user;                                            // response flushes here
+  // ViewedProfile is enqueued AFTER the client gets the response
+}
+```
+
+### Fluent on `PendingDispatch`
+
+Apply fluent options first, then defer:
+
+```ts
+ViewedProfile.dispatch({ userId: id })
+  .delay(5_000)
+  .tries(2)
+  .afterResponse();          // returns void; no await
+```
+
+## How it works
+
+- The `mq()` plugin registers two Elysia hooks:
+  - **`onRequest`** — calls `enterDeferredBuffer()` which sets up a fresh
+    `AsyncLocalStorage`-scoped buffer for the current request.
+  - **`onAfterResponse`** — calls `flushDeferred()` which drains the
+    buffer and `await`s each `PendingDispatch` in declaration order.
+- `dispatchAfterResponse` / `.afterResponse()` push the builder onto the
+  current request's ALS buffer.
+
+So inside an HTTP handler, deferred dispatches accumulate during request
+processing and fire as soon as the response is flushed — outside the
+critical path the user sees.
+
+## Outside an HTTP context
+
+When called from a worker, a CLI command, a test, or anywhere
+`getDeferredBuffer()` returns `undefined`, the dispatch happens
+**immediately** as a fire-and-forget promise. Errors are logged via
+`console.error`, never thrown.
+
+```ts
+// In a CLI script:
+ViewedProfile.dispatchAfterResponse({ userId: "u1" });
+// → starts dispatching immediately; errors logged but not surfaced
+```
+
+## Ordering
+
+Within one request, deferred dispatches flush in the order they were
+registered. They flush **sequentially** (each `await`ed), not in parallel.
+
+```ts
+@Get("/checkout")
+async checkout(req) {
+  TrackOrder.dispatchAfterResponse({ orderId: req.id });           // 1st
+  SendReceipt.dispatchAfterResponse({ orderId: req.id });          // 2nd
+  RefreshDashboard.dispatchAfterResponse({ userId: req.userId });  // 3rd
+  return ok();
+}
+// After response: TrackOrder → SendReceipt → RefreshDashboard, in order.
+```
+
+## Error handling
+
+A deferred dispatch that throws during flush is logged via `console.error`
+and skipped — the next deferred dispatch still runs. We can't surface
+errors after the response has already been sent.
+
+If a deferred dispatch needs durable retry semantics, that's already part
+of the normal queue contract — the job is enqueued with its full
+`PendingDispatch` options including `.tries(...)`, `.backoff(...)`,
+`failed()`, etc.
+
+## When NOT to use
+
+- When the response should **depend** on the dispatch's result. Use `await
+  Job.dispatch(payload)` inline instead.
+- When the dispatch is critical and failure to enqueue must abort the
+  request. Deferred errors are logged, not surfaced.
+- When you're not inside an HTTP request — the fire-and-forget fallback
+  may not be what you want for non-HTTP contexts.

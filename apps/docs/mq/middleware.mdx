@@ -1,0 +1,151 @@
+---
+title: "Job middleware"
+description: "RateLimited, WithoutOverlapping, ThrottlesExceptions, plus custom middleware via the middleware() method."
+---
+
+Wrap a job's handler with composable cross-cutting concerns: rate limiting,
+no-overlap locking, exception throttling. Each is a small class
+implementing `JobMiddleware`.
+
+## The pattern
+
+```ts
+import {
+  Dispatchable, Queueable,
+  RateLimited, WithoutOverlapping, ThrottlesExceptions,
+} from "@kaonashi-dev/techne/mq";
+
+@Queueable()
+class SyncContacts extends Dispatchable<{ userId: string }> {
+  static queue = ContactsQueueDef;
+
+  middleware() {
+    return [
+      new RateLimited("contacts-sync", 10, 60_000),     // 10 per minute
+      new WithoutOverlapping(`contacts:${this.userId}`),
+      new ThrottlesExceptions(5, 60_000),               // 5 errors per minute
+    ];
+  }
+
+  async handle({ userId }) { /* … */ }
+}
+```
+
+`middleware()` is an optional method on any `Dispatchable`. Return the
+middleware list — the registry composes them around your `handle()` call.
+
+## How composition works
+
+Left-to-right: the first middleware in the array is the **outermost**
+wrapper.
+
+```ts
+middleware() {
+  return [A, B, C];        // A wraps B wraps C wraps handle()
+}
+```
+
+A middleware can:
+
+- **Call `next()`** to proceed.
+- **Throw** to fail the job (counts as a failure for retry / `failed()`).
+- **Call `job.release(seconds)`** to release the job back to the queue with
+  a delay. Does not count as a failure — retry counter is unchanged.
+
+## Built-ins
+
+### `RateLimited(name, maxPerWindow?, windowMs?)`
+
+Process-local token bucket. Default `10` per `60_000` ms.
+
+```ts
+new RateLimited("payments", 100, 60_000)   // 100/min for the "payments" bucket
+```
+
+When the bucket is empty the job is released for the remainder of the
+window via `job.release(seconds)`.
+
+**Caveat:** the bucket is in-process. With multiple worker processes you
+will allow `N × processCount` jobs per window. For cluster-wide limits,
+move the bucket to the driver layer (planned follow-up).
+
+### `WithoutOverlapping(key, ttlMs?)`
+
+Acquires a driver-backed lock for `key` before running. Default TTL
+`60_000` ms.
+
+```ts
+new WithoutOverlapping(`process-report:${this.reportId}`, 5 * 60_000)
+```
+
+If the lock is held the job is released for 5 s and retried.
+
+Uses the same `acquireUniqueLock` primitive as
+[Uniqueness](/mq/uniqueness) — it's lock-based, not best-effort, so it
+honors multi-process semantics on the Redis driver.
+
+### `ThrottlesExceptions(maxFailures, decayMs)`
+
+After `maxFailures` exceptions within `decayMs`, further attempts are
+released (re-enqueued with a delay) instead of propagating the error.
+The failure window resets when `decayMs` elapses.
+
+```ts
+new ThrottlesExceptions(3, 60_000)         // 3 errors / minute, then back off
+```
+
+Useful when an external dependency is misbehaving and you want to stop
+hammering it without permanently failing the job.
+
+## Custom middleware
+
+A `JobMiddleware` is anything with this shape:
+
+```ts
+interface JobMiddleware {
+  handle(job: Job, next: () => Promise<unknown>): Promise<unknown>;
+}
+```
+
+```ts
+class LogTiming implements JobMiddleware {
+  async handle(job, next) {
+    const start = Date.now();
+    try {
+      return await next();
+    } finally {
+      console.log(`${job.name} took ${Date.now() - start}ms`);
+    }
+  }
+}
+
+@Queueable()
+class MyJob extends Dispatchable<void> {
+  static queue = MyQueueDef;
+  middleware() { return [new LogTiming()]; }
+  async handle() { /* … */ }
+}
+```
+
+Middleware are **not** DI-resolvable today — you instantiate them in
+`middleware()`. If you need container-injected middleware, file a roadmap
+issue.
+
+## `job.release(seconds)`
+
+The runtime `Job` class exposes a `release(seconds)` method that throws a
+control-flow signal the worker catches. Inside middleware, it stops the
+current attempt without counting as a failure.
+
+```ts
+class HoldUntilTomorrow implements JobMiddleware {
+  handle(job, next) {
+    const tomorrow = nextMidnight() - Date.now();
+    job.release(Math.ceil(tomorrow / 1000));
+    return Promise.resolve();   // unreachable — release() doesn't return
+  }
+}
+```
+
+`release()` is typed `never`. You can call it from outside middleware too
+(inside `handle()`), though it's most useful in middleware composition.

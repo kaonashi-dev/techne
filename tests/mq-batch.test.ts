@@ -287,10 +287,7 @@ describe("mq batch jobs", () => {
       .dispatch();
 
     // Add more jobs — total goes from 1 to 3
-    await handle.addJobs([
-      AddJobsWorkJob.dispatch({ id: 2 }),
-      AddJobsWorkJob.dispatch({ id: 3 }),
-    ]);
+    await handle.addJobs([AddJobsWorkJob.dispatch({ id: 2 }), AddJobsWorkJob.dispatch({ id: 3 })]);
 
     await sleep(500);
 

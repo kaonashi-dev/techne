@@ -1,0 +1,116 @@
+---
+title: "Batches"
+description: "Fan-out + barrier with batch([...]).then().catch().finally().dispatch()."
+---
+
+A **batch** enqueues N jobs in parallel and fires callback jobs when the
+batch as a whole completes. Use it when you need to know that *all* of
+several jobs finished before doing something else.
+
+## Basic batch
+
+```ts
+import { batch } from "@kaonashi-dev/techne/mq";
+
+const handle = await batch([
+  ProcessPodcast.dispatch({ id: 1 }),
+  ProcessPodcast.dispatch({ id: 2 }),
+  ProcessPodcast.dispatch({ id: 3 }),
+])
+  .then(NotifySuccess.dispatch({ event: "all-done" }))
+  .catch(NotifyOps.dispatch({ event: "some-failed" }))
+  .finally(CleanupTemp.dispatch({}))
+  .dispatch();
+```
+
+Returns a `BatchHandle` you can use to inspect or control the batch.
+
+## Callbacks
+
+| Callback | Fires when |
+|---|---|
+| `.then(pd)` | All jobs completed AND `failed === 0`. |
+| `.catch(pd)` | All jobs completed AND `failed > 0`. |
+| `.finally(pd)` | All jobs completed, after `then` or `catch`. |
+
+Each callback is a `PendingDispatch` — a normal job that gets dispatched
+when the barrier fires. They're **not** closures; the batch stores a
+serializable tuple `(queueName, jobName, payload, options)` and the registry
+dispatches it like any other job.
+
+## `BatchHandle`
+
+```ts
+const handle = await batch([...]).dispatch();
+
+await handle.progress();    // { total, completed, failed, cancelled }
+
+await handle.cancel();      // best-effort: in-flight jobs finish; new dequeues skip
+
+await handle.addJobs([
+  ProcessPodcast.dispatch({ id: 4 }),
+  ProcessPodcast.dispatch({ id: 5 }),
+]);
+//      ↑ atomically extends total so the barrier waits for these too
+```
+
+## How it works
+
+1. `.dispatch()` generates a `batchId`, calls
+   `BatchStore.create(batchId, total, callbacks)`.
+2. Each job is enqueued with `__batchId` in its `JobsOptions`.
+3. On completion: `BatchStore.incrementCompleted(batchId)` returns the
+   post-increment snapshot.
+4. On final failure: `BatchStore.incrementFailed(batchId)` does the same.
+5. When `completed + failed === total`, the registry calls
+   `fireBatchCallbacks`:
+   - Dispatches `then` if `failed === 0`, OR `catch` if `failed > 0`.
+   - Dispatches `finally` regardless.
+   - Cleans up the store entry.
+
+`getState(batchId)` powers `handle.progress()`; `isCancelled(batchId)` is
+checked on each dequeue so cancellation is honored without draining
+in-flight workers.
+
+## Stores
+
+```ts
+interface BatchStore {
+  create(batchId, total, callbacks): Promise<void>;
+  incrementCompleted(batchId): Promise<BatchProgress>;
+  incrementFailed(batchId): Promise<BatchProgress>;
+  incrementTotal(batchId, delta): Promise<void>;
+  cancel(batchId): Promise<void>;
+  isCancelled(batchId): Promise<boolean>;
+  getCallbacks(batchId): Promise<BatchCallbacks | null>;
+  getState(batchId): Promise<BatchProgress | null>;
+  cleanup(batchId): Promise<void>;
+}
+```
+
+- **`MemoryBatchStore`** ships and is wired by `mq()` by default.
+- **A Redis-backed `BatchStore` is on the roadmap but not yet shipped.**
+  Apps using `RedisDriver` for queues can still use the memory batch
+  store — they're independent — but batches won't survive a process
+  restart. Track via the MQ ergonomics roadmap.
+
+## Empty batches
+
+`batch([]).dispatch()` fires `then` + `finally` immediately (zero failures,
+zero jobs).
+
+## Pairing with chains
+
+A `chain` and a `batch` are both `PendingDispatch` producers. You can mix
+them — pass a `chain([...])` builder as one element of a `batch([...])`,
+or vice-versa, by `await`ing one inside the other's callback.
+
+## Edge cases
+
+- **`addJobs` after the barrier has fired** — undefined behavior. Throw or
+  silently no-op depending on driver. Avoid by checking `progress()` first.
+- **A callback that itself fails** — its own retry/`failed()` policy
+  applies. The batch is already considered done.
+- **Cancelled batches** — `then`/`catch`/`finally` still fire when the
+  remaining jobs eventually complete (skipped via `isCancelled`). Treat
+  cancellation as "stop dequeueing"; cleanup work belongs in `finally`.

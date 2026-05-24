@@ -190,10 +190,7 @@ describe("mq deferred dispatch (dispatchAfterResponse)", () => {
       // Wait for the flush (which will throw).
       await tick();
 
-      expect(errorSpy).toHaveBeenCalledWith(
-        "[mq] deferred dispatch error",
-        expect.any(Error),
-      );
+      expect(errorSpy).toHaveBeenCalledWith("[mq] deferred dispatch error", expect.any(Error));
     } finally {
       errorSpy.mockRestore();
     }

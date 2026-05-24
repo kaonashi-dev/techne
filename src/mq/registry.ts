@@ -32,10 +32,7 @@ function buildMiddlewareStack(
   job: Job,
   handler: () => Promise<unknown>,
 ): () => Promise<unknown> {
-  return middlewares.reduceRight(
-    (next, mw) => () => mw.handle(job, next),
-    handler,
-  );
+  return middlewares.reduceRight((next, mw) => () => mw.handle(job, next), handler);
 }
 
 export class MqRegistry {

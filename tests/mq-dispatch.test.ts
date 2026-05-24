@@ -39,9 +39,7 @@ describe("mq dispatch (Laravel-style)", () => {
     });
     closers.push(() => ctx.close());
 
-    await Payins.dispatchers.initiatePayin({ payinId: "pi_1" })
-      .delay(0)
-      .tries(2);
+    await Payins.dispatchers.initiatePayin({ payinId: "pi_1" }).delay(0).tries(2);
 
     const queue = ctx.get<any>(`Mq_${Payins.name}`);
     expect(await queue.getJobCounts("waiting")).toEqual({ waiting: 1 });
@@ -235,9 +233,7 @@ describe("mq dispatch (Laravel-style)", () => {
 
     await dispatchToQueue(Payins.name, "initiatePayin", { payinId: "x" });
 
-    expect(captured).toEqual([
-      { q: "core-payins", n: "initiatePayin", data: { payinId: "x" } },
-    ]);
+    expect(captured).toEqual([{ q: "core-payins", n: "initiatePayin", data: { payinId: "x" } }]);
   });
 
   test("PendingDispatch is exported and instanceable", () => {
