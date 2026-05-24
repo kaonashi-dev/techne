@@ -1,4 +1,6 @@
 import { definePlugin } from "../../core/plugins/define-plugin";
+import { clearChainStore, setChainStore } from "../chain-context";
+import { MemoryChainStore } from "../chain-store";
 import {
   isQueueBagDef,
   isQueueDef,
@@ -55,7 +57,11 @@ export function mq(options: MqPluginOptions = {}) {
 
       const resolver = createResolverFromContainer((token) => ctx.resolve(token));
       setDispatcherContext(resolver);
-      ctx.onShutdown(() => clearDispatcherContext());
+      setChainStore(new MemoryChainStore());
+      ctx.onShutdown(() => {
+        clearDispatcherContext();
+        clearChainStore();
+      });
 
       const registered = new Set<string>();
       const bags: QueueBagDef[] = [];
