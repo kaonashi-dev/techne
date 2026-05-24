@@ -1,13 +1,23 @@
 import type { Job } from "./job";
 import { PendingDispatch } from "./pending-dispatch";
 import type { Queue } from "./queue";
-import type { JobsOptions, WorkerOptions } from "./types";
+import type { BackoffOptions, JobsOptions, WorkerOptions } from "./types";
 
 export type JobMap = Record<string, unknown>;
+
+/** Dispatch-time defaults for a single job. Per-call overrides always win. */
+export interface DispatchDefaults {
+  tries?: number;
+  backoff?: number | number[] | BackoffOptions;
+  timeout?: number;
+  onQueue?: string;
+}
 
 export interface QueueDefInput<N extends string, T extends JobMap> {
   name: N;
   jobs: T;
+  /** Per-job dispatch defaults. Keys must match declared job names. */
+  defaults?: { [K in keyof T & string]?: DispatchDefaults };
 }
 
 /**
@@ -156,18 +166,38 @@ export function defineQueue(
     }
     return finalizeQueueDef(name, jobs, options.worker);
   }
-  return finalizeQueueDef(input.name, input.jobs, options.worker);
+  return finalizeQueueDef(input.name, input.jobs, options.worker, input.defaults);
 }
 
-function finalizeQueueDef(name: string, jobs: JobMap, workerOptions?: WorkerOptions): QueueDef {
+function finalizeQueueDef(
+  name: string,
+  jobs: JobMap,
+  workerOptions?: WorkerOptions,
+  defaults?: Record<string, DispatchDefaults | undefined>,
+): QueueDef {
   const dispatchers: Record<string, DispatcherFn<unknown>> = {};
   for (const jobName of Object.keys(jobs)) {
-    dispatchers[jobName] = ((payload?: unknown) =>
-      new PendingDispatch({
-        queueName: name,
+    const jobDefaults = defaults?.[jobName];
+    dispatchers[jobName] = ((payload?: unknown) => {
+      const opts: JobsOptions & { timeout?: number } = {};
+      if (jobDefaults) {
+        if (jobDefaults.tries !== undefined) opts.attempts = jobDefaults.tries;
+        if (jobDefaults.backoff !== undefined) {
+          if (Array.isArray(jobDefaults.backoff)) {
+            opts.backoff = { type: "fixed", delay: jobDefaults.backoff[0] ?? 0 };
+          } else {
+            opts.backoff = jobDefaults.backoff;
+          }
+        }
+        if (jobDefaults.timeout !== undefined) opts.timeout = jobDefaults.timeout;
+      }
+      return new PendingDispatch({
+        queueName: jobDefaults?.onQueue ?? name,
         jobName,
         payload: payload as unknown,
-      })) as DispatcherFn<unknown>;
+        options: opts,
+      });
+    }) as DispatcherFn<unknown>;
   }
   return Object.freeze({
     name,

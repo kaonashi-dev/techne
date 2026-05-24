@@ -1,5 +1,13 @@
+import {
+  MQ_DEFAULT_BACKOFF,
+  MQ_DEFAULT_QUEUE,
+  MQ_DEFAULT_TIMEOUT,
+  MQ_DEFAULT_TRIES,
+} from "../common/constants";
 import { Injectable } from "../decorators/injectable.decorator";
+import { getMetadata } from "../core/metadata-store";
 import { PendingDispatch } from "./pending-dispatch";
+import type { BackoffOptions, JobsOptions } from "./types";
 import type { QueueDef } from "./define-queue";
 
 /**
@@ -91,10 +99,31 @@ function buildPendingDispatch<C extends DispatchableConstructor<unknown, unknown
       `${cls.name}.dispatch(): missing 'static queue' — point it at a QueueDef.`,
     );
   }
+
+  const options: JobsOptions & { timeout?: number } = {};
+
+  const tries = getMetadata<number>(MQ_DEFAULT_TRIES, cls);
+  if (tries !== undefined) options.attempts = tries;
+
+  const backoff = getMetadata<number | number[] | BackoffOptions>(MQ_DEFAULT_BACKOFF, cls);
+  if (backoff !== undefined) {
+    if (Array.isArray(backoff)) {
+      options.backoff = { type: "fixed", delay: backoff[0] ?? 0 };
+    } else {
+      options.backoff = backoff;
+    }
+  }
+
+  const timeout = getMetadata<number>(MQ_DEFAULT_TIMEOUT, cls);
+  if (timeout !== undefined) options.timeout = timeout;
+
+  const onQueue = getMetadata<string>(MQ_DEFAULT_QUEUE, cls);
+
   return new PendingDispatch<PayloadOf<C>, ResultOf<C>>({
-    queueName: cls.queue.name,
+    queueName: onQueue ?? cls.queue.name,
     jobName: cls.jobName ?? cls.name,
     payload: payload as PayloadOf<C>,
+    options,
   });
 }
 
