@@ -31,3 +31,6 @@ export * from "./dispatchable";
 export * from "./chain";
 export * from "./chain-store";
 export * from "./chain-context";
+export * from "./batch";
+export * from "./batch-store";
+export * from "./batch-context";
