@@ -6,12 +6,12 @@ Status as of 2026-05-24. Eight phases of work to bring Techne's MQ surface to pa
 |---|---|---|---|---|
 | 1 | Fluent dispatch (Dispatchable + dispatchers map) | ✅ shipped | [#43](https://github.com/kaonashi-dev/techne/pull/43) | — |
 | 2 | Class-level defaults (`@Tries` / `@Backoff` / `@Timeout` / `@OnQueue`) | ✅ shipped | — | 1 |
-| 3 | `failed()` lifecycle + `@OnFailure` | pending | — | 1 |
-| 4 | `chain([...]).dispatch()` sequential pipelines | pending | — | 1, 3 |
-| 5 | `batch([...]).then/.catch/.finally` fan-out + barrier | pending | — | 1, 3 |
-| 6 | Uniqueness (`@Unique`, `uniqueFor`) | pending | — | 1 |
-| 7 | Per-job middleware (`RateLimited`, `WithoutOverlapping`, …) | pending | — | 1 |
-| 8 | `dispatchAfterResponse` (Elysia-integrated) | pending | — | 1 |
+| 3 | `failed()` lifecycle + `@OnFailure` | ✅ shipped | [#46](https://github.com/kaonashi-dev/techne/pull/46) | 1 |
+| 4 | `chain([...]).dispatch()` sequential pipelines | ✅ shipped | [#47](https://github.com/kaonashi-dev/techne/pull/47) | 1, 3 |
+| 5 | `batch([...]).then/.catch/.finally` fan-out + barrier | ✅ shipped | [#48](https://github.com/kaonashi-dev/techne/pull/48) | 1, 3 |
+| 6 | Uniqueness (`@Unique`, `uniqueFor`) | ✅ shipped | [#49](https://github.com/kaonashi-dev/techne/pull/49) | 1 |
+| 7 | Per-job middleware (`RateLimited`, `WithoutOverlapping`, …) | ✅ shipped | [#50](https://github.com/kaonashi-dev/techne/pull/50) | 1 |
+| 8 | `dispatchAfterResponse` (Elysia-integrated) | ✅ shipped | [#45](https://github.com/kaonashi-dev/techne/pull/45) | 1 |
 
 ---
 
