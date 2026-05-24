@@ -45,7 +45,7 @@ function normalizeQueue(entry: MqQueueRegistration): RegisterQueueOptions {
 
 /**
  * Plugin-style MQ registration. Use with
- * `TechneFactory.create({ plugins: [mq({ queues: [PayinsQueueDef] })] })`.
+ * `TechneFactory.create({ plugins: [mq({ queues: [ExampleQueueDef] })] })`.
  */
 export function mq(options: MqPluginOptions = {}) {
   const { queues = [], ...moduleOptions } = options;
