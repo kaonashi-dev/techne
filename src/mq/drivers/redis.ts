@@ -20,6 +20,8 @@ function normalizeOptions(options: JobsOptions): JobsOptions {
     removeOnFail: options.removeOnFail ?? false,
     backoff: options.backoff,
     jobId: options.jobId,
+    __chainId: options.__chainId,
+    __chainStepIndex: options.__chainStepIndex,
   };
 }
 

@@ -24,3 +24,6 @@ export * from "./decorators/inject-queue.decorator";
 export * from "./dispatcher";
 export * from "./pending-dispatch";
 export * from "./dispatchable";
+export * from "./chain";
+export * from "./chain-store";
+export * from "./chain-context";

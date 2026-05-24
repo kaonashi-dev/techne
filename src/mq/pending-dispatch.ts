@@ -1,5 +1,5 @@
 import { dispatchToQueue, getDispatcherContext } from "./dispatcher";
-import type { BackoffOptions, JobsOptions } from "./types";
+import type { BackoffOptions, ChainStepSpec, JobsOptions } from "./types";
 
 /**
  * Inline handler used by `.dispatchSync()`. The registry registers one
@@ -53,6 +53,12 @@ export class PendingDispatch<TPayload = unknown, TResult = unknown>
   private readonly payload: TPayload;
   private enabled: boolean;
   private readonly options: JobsOptions;
+  /**
+   * When `true`, awaiting this builder is a no-op. Set by `chain()` and
+   * `batch()` to prevent the builder from auto-enqueueing when passed as
+   * an argument rather than awaited directly.
+   */
+  _parked = false;
 
   constructor(init: PendingDispatchInit<TPayload, TResult>) {
     this.queueName = init.queueName;
@@ -135,16 +141,33 @@ export class PendingDispatch<TPayload = unknown, TResult = unknown>
 
   /**
    * Implicit terminator. Awaiting the builder enqueues via the active
-   * dispatcher context.
+   * dispatcher context. When `_parked` is true the builder is owned by a
+   * `ChainBuilder` or `BatchBuilder`; awaiting it is a no-op.
    */
   // oxlint-disable-next-line no-thenable -- intentional: this is the builder's terminator
   then<TFulfilled = unknown, TRejected = never>(
     onFulfilled?: ((value: unknown) => TFulfilled | PromiseLike<TFulfilled>) | null,
     onRejected?: ((reason: unknown) => TRejected | PromiseLike<TRejected>) | null,
   ): PromiseLike<TFulfilled | TRejected> {
-    const promise = this.enabled
-      ? dispatchToQueue(this.queueName, this.jobName, this.payload, this.options)
-      : Promise.resolve(undefined);
+    const promise =
+      this._parked || !this.enabled
+        ? Promise.resolve(undefined)
+        : dispatchToQueue(this.queueName, this.jobName, this.payload, this.options);
     return promise.then(onFulfilled, onRejected);
   }
+}
+
+/**
+ * Extract a serialisable step specification from a `PendingDispatch` so it
+ * can be stored in a `ChainStore`. Package-internal — not re-exported from
+ * the public index.
+ */
+export function toPendingDispatchSpec(pd: PendingDispatch): ChainStepSpec {
+  const p = pd as any;
+  return {
+    queueName: p.queueName,
+    jobName: p.jobName,
+    payload: p.payload,
+    options: { ...p.options },
+  };
 }
