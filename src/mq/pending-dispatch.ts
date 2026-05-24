@@ -1,4 +1,4 @@
-import { dispatchToQueue, getDispatcherContext, type DispatchUniqueOptions } from "./dispatcher";
+import { dispatchToQueue, getDeferredBuffer, getDispatcherContext, type DispatchUniqueOptions } from "./dispatcher";
 import type { BackoffOptions, ChainStepSpec, JobsOptions } from "./types";
 
 /**
@@ -61,8 +61,6 @@ export class PendingDispatch<TPayload = unknown, TResult = unknown>
    */
   _parked = false;
   private readonly uniqueOptions?: DispatchUniqueOptions;
-  /** When true, awaiting this builder is a no-op (used by batch() to park jobs). */
-  _parked = false;
 
   constructor(init: PendingDispatchInit<TPayload, TResult>) {
     this.queueName = init.queueName;
@@ -142,6 +140,35 @@ export class PendingDispatch<TPayload = unknown, TResult = unknown>
     // Ensure context is at least set — keeps error messaging consistent.
     getDispatcherContext();
     return (await handler(this.payload)) as TResult;
+  }
+
+  /**
+   * Defer enqueue until after the HTTP response has been flushed.
+   *
+   * Equivalent to `Dispatchable.dispatchAfterResponse()` but available on
+   * any `PendingDispatch` builder, letting you apply fluent options first:
+   *
+   * ```ts
+   * MyJob.dispatch(payload).delay(5_000).afterResponse();
+   * ```
+   *
+   * Outside an HTTP context the dispatch happens immediately as a
+   * fire-and-forget; errors are swallowed after logging.
+   */
+  afterResponse(): void {
+    const buf = getDeferredBuffer();
+    if (buf) {
+      buf.push(this);
+    } else {
+      // No HTTP context: fire-and-forget immediately.
+      void (async () => {
+        try {
+          await this;
+        } catch (e) {
+          console.error("[mq] deferred dispatch error", e);
+        }
+      })();
+    }
   }
 
   /**

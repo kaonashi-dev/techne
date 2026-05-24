@@ -1,16 +1,87 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { JobNotUniqueError } from "./errors";
 import { Queue } from "./queue";
 import { getMqToken } from "./tokens";
+import type { PendingDispatch } from "./pending-dispatch";
 import type { JobsOptions, QueueDriver } from "./types";
 
+// ── Per-request deferred dispatch buffer ─────────────────────────────────────
+
 /**
- * Resolver the dispatch layer uses to fetch a `Queue` by name. Set once
- * by the `mq()` plugin during `bootstrap()` so static `Job.dispatch()`
- * and `def.dispatchers.x()` have something to enqueue against.
+ * ALS store that holds the deferred `PendingDispatch` queue for the current
+ * HTTP request. Populated by `runWithDeferredBuffer` (wired in the `mq()`
+ * plugin's `onRequest` hook) and drained by `flushDeferred` in `onAfterResponse`.
  *
- * Storing a single function pointer keeps per-dispatch overhead at one
- * indirect call — no DI walk, no Map lookup.
+ * When `getStore()` returns `undefined` the caller is outside an HTTP context
+ * (e.g. a worker job or CLI) and should fall back to immediate dispatch.
  */
+const deferredStore = new AsyncLocalStorage<PendingDispatch[]>();
+
+/**
+ * Enter a fresh deferred-dispatch scope and run `fn` inside it. Every call to
+ * `pushDeferred` within `fn` (and within async continuations it spawns) will
+ * enqueue onto the buffer returned by `getDeferredBuffer()`.
+ *
+ * Used by the `mq()` plugin to scope one buffer per HTTP request.
+ */
+export function runWithDeferredBuffer<T>(fn: () => T): T {
+  return deferredStore.run([], fn);
+}
+
+/**
+ * Return the deferred-dispatch buffer for the current async context, or
+ * `undefined` when called outside an HTTP request scope.
+ */
+export function getDeferredBuffer(): PendingDispatch[] | undefined {
+  return deferredStore.getStore();
+}
+
+/**
+ * Enter a fresh deferred-dispatch scope using `enterWith` — sets a new empty
+ * buffer on the current async resource so all continuations in this request's
+ * promise chain inherit it. Call this from the HTTP adapter's `onRequest` hook.
+ *
+ * Prefer this over `runWithDeferredBuffer` in Elysia hooks because hooks are
+ * sequential continuations of the same promise chain; `enterWith` is sufficient
+ * and avoids having to wrap the entire request in a `run()` callback.
+ */
+export function enterDeferredBuffer(): void {
+  deferredStore.enterWith([]);
+}
+
+/**
+ * Push `pd` onto the current request's deferred buffer. When called outside
+ * an HTTP context (no buffer in scope) this is a no-op — callers that want
+ * fire-and-forget fallback outside HTTP must handle that themselves.
+ */
+export function pushDeferred(pd: PendingDispatch): void {
+  const buf = deferredStore.getStore();
+  if (buf) {
+    buf.push(pd);
+  }
+  // Outside HTTP context: callers handle the fire-and-forget fallback.
+}
+
+/**
+ * Drain all pending dispatches in the current request's deferred buffer.
+ * Errors during individual dispatches are logged and swallowed — we cannot
+ * surface them after the response has already been sent.
+ *
+ * No-op when called outside an HTTP context or when the buffer is empty.
+ */
+export async function flushDeferred(): Promise<void> {
+  const buf = deferredStore.getStore();
+  if (!buf || buf.length === 0) return;
+  const items = buf.splice(0);
+  for (const pd of items) {
+    try {
+      await pd;
+    } catch (e) {
+      console.error("[mq] deferred dispatch error", e);
+    }
+  }
+}
+
 // ── Driver context (used for uniqueness lock operations) ──────────────────────
 
 let activeDriver: QueueDriver | undefined;
