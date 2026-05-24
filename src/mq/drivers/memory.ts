@@ -56,10 +56,13 @@ function normalizeOptions(options: JobsOptions): JobsOptions {
     removeOnFail: options.removeOnFail ?? false,
     backoff: options.backoff,
     jobId: options.jobId,
+    // Chain side-channel fields — must be preserved so the worker can advance the chain.
     __chainId: options.__chainId,
     __chainStepIndex: options.__chainStepIndex,
     // Batch side-channel field — must be preserved so the barrier can count completions.
     __batchId: options.__batchId,
+    lockKey: options.lockKey,
+    lockUntilProcessing: options.lockUntilProcessing,
   };
 }
 
@@ -142,6 +145,7 @@ function heapPop(heap: DelayedEntry[]): DelayedEntry | undefined {
 
 export class MemoryQueueDriver implements QueueDriver {
   private queues = new Map<string, MemoryQueueState>();
+  private uniqueLocks = new Map<string, number>();
 
   async add<T>(
     queueName: string,
@@ -421,6 +425,19 @@ export class MemoryQueueDriver implements QueueDriver {
     }
     this.promoteDelayed(queueName, state);
     this.notifyWaiters(state);
+  }
+
+  async acquireUniqueLock(lockKey: string, ttlMs: number): Promise<boolean> {
+    const existingExpiry = this.uniqueLocks.get(lockKey);
+    if (existingExpiry !== undefined && existingExpiry > Date.now()) {
+      return false;
+    }
+    this.uniqueLocks.set(lockKey, Date.now() + ttlMs);
+    return true;
+  }
+
+  async releaseUniqueLock(lockKey: string): Promise<void> {
+    this.uniqueLocks.delete(lockKey);
   }
 
   async close(): Promise<void> {
