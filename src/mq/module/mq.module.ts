@@ -1,6 +1,8 @@
 import { definePlugin } from "../../core/plugins/define-plugin";
 import { clearChainStore, setChainStore } from "../chain-context";
 import { MemoryChainStore } from "../chain-store";
+import { clearBatchStore, setBatchStore } from "../batch-context";
+import { MemoryBatchStore } from "../batch-store";
 import {
   isQueueBagDef,
   isQueueDef,
@@ -58,9 +60,11 @@ export function mq(options: MqPluginOptions = {}) {
       const resolver = createResolverFromContainer((token) => ctx.resolve(token));
       setDispatcherContext(resolver);
       setChainStore(new MemoryChainStore());
+      setBatchStore(new MemoryBatchStore());
       ctx.onShutdown(() => {
         clearDispatcherContext();
         clearChainStore();
+        clearBatchStore();
       });
 
       const registered = new Set<string>();

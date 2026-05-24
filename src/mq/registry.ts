@@ -7,6 +7,8 @@ import type { Container } from "../core/container";
 import { isCustomProvider } from "../core/container";
 import { getChainStore } from "./chain-context";
 import { dispatchToQueue } from "./dispatcher";
+import { getBatchStore } from "./batch-context";
+import { fireBatchCallbacks } from "./batch";
 import {
   isDispatchableClass,
   type DispatchableConstructor,
@@ -79,6 +81,7 @@ export class MqRegistry {
       );
 
       this.attachChainListeners(worker);
+      this.attachBatchListeners(worker);
 
       worker.on("failed", async (job: Job, err: Error) => {
         if (job.state !== "failed") return;
@@ -169,6 +172,7 @@ export class MqRegistry {
       );
 
       this.attachChainListeners(worker);
+      this.attachBatchListeners(worker);
 
       worker.on("failed", async (job: Job, err: Error) => {
         if (job.state !== "failed") return;
@@ -241,6 +245,54 @@ export class MqRegistry {
             `[MqRegistry] Chain catch handler dispatch failed for chain '${chainId}':`,
             err,
           );
+        }
+      })();
+    });
+  }
+
+  /**
+   * Wire batch-barrier event listeners onto a worker. Both Processor and
+   * Dispatchable workers get these so fan-out batches work regardless of
+   * which job style is in use.
+   *
+   * On "active": check cancellation flag (best-effort).
+   * On "completed": increment the completed counter; fire callbacks if done.
+   * On "failed" (final): increment the failed counter; fire callbacks if done.
+   */
+  private attachBatchListeners(worker: Worker): void {
+    worker.on("active", (job: Job) => {
+      const batchId = job.opts.__batchId;
+      if (!batchId) return;
+      const store = getBatchStore();
+      if (!store) return;
+      // Note: we can't stop an already-claimed job. The cancelled flag is
+      // available via BatchHandle.progress() for callers who want to abort work.
+      void store.isCancelled(batchId);
+    });
+
+    worker.on("completed", (job: Job) => {
+      const batchId = job.opts.__batchId;
+      if (!batchId) return;
+      const store = getBatchStore();
+      if (!store) return;
+      void (async () => {
+        const { completed, failed, total } = await store.incrementCompleted(batchId);
+        if (completed + failed === total) {
+          await fireBatchCallbacks(batchId, store, failed);
+        }
+      })();
+    });
+
+    worker.on("failed", (job: Job) => {
+      const batchId = job.opts.__batchId;
+      if (!batchId) return;
+      if (job.state !== "failed") return; // retry still pending
+      const store = getBatchStore();
+      if (!store) return;
+      void (async () => {
+        const { completed, failed, total } = await store.incrementFailed(batchId);
+        if (completed + failed === total) {
+          await fireBatchCallbacks(batchId, store, failed);
         }
       })();
     });
