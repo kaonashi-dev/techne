@@ -19,6 +19,8 @@ export interface RedisClientAdapter {
     channel: string,
     listener: (message: string) => void,
   ): Promise<() => Promise<void> | void>;
+  /** SET key value NX PX ttlMs — returns true if the key was set (didn't already exist). */
+  setnx(key: string, value: string, ttlMs: number): Promise<boolean>;
   quit(): Promise<void>;
 }
 
@@ -44,6 +46,13 @@ export interface JobsOptions {
   backoff?: number | BackoffOptions;
   removeOnComplete?: boolean;
   removeOnFail?: boolean;
+  /** Internal: unique lock key stored on the job for release on completion/failure. */
+  lockKey?: string;
+  /**
+   * Internal: when `true` the unique lock should be released as soon as the
+   * worker claims the job (before `handle()` runs) rather than after completion.
+   */
+  lockUntilProcessing?: boolean;
 }
 
 export interface QueueOptions {
@@ -132,6 +141,8 @@ export interface QueueDriver {
     queueName: string,
     listener: (event: QueueEvent) => void,
   ): Promise<() => Promise<void> | void>;
+  acquireUniqueLock(lockKey: string, ttlMs: number): Promise<boolean>;
+  releaseUniqueLock(lockKey: string): Promise<void>;
 }
 
 export interface WorkerOptions extends QueueOptions {

@@ -1,4 +1,11 @@
+import {
+  MQ_UNIQUE_METADATA,
+  MQ_UNIQUE_UNTIL_PROCESSING_METADATA,
+} from "../common/constants";
+import { getMetadata } from "../core/metadata-store";
 import { Injectable } from "../decorators/injectable.decorator";
+import type { UniqueOptions } from "./decorators/unique.decorator";
+import type { DispatchUniqueOptions } from "./dispatcher";
 import { PendingDispatch } from "./pending-dispatch";
 import type { QueueDef } from "./define-queue";
 
@@ -91,10 +98,24 @@ function buildPendingDispatch<C extends DispatchableConstructor<unknown, unknown
       `${cls.name}.dispatch(): missing 'static queue' — point it at a QueueDef.`,
     );
   }
+
+  let uniqueOptions: DispatchUniqueOptions | undefined;
+
+  const unique = getMetadata<UniqueOptions>(MQ_UNIQUE_METADATA, cls);
+  if (unique !== undefined) {
+    uniqueOptions = { ...unique };
+  } else {
+    const uniqueUntil = getMetadata<UniqueOptions>(MQ_UNIQUE_UNTIL_PROCESSING_METADATA, cls);
+    if (uniqueUntil !== undefined) {
+      uniqueOptions = { ...uniqueUntil, untilProcessing: true };
+    }
+  }
+
   return new PendingDispatch<PayloadOf<C>, ResultOf<C>>({
     queueName: cls.queue.name,
     jobName: cls.jobName ?? cls.name,
     payload: payload as PayloadOf<C>,
+    uniqueOptions,
   });
 }
 

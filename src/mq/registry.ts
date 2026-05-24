@@ -5,6 +5,7 @@ import {
   isDispatchableClass,
   type DispatchableConstructor,
 } from "./dispatchable";
+import type { Job } from "./job";
 import { registerSyncHandler } from "./pending-dispatch";
 import { Queue } from "./queue";
 import { getMqToken } from "./tokens";
@@ -109,14 +110,41 @@ export class MqRegistry {
               `No Dispatchable registered for job '${job.name}' on queue '${queueName}'`,
             );
           }
+          // Release the unique lock immediately if this is a @UniqueUntilProcessing job.
+          if (job.opts.lockUntilProcessing && job.opts.lockKey) {
+            await this.releaseLock(job.opts.lockKey);
+          }
           const instance = this.container.get<{ handle: (p: unknown) => unknown }>(cls);
           return await instance.handle(job.data);
         },
         { ...workerOptions, autorun: false },
       );
 
+      // Release the @Unique lock when the job reaches a terminal state.
+      worker.on("completed", (job: Job) => {
+        if (job.opts.lockKey && !job.opts.lockUntilProcessing) {
+          void this.releaseLock(job.opts.lockKey);
+        }
+      });
+
+      worker.on("failed", async (job: Job) => {
+        if (job.state !== "failed") return;
+        // Release the @Unique lock on final failure (not retries).
+        if (job.opts.lockKey && !job.opts.lockUntilProcessing) {
+          await this.releaseLock(job.opts.lockKey);
+        }
+      });
+
       this.workers.push(worker);
       void worker.run();
+    }
+  }
+
+  private async releaseLock(lockKey: string): Promise<void> {
+    try {
+      await this.driver.releaseUniqueLock(lockKey);
+    } catch (e) {
+      console.error(`[MqRegistry] Failed to release unique lock '${lockKey}':`, e);
     }
   }
 

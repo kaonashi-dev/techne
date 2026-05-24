@@ -23,3 +23,4 @@ export * from "./decorators/inject-queue.decorator";
 export * from "./dispatcher";
 export * from "./pending-dispatch";
 export * from "./dispatchable";
+export * from "./decorators/unique.decorator";
