@@ -7,7 +7,7 @@ import { Get } from "../src/decorators/routes.decorator";
 import { Injectable } from "../src/decorators/injectable.decorator";
 import { TechneFactory, __resetTechneConfigCache } from "../src/factory/techne-factory";
 import { precompileRoutes } from "../src/cli/precompile";
-import { defineTechneConfig, bnest, bootstrap } from "../src/core";
+import { defineTechneConfig, bootstrap } from "../src/core";
 import type { CanActivate } from "../src/interfaces/can-activate.interface";
 import { Logger } from "../src/services/logger.service";
 // Silence deprecation warnings emitted by `app.setGlobalPrefix()` etc. — they
@@ -28,9 +28,6 @@ class AllowGuard implements CanActivate {
 }
 async function writeConfig(dir: string, contents: string) {
   await fs.writeFile(path.join(dir, "techne.config.ts"), contents);
-}
-async function writeLegacyBnestConfig(dir: string, contents: string) {
-  await fs.writeFile(path.join(dir, "bnest.config.ts"), contents);
 }
 describe("defineTechneConfig", () => {
   test("returns the input unchanged (identity)", () => {
@@ -188,39 +185,6 @@ export default { features: [AppFeature], logger: false };\n`,
     await expect(TechneFactory.create({ controllers: [UsersController] })).rejects.toThrow(
       /no default export/,
     );
-  });
-  test("bnest() shorthand calls through to TechneFactory.create", async () => {
-    await writeConfig(tempRoot, `export default { globalPrefix: "via-bnest" };\n`);
-    const app = await bnest({
-      controllers: [UsersController],
-      logger: false,
-    });
-    const res = await app.handle(new Request("http://localhost/via-bnest/users"));
-    expect(res.status).toBe(200);
-  });
-  test("legacy bnest.config.ts still loads as a deprecated fallback", async () => {
-    // Regression net: through v0.4.x users can keep the old filename. The
-    // loader prefers techne.config.ts when both exist; this test only writes
-    // the legacy name and verifies the values still flow through.
-    await writeLegacyBnestConfig(tempRoot, `export default { globalPrefix: "legacy" };\n`);
-    const app = await TechneFactory.create({
-      controllers: [UsersController],
-      logger: false,
-    });
-    const res = await app.handle(new Request("http://localhost/legacy/users"));
-    expect(res.status).toBe(200);
-  });
-  test("techne.config.ts wins when both filenames are present", async () => {
-    await writeConfig(tempRoot, `export default { globalPrefix: "winner" };\n`);
-    await writeLegacyBnestConfig(tempRoot, `export default { globalPrefix: "loser" };\n`);
-    const app = await TechneFactory.create({
-      controllers: [UsersController],
-      logger: false,
-    });
-    const ok = await app.handle(new Request("http://localhost/winner/users"));
-    expect(ok.status).toBe(200);
-    const miss = await app.handle(new Request("http://localhost/loser/users"));
-    expect(miss.status).toBe(404);
   });
   test("bootstrap() listens on the configured port and respects Bun.env.PORT", async () => {
     await writeConfig(tempRoot, `export default { port: 0, logger: false };\n`);

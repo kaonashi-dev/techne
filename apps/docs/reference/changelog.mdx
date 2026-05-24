@@ -19,22 +19,22 @@ in the repo root. Notable highlights below.
   including `UseInterceptors`, `FileInterceptor`, `UsePipes`,
   `TechneInterceptor`, `PipeTransform`, `APP_INTERCEPTOR`, and `APP_PIPE`.
 - CLI `g pipe` and `g interceptor` generator entries.
+- The retired pre-Techne compatibility package shim, CLI alias, public API
+  aliases, and old config filename fallback.
 
-## [0.4.0] — 2026-05-13 — Renamed Bnest to Techne
+## [0.4.0] — 2026-05-13 — Renamed project to Techne
 
-The project was renamed from `Bnest` to `Techne` (Greek τέχνη — "applied
-craft"). See the [migration guide](/reference/migrating) for the upgrade
-recipe.
+The project was renamed to `Techne` (Greek τέχνη — "applied craft"). See the
+[migration guide](/reference/migrating) for the upgrade recipe.
 
 Concrete breaking changes:
 
-1. **Package name**: `@kaonashi-dev/bnest` → `@kaonashi-dev/techne` (the
-   bnest package keeps working through 0.4.x via a shim).
-2. **CLI bin**: `bnest <cmd>` → `techne <cmd>`.
-3. **Redis prefixes**: defaults change from `bnest:*` to `techne:*`.
+1. **Package name**: use `@kaonashi-dev/techne`.
+2. **CLI bin**: use `techne <cmd>`.
+3. **Redis prefixes**: defaults use `techne:*`.
 4. **RFC 7807 problem `type` URL** moved to a `github.com/.../docs/errors/<slug>.md`
    host.
-5. **OpenAPI marker**: `x-bnest-unknown-kind` → `x-techne-unknown-kind`.
+5. **OpenAPI marker**: `x-techne-unknown-kind`.
 
 ### Added (highlights)
 
@@ -66,17 +66,15 @@ Concrete breaking changes:
 - Scaffolded projects (`techne new`) emit a `bootstrap()` `main.ts` paired
   with a `techne.config.ts` instead of a manual `TechneFactory.create()`
   block.
-- Config-file discovery prefers `techne.config.{ts,js,mjs}`; legacy
-  `bnest.config.{ts,js,mjs}` still loads but emits a one-time warning.
+- Config-file discovery prefers `techne.config.{ts,js,mjs}`.
 
 ### Deprecated
 
 - `app.setGlobalPrefix()`, `app.enableVersioning()`, `app.enableCors()`,
   and `app.useGlobalGuards()` — declare these in `techne.config.ts`
   instead.
-- Every `Bnest*` class/function/type — aliases stay through 0.4.x.
-- The legacy `bnest.config.ts` filename — removed in v0.5+.
-- The legacy `@kaonashi-dev/bnest` npm package.
+- Pre-Techne public aliases and config filenames stayed available through the
+  0.4 line and were scheduled for removal in the next breaking release.
 
 For the full entry list (including performance notes), see the file in the
 repo.

@@ -25,6 +25,3 @@ const redisQueue = new Queue("emails", {
 `RedisClient` is a thin wrapper over the underlying Redis driver — it is
 exported so callers can share a single connection across multiple
 queues/workers, or instrument it for tracing.
-
-If you're upgrading from Bnest, the default Redis prefix changed from
-`bnest:mq` to `techne:mq` — see the [migrating reference](/reference/migrating).

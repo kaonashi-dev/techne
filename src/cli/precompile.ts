@@ -15,9 +15,6 @@ const TECHNE_CONFIG_CANDIDATES = [
   "techne.config.ts",
   "techne.config.js",
   "techne.config.mjs",
-  "bnest.config.ts",
-  "bnest.config.js",
-  "bnest.config.mjs",
 ] as const;
 
 interface SerializedParamMetadata {

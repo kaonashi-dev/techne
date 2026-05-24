@@ -20,9 +20,3 @@ export type TechneConfig = AppBootstrapConfig & {
 export function defineTechneConfig(config: TechneConfig): TechneConfig {
   return config;
 }
-
-/** @deprecated use TechneConfig */
-export type BnestConfig = TechneConfig;
-
-/** @deprecated use defineTechneConfig */
-export const defineBnestConfig = defineTechneConfig;

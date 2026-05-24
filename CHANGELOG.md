@@ -17,51 +17,35 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   including `UseInterceptors`, `FileInterceptor`, `UsePipes`,
   `TechneInterceptor`, `PipeTransform`, `APP_INTERCEPTOR`, and `APP_PIPE`.
 - CLI `g pipe` and `g interceptor` generator entries.
+- The retired pre-Techne compatibility package shim, CLI alias, public API
+  aliases, and old config filename fallback.
 
-## [0.4.0] - 2026-05-13 — Renamed Bnest to Techne
+## [0.4.0] - 2026-05-13 — Renamed project to Techne
 
-> **Breaking — read first.** The project has been renamed from `Bnest` to
-> `Techne` (Greek τέχνη — "applied craft"). The npm package is now
-> `@kaonashi-dev/techne` and the CLI bin is `techne`. The legacy
-> `@kaonashi-dev/bnest` package becomes a thin re-export shim with a
-> one-time deprecation warning. **See [MIGRATING.md](./MIGRATING.md) for
-> the upgrade recipe.**
+> **Breaking — read first.** The project has been renamed to `Techne` (Greek
+> τέχνη — "applied craft"). The npm package is now `@kaonashi-dev/techne`
+> and the CLI bin is `techne`. **See [MIGRATING.md](./MIGRATING.md) for the
+> upgrade recipe.**
 >
 > Concrete breaking changes:
 >
-> 1. **Package name**: `@kaonashi-dev/bnest` → `@kaonashi-dev/techne` (the
->    bnest package keeps working through 0.4.x via a shim).
-> 2. **CLI bin**: `bnest <cmd>` → `techne <cmd>` (the bnest bin keeps
->    working through 0.4.x via the shim and prints a deprecation notice).
-> 3. **Redis prefixes**: defaults change from `bnest:queue`, `bnest:mq`,
->    and `bnest` (microservices) to `techne:queue`, `techne:mq`, and
->    `techne`. In-flight jobs/pubsub state under the old prefixes will be
->    invisible to the new code. See MIGRATING.md for the
->    `redis-cli RENAME` recipe.
-> 4. **RFC 7807 problem `type` URL**: was `https://bnest.dev/errors/<slug>`;
->    now `https://github.com/kaonashi-dev/techne/blob/main/docs/errors/<slug>.md`.
->    Clients pattern-matching on the old URL must update.
-> 5. **OpenAPI marker**: `x-bnest-unknown-kind` → `x-techne-unknown-kind`
+> 1. **Package name**: use `@kaonashi-dev/techne`.
+> 2. **CLI bin**: use `techne <cmd>`.
+> 3. **Redis prefixes**: defaults use `techne:queue`, `techne:mq`, and
+>    `techne`.
+> 4. **RFC 7807 problem `type` URL**: now uses
+>    `https://github.com/kaonashi-dev/techne/blob/main/docs/errors/<slug>.md`.
+> 5. **OpenAPI marker**: `x-techne-unknown-kind`
 >    (diagnostic-only, no API contract).
 >
-> Non-breaking renames (legacy names continue to work as `@deprecated`
-> re-exports through 0.4.x; scheduled removal in 0.5):
->
-> - `BnestFactory` / `BnestApplication` / `BnestApplicationContext` /
->   `BnestMicroservice` / `BnestInterceptor`.
-> - `BnestApplicationOptions` / `BnestHealthOptions` / `BnestShutdownOptions` /
->   `BnestConfig`.
-> - `defineBnestConfig` / `loadBnestConfigFile` / `__resetBnestConfigCache`.
-> - `bnest()` shorthand (use `techne()`).
-> - `bnest.config.ts` filename (use `techne.config.ts`).
-> - Logger label `[Bnest]` and JSON `name: "Bnest"` (now `[Techne]` /
->   `name: "Techne"`).
+> Compatibility aliases were retained through the 0.4 line and scheduled for
+> removal in the next breaking release.
 
 ### Added
 
 - `defineConfig({ schema, source?, coerce?, arraySeparator? })` validates env values against a TypeBox schema at startup and returns a typed `AppConfig` with `.get()` / `.getOrThrow()`; `ConfigValidationError` carries per-field failures.
 - `defineTechneConfig(config)` typing helper for `techne.config.ts`, consumed by `TechneFactory.create()` / `bootstrap()` from `process.cwd()`.
-- `bootstrap(module?, overrides?)` and `techne(module?, options?)` shorthands in `@kaonashi-dev/techne/core` for one-line `main.ts` entrypoints. The legacy `bnest(module?, options?)` is retained as a `@deprecated` alias.
+- `bootstrap(module?, overrides?)` and `techne(module?, options?)` shorthands in `@kaonashi-dev/techne/core` for one-line `main.ts` entrypoints.
 - `definePlugin({ name, version?, dependencies?, setup })` plugin protocol; `app.register(plugin, options)`, `app.use(elysiaPlugin)`, and `app.getRegisteredPlugins()` on `TechneApplication`.
 - `PluginContext` exposes `provide`, `resolve`, `onReady`, `onShutdown`, `http()`, and a scoped `logger`.
 - RFC 7807 error responses with `type`, `title`, `status`, `detail`, `code`, `instance`, `requestId`, and a `Content-Type: application/problem+json` header.
@@ -84,15 +68,14 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Error responses are now served as `application/problem+json` (RFC 7807) instead of the legacy `{ statusCode, message, error }` JSON shape.
 - Scaffolded projects (`techne new`) emit a `bootstrap()` `main.ts` paired with a `techne.config.ts` instead of a manual `TechneFactory.create()` block.
-- Config-file discovery prefers `techne.config.{ts,js,mjs}`; legacy `bnest.config.{ts,js,mjs}` still loads but emits a one-time warning.
-- Internal `Symbol("bnest:context")`, plugin name `"bnest:request-id"`, and inflight-counter ctx-store key all switched to the `techne:` namespace.
+- Config-file discovery prefers `techne.config.{ts,js,mjs}`.
+- Internal symbols, plugin names, and in-flight counter keys switched to the `techne:` namespace.
 
 ### Deprecated
 
 - `app.setGlobalPrefix()`, `app.enableVersioning()`, `app.enableCors()`, and `app.useGlobalGuards()` — declare these in `techne.config.ts` instead. Setters emit a one-time deprecation warning per process and will be removed in v0.5+.
-- Every `Bnest*` class/function/type — see the breaking-change callout above for the full list. Aliases stay through 0.4.x.
-- The legacy `bnest.config.ts` filename — the loader warns on first hit and you should rename to `techne.config.ts`. Legacy support removed in v0.5+.
-- The legacy `@kaonashi-dev/bnest` npm package — installs through 0.4.x but emits a deprecation banner.
+- Pre-Techne public aliases and config filenames stayed available through the
+  0.4 line and were scheduled for removal in the next breaking release.
 
 ### Performance
 

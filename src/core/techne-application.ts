@@ -601,6 +601,3 @@ export class TechneApplication {
     this.shutdownHandlers = [];
   }
 }
-
-/** @deprecated use TechneApplication */
-export { TechneApplication as BnestApplication };

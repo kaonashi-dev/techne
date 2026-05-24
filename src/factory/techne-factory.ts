@@ -19,29 +19,17 @@ import type { Feature } from "../core/define-feature";
 import type { PluginDefinition } from "../core/plugins/define-plugin";
 import { loadPrecompiledRoutesForScanner } from "../cli/precompile";
 
-/**
- * Config file lookup order: `techne.config.{ts,js,mjs}` is canonical;
- * `bnest.config.{ts,js,mjs}` is a deprecated fallback retained through v0.4.x
- * and removed in v0.5+. Matching the legacy name emits a one-time warning.
- */
 const TECHNE_CONFIG_CANDIDATES = [
   "techne.config.ts",
   "techne.config.js",
   "techne.config.mjs",
 ] as const;
-const LEGACY_BNEST_CONFIG_CANDIDATES = [
-  "bnest.config.ts",
-  "bnest.config.js",
-  "bnest.config.mjs",
-] as const;
 const cwdCache = new Map<string, TechneConfig | null>();
-let warnedLegacyConfig = false;
 
 /**
  * Loads the framework config from `process.cwd()` if present.
- * Tries `techne.config.{ts,js,mjs}` first, then the deprecated
- * `bnest.config.{ts,js,mjs}`. Results are cached per cwd; tests that swap
- * directories between cases should call {@link __resetTechneConfigCache}.
+ * Results are cached per cwd; tests that swap directories between cases should
+ * call {@link __resetTechneConfigCache}.
  */
 export async function loadTechneConfigFile(): Promise<TechneConfig | null> {
   const cwd = process.cwd();
@@ -59,37 +47,16 @@ export async function loadTechneConfigFile(): Promise<TechneConfig | null> {
     cwdCache.set(cwd, value);
     return value;
   }
-  for (const name of LEGACY_BNEST_CONFIG_CANDIDATES) {
-    const filePath = `${cwd}/${name}`;
-    if (!(await Bun.file(filePath).exists())) continue;
-    if (!warnedLegacyConfig) {
-      warnedLegacyConfig = true;
-      new Logger("TechneFactory").warn(
-        `Found ${name}; rename to ${name.replace("bnest.", "techne.")} (legacy name removed in v0.5).`,
-      );
-    }
-    const mod = await import(filePath);
-    if (!mod || mod.default === undefined) {
-      throw new Error(
-        `Found ${name} but it has no default export. Use \`export default defineTechneConfig({...})\`.`,
-      );
-    }
-    const value = mod.default as TechneConfig;
-    cwdCache.set(cwd, value);
-    return value;
-  }
   cwdCache.set(cwd, null);
   return null;
 }
 
 /**
  * Test/internal hook: clears the cached config resolution so the next call
- * re-reads the file. Tests that swap `cwd` between cases need this. Also
- * resets the one-time legacy-config warning latch.
+ * re-reads the file. Tests that swap `cwd` between cases need this.
  */
 export function __resetTechneConfigCache() {
   cwdCache.clear();
-  warnedLegacyConfig = false;
 }
 
 function mergeConfig(
@@ -607,17 +574,3 @@ export class TechneFactory {
     return Array.isArray(resolved) ? resolved : [resolved];
   }
 }
-
-// ─── Deprecated Bnest aliases (kept through v0.4.x; removed in v0.5+) ───
-/** @deprecated use TechneFactory */
-export { TechneFactory as BnestFactory };
-/** @deprecated use TechneApplicationOptions */
-export type BnestApplicationOptions = TechneApplicationOptions;
-/** @deprecated use TechneHealthOptions */
-export type BnestHealthOptions = TechneHealthOptions;
-/** @deprecated use TechneShutdownOptions */
-export type BnestShutdownOptions = TechneShutdownOptions;
-/** @deprecated use loadTechneConfigFile */
-export const loadBnestConfigFile = loadTechneConfigFile;
-/** @deprecated use __resetTechneConfigCache */
-export const __resetBnestConfigCache = __resetTechneConfigCache;

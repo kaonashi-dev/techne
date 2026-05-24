@@ -66,7 +66,7 @@ export interface HttpExceptionOptions {
  *     - status: number
  *     - options?: HttpExceptionOptions
  *
- *   new HttpException(statusCode, message, error?)            // Legacy Bnest-style
+ *   new HttpException(statusCode, message, error?)            // legacy positional form
  *     - statusCode: number
  *     - message: string
  *     - error?: string  (defaults to "Error")
@@ -90,7 +90,7 @@ export class HttpException extends Error {
     errorOrOptions?: string | HttpExceptionOptions,
   ) {
     if (typeof statusCodeOrResponse === "number") {
-      // Legacy Bnest signature: (statusCode, message, errorOrOptions?)
+      // Legacy positional signature: (statusCode, message, errorOrOptions?)
       // `errorOrOptions` is normally a string (the reason phrase). For
       // forward-compat we also accept an HttpExceptionOptions object here so
       // callers using the legacy signature can still attach `code`/`type`.

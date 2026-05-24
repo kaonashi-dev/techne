@@ -30,9 +30,6 @@ export function techne(config?: AppBootstrapConfig): Promise<TechneApplication> 
   return TechneFactory.create(config);
 }
 
-/** @deprecated use `techne()` */
-export const bnest = techne;
-
 export interface BootstrapOverrides extends TechneApplicationOptions {
   port?: number;
   host?: string;
