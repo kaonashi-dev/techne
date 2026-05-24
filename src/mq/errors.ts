@@ -10,3 +10,14 @@ export class JobNotUniqueError extends Error {
     this.name = "JobNotUniqueError";
   }
 }
+
+/**
+ * Thrown by `job.release(seconds)` to re-enqueue the job after a delay
+ * without incrementing the failure attempt counter.
+ */
+export class JobReleasedError extends Error {
+  constructor(public readonly delayMs: number) {
+    super(`Job released for retry after ${delayMs}ms`);
+    this.name = "JobReleasedError";
+  }
+}

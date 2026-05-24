@@ -12,13 +12,31 @@ import { fireBatchCallbacks } from "./batch";
 import {
   isDispatchableClass,
   type DispatchableConstructor,
+  type Dispatchable,
 } from "./dispatchable";
+import { JobReleasedError } from "./errors";
 import type { Job } from "./job";
 import { registerSyncHandler } from "./pending-dispatch";
 import { Queue } from "./queue";
 import { getMqToken } from "./tokens";
-import type { MqProcessorMetadata, ProcessMetadata, QueueDriver } from "./types";
+import type { JobMiddleware, MqProcessorMetadata, ProcessMetadata, QueueDriver } from "./types";
 import { Worker } from "./worker";
+
+/**
+ * Compose a left-to-right middleware stack around `handler`. The first
+ * middleware in the array is the outermost wrapper (runs first before the
+ * handler, last on the way back out).
+ */
+function buildMiddlewareStack(
+  middlewares: JobMiddleware[],
+  job: Job,
+  handler: () => Promise<unknown>,
+): () => Promise<unknown> {
+  return middlewares.reduceRight(
+    (next, mw) => () => mw.handle(job, next),
+    handler,
+  );
+}
 
 export class MqRegistry {
   private workers: Worker[] = [];
@@ -169,8 +187,25 @@ export class MqRegistry {
           if (job.opts.lockUntilProcessing && job.opts.lockKey) {
             await this.releaseLock(job.opts.lockKey);
           }
-          const instance = this.container.get<{ handle: (p: unknown) => unknown }>(cls);
-          return await instance.handle(job.data);
+          const instance = this.container.get<Dispatchable<unknown, unknown>>(cls);
+          const middlewares = instance.middleware?.() ?? [];
+          const runner = buildMiddlewareStack(middlewares, job, () =>
+            Promise.resolve((instance as { handle: (p: unknown) => unknown }).handle(job.data)),
+          );
+          try {
+            return await runner();
+          } catch (err) {
+            if (err instanceof JobReleasedError) {
+              // Re-enqueue with delay; complete this attempt cleanly without
+              // incrementing the failure counter.
+              await dispatchToQueue(queueName, job.name, job.data as unknown, {
+                ...job.opts,
+                delay: err.delayMs,
+              });
+              return undefined;
+            }
+            throw err;
+          }
         },
         { ...workerOptions, autorun: false },
       );
