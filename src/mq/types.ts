@@ -44,6 +44,32 @@ export interface JobsOptions {
   backoff?: number | BackoffOptions;
   removeOnComplete?: boolean;
   removeOnFail?: boolean;
+  /** Internal: batch correlation id — set by batch().dispatch(). */
+  __batchId?: string;
+}
+
+/**
+ * A serialisable spec for a single pending dispatch step, used by batch
+ * callback chains and (in future) sequential job chains.
+ */
+export interface ChainStepSpec {
+  queueName: string;
+  jobName: string;
+  payload: unknown;
+  options: JobsOptions;
+}
+
+/**
+ * Callback specs attached to a batch. Each spec describes a job to dispatch
+ * when the batch reaches its terminal state.
+ */
+export interface BatchCallbacks {
+  /** Dispatched only if every job in the batch succeeded (failed === 0). */
+  then?: ChainStepSpec;
+  /** Dispatched only if at least one job failed (failed > 0). */
+  catch?: ChainStepSpec;
+  /** Always dispatched when the batch is done, regardless of outcome. */
+  finally?: ChainStepSpec;
 }
 
 export interface QueueOptions {

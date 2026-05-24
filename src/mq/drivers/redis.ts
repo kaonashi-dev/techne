@@ -20,6 +20,8 @@ function normalizeOptions(options: JobsOptions): JobsOptions {
     removeOnFail: options.removeOnFail ?? false,
     backoff: options.backoff,
     jobId: options.jobId,
+    // Batch side-channel field — must be preserved so the barrier can count completions.
+    __batchId: options.__batchId,
   };
 }
 

@@ -1,4 +1,6 @@
 import { definePlugin } from "../../core/plugins/define-plugin";
+import { clearBatchStore, setBatchStore } from "../batch-context";
+import { MemoryBatchStore } from "../batch-store";
 import {
   isQueueBagDef,
   isQueueDef,
@@ -55,7 +57,11 @@ export function mq(options: MqPluginOptions = {}) {
 
       const resolver = createResolverFromContainer((token) => ctx.resolve(token));
       setDispatcherContext(resolver);
-      ctx.onShutdown(() => clearDispatcherContext());
+      setBatchStore(new MemoryBatchStore());
+      ctx.onShutdown(() => {
+        clearDispatcherContext();
+        clearBatchStore();
+      });
 
       const registered = new Set<string>();
       const bags: QueueBagDef[] = [];
