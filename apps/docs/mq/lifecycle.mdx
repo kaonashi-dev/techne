@@ -37,7 +37,9 @@ import { OnFailure } from "@kaonashi-dev/techne/mq";
 @Processor(PayinsQueueDef)
 class PayinsProcessor {
   @On("initiate-payin")
-  init(job: Job<{ payinId: string }>) { /* … */ }
+  init(job: Job<{ payinId: string }>) {
+    /* … */
+  }
 
   @OnFailure("initiate-payin")
   async onInitiateFailed(payload: { payinId: string }, error: Error) {

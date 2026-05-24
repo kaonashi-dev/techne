@@ -20,7 +20,7 @@ await chain([
 ```
 
 Each element is a `PendingDispatch` — exactly what `Job.dispatch(payload)`
-or `def.dispatchers.x(payload)` returns. The chain *parks* each builder
+or `def.dispatchers.x(payload)` returns. The chain _parks_ each builder
 internally so awaiting them individually is a no-op; only
 `chain(...).dispatch()` actually enqueues anything.
 
@@ -96,7 +96,7 @@ you need cross-process persistence.
 - **Empty chain** (`chain([])`) — no-op, returns immediately.
 - **Single-step chain** (`chain([x])`) — bypasses the store; equivalent to
   awaiting `x` directly.
-- **A step's `failed()` hook** runs *outside* the chain context (the catch
+- **A step's `failed()` hook** runs _outside_ the chain context (the catch
   handler dispatches independently). It won't re-enter the chain.
 - **Catch handler that itself fails** — its own retry/`failed()` policy
   applies. The chain is already considered done.

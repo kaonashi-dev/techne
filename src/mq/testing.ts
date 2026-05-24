@@ -4,11 +4,7 @@ import { getChainStore, setChainStore } from "./chain-context";
 import type { ChainStore } from "./chain-store";
 import type { QueueDef } from "./define-queue";
 import type { DispatchableConstructor } from "./dispatchable";
-import {
-  clearDispatcherContext,
-  setDispatcherContext,
-  type QueueResolver,
-} from "./dispatcher";
+import { clearDispatcherContext, setDispatcherContext, type QueueResolver } from "./dispatcher";
 import type { BatchCallbacks, ChainStepSpec, JobsOptions } from "./types";
 
 /**
@@ -41,9 +37,7 @@ export interface BatchRecord {
 }
 
 /** Either a Dispatchable class or a raw `jobName` string. */
-export type DispatchTarget =
-  | DispatchableConstructor<unknown, unknown>
-  | string;
+export type DispatchTarget = DispatchableConstructor<unknown, unknown> | string;
 
 // ── Internal helpers ─────────────────────────────────────────────────────────
 
@@ -54,8 +48,7 @@ function isDispatchableClass(t: DispatchTarget): t is DispatchableConstructor<un
 function targetMatches(record: DispatchRecord, target: DispatchTarget): boolean {
   if (!isDispatchableClass(target)) return record.jobName === target;
   return (
-    record.queueName === target.queue.name &&
-    record.jobName === (target.jobName ?? target.name)
+    record.queueName === target.queue.name && record.jobName === (target.jobName ?? target.name)
   );
 }
 
@@ -71,16 +64,9 @@ function fail(message: string): never {
 // ── Recording stores ──────────────────────────────────────────────────────────
 
 class RecordingChainStore implements ChainStore {
-  public readonly saved = new Map<
-    string,
-    { steps: ChainStepSpec[]; catchSpec?: ChainStepSpec }
-  >();
+  public readonly saved = new Map<string, { steps: ChainStepSpec[]; catchSpec?: ChainStepSpec }>();
 
-  async save(
-    chainId: string,
-    steps: ChainStepSpec[],
-    catchSpec?: ChainStepSpec,
-  ): Promise<void> {
+  async save(chainId: string, steps: ChainStepSpec[], catchSpec?: ChainStepSpec): Promise<void> {
     this.saved.set(chainId, { steps: [...steps], catchSpec });
   }
   async next(): Promise<ChainStepSpec | null> {
@@ -102,16 +88,9 @@ const ZERO_PROGRESS: BatchProgress = {
 };
 
 class RecordingBatchStore implements BatchStore {
-  public readonly saved = new Map<
-    string,
-    { total: number; callbacks: BatchCallbacks }
-  >();
+  public readonly saved = new Map<string, { total: number; callbacks: BatchCallbacks }>();
 
-  async create(
-    batchId: string,
-    total: number,
-    callbacks: BatchCallbacks,
-  ): Promise<void> {
+  async create(batchId: string, total: number, callbacks: BatchCallbacks): Promise<void> {
     this.saved.set(batchId, { total, callbacks });
   }
   async incrementCompleted(): Promise<BatchProgress> {
@@ -259,9 +238,7 @@ export class FakeQueue {
   assertDispatchedTimes(target: DispatchTarget, times: number): void {
     const actual = this.filter(target).length;
     if (actual !== times) {
-      fail(
-        `Expected ${targetLabel(target)} to have been dispatched ${times}x; got ${actual}.`,
-      );
+      fail(`Expected ${targetLabel(target)} to have been dispatched ${times}x; got ${actual}.`);
     }
   }
 
@@ -269,9 +246,7 @@ export class FakeQueue {
   assertNotDispatched(target: DispatchTarget): void {
     const actual = this.filter(target).length;
     if (actual > 0) {
-      fail(
-        `Expected ${targetLabel(target)} not to have been dispatched; got ${actual}.`,
-      );
+      fail(`Expected ${targetLabel(target)} not to have been dispatched; got ${actual}.`);
     }
   }
 
@@ -288,9 +263,7 @@ export class FakeQueue {
     const queueName = typeof queue === "string" ? queue : queue.name;
     const matches = this.records.filter((r) => r.queueName === queueName);
     if (matches.length > 0) {
-      fail(
-        `Expected nothing dispatched on queue '${queueName}'; got ${matches.length}.`,
-      );
+      fail(`Expected nothing dispatched on queue '${queueName}'; got ${matches.length}.`);
     }
   }
 
@@ -322,16 +295,13 @@ export class FakeQueue {
       if (actualSteps.length !== expectedSteps.length) return false;
       return expectedSteps.every(
         (e, i) =>
-          actualSteps[i]!.queueName === e.queueName &&
-          actualSteps[i]!.jobName === e.jobName,
+          actualSteps[i]!.queueName === e.queueName && actualSteps[i]!.jobName === e.jobName,
       );
     });
 
     if (!ok) {
       const want = expected.map((c) => c.name).join(" → ");
-      fail(
-        `Expected a chain matching [${want}]; got ${allChains.length} chain(s), none matched.`,
-      );
+      fail(`Expected a chain matching [${want}]; got ${allChains.length} chain(s), none matched.`);
     }
   }
 
@@ -345,9 +315,7 @@ export class FakeQueue {
   assertBatched(predicate: (batch: BatchRecord) => boolean): void {
     const all = this.batches();
     if (!all.some(predicate)) {
-      fail(
-        `Expected a batch matching predicate; got ${all.length} batch(es), none matched.`,
-      );
+      fail(`Expected a batch matching predicate; got ${all.length} batch(es), none matched.`);
     }
   }
 }
