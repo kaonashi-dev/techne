@@ -9,7 +9,7 @@ import {
 import { getMetadata } from "../core/metadata-store";
 import { Injectable } from "../decorators/injectable.decorator";
 import type { UniqueOptions } from "./decorators/unique.decorator";
-import type { DispatchUniqueOptions } from "./dispatcher";
+import { getDeferredBuffer, type DispatchUniqueOptions } from "./dispatcher";
 import { PendingDispatch } from "./pending-dispatch";
 import type { BackoffOptions, JobsOptions } from "./types";
 import type { QueueDef } from "./define-queue";
@@ -98,6 +98,42 @@ export abstract class Dispatchable<TPayload = void, TResult = unknown> {
     ...args: PayloadArgs<C>
   ): PendingDispatch<PayloadOf<C>, ResultOf<C>> {
     return buildPendingDispatch(this, args[0]).dispatchUnless(condition);
+  }
+
+  /**
+   * Defer enqueue until after the HTTP response has been flushed.
+   *
+   * Inside an HTTP request (established by the `mq()` plugin's `onRequest`
+   * hook), the job is held in the per-request ALS buffer and dispatched in
+   * `onAfterResponse` — after the client has already received the response,
+   * so this path never blocks the response time.
+   *
+   * Outside an HTTP context (worker jobs, CLI commands, tests) there is no
+   * buffer; the job is dispatched immediately as a fire-and-forget (errors
+   * are logged to `console.error` but do not propagate).
+   *
+   * @example
+   *   // Inside an HTTP handler — enqueued after response:
+   *   InitiatePayin.dispatchAfterResponse({ payinId: "pi_123" });
+   */
+  static dispatchAfterResponse<C extends DispatchableConstructor<unknown, unknown>>(
+    this: C,
+    ...args: PayloadArgs<C>
+  ): void {
+    const pd = buildPendingDispatch(this, args[0]);
+    const buf = getDeferredBuffer();
+    if (buf) {
+      buf.push(pd);
+    } else {
+      // No HTTP context: fire-and-forget immediately.
+      void (async () => {
+        try {
+          await pd;
+        } catch (e) {
+          console.error("[mq] deferred dispatch error", e);
+        }
+      })();
+    }
   }
 }
 
