@@ -32,16 +32,16 @@ export const DISPATCHABLE_MARKER = Symbol("DISPATCHABLE_MARKER");
  * dependencies are injected when the worker resolves it to run a job.
  *
  * @example
- *   class InitiatePayin extends Dispatchable<{ payinId: string }> {
- *     static queue = PayinsQueueDef;
- *     static jobName = "initiate-payin"; // optional; defaults to class name
- *     constructor(private exec: CoPayinsExecutionService) { super(); }
- *     async handle({ payinId }: { payinId: string }) {
- *       await this.exec.initiatePayin(payinId);
+ *   class initiateTask extends Dispatchable<{ taskId: string }> {
+ *     static queue = ExampleQueueDef;
+ *     static jobName = "initiate-task"; // optional; defaults to class name
+ *     constructor(private exec: CotasksExecutionService) { super(); }
+ *     async handle({ taskId }: { taskId: string }) {
+ *       await this.exec.initiateTask(taskId);
  *     }
  *   }
  *
- *   await InitiatePayin.dispatch({ payinId: "pi_123" })
+ *   await initiateTask.dispatch({ taskId: "pi_123" })
  *     .delay(60_000).tries(3);
  */
 export abstract class Dispatchable<TPayload = void, TResult = unknown> {
@@ -114,7 +114,7 @@ export abstract class Dispatchable<TPayload = void, TResult = unknown> {
    *
    * @example
    *   // Inside an HTTP handler — enqueued after response:
-   *   InitiatePayin.dispatchAfterResponse({ payinId: "pi_123" });
+   *   initiateTask.dispatchAfterResponse({ taskId: "pi_123" });
    */
   static dispatchAfterResponse<C extends DispatchableConstructor<unknown, unknown>>(
     this: C,
@@ -218,10 +218,10 @@ export function isDispatchableClass(
  *
  * @example
  *   @Queueable()
- *   class InitiatePayin extends Dispatchable<{ payinId: string }> {
- *     static queue = PayinsQueueDef;
- *     constructor(private exec: CoPayinsExecutionService) { super(); }
- *     async handle({ payinId }) { await this.exec.initiatePayin(payinId); }
+ *   class initiateTask extends Dispatchable<{ taskId: string }> {
+ *     static queue = ExampleQueueDef;
+ *     constructor(private exec: CotasksExecutionService) { super(); }
+ *     async handle({ taskId }) { await this.exec.initiateTask(taskId); }
  *   }
  */
 export function Queueable(): ClassDecorator {

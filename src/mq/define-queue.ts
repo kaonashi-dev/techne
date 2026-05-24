@@ -43,8 +43,8 @@ export interface QueueDef<N extends string = string, T extends JobMap = JobMap> 
    * dispatcher context registered by `mq()`.
    *
    * @example
-   *   const { initiatePayin } = PayinsQueueDef.dispatchers;
-   *   await initiatePayin({ payinId }).delay(60_000).tries(3);
+   *   const { initiateTask } = ExampleQueueDef.dispatchers;
+   *   await initiateTask({ taskId }).delay(60_000).tries(3);
    */
   readonly dispatchers: DispatchersOf<T>;
 }
@@ -74,10 +74,10 @@ export type JobOf<Def extends QueueDef, K extends keyof Def["jobs"]> = Job<Def["
  *
  * @example
  *   constructor(
- *     @InjectQueue([PayinsQueue, AlertsQueue])
- *     queues: QueueBagOf<[typeof PayinsQueue, typeof AlertsQueue]>,
+ *     @InjectQueue([ExampleQueue, AlertsQueue])
+ *     queues: QueueBagOf<[typeof ExampleQueue, typeof AlertsQueue]>,
  *   ) {
- *     queues.payins.add("initiate-payin", { payinId });
+ *     queues.tasks.add("initiate-task", { taskId });
  *     queues.alerts.add("warn", { msg });
  *   }
  */
@@ -129,11 +129,11 @@ export type QueueDefFromClass<
  * so renaming a job name surfaces as a TypeScript error on every callsite.
  *
  * @example
- *   export const PayinsQueue = defineQueue({
- *     name: "payins",
+ *   export const ExampleQueue = defineQueue({
+ *     name: "tasks",
  *     jobs: {
- *       "initiate-payin": {} as { payinId: string },
- *       "settle-payins":  {} as Record<string, never>,
+ *       "initiate-task": {} as { taskId: string },
+ *       "settle-tasks":  {} as Record<string, never>,
  *     },
  *   });
  */
@@ -235,9 +235,9 @@ export interface QueueBagDef<M extends Record<string, QueueDef> = Record<string,
  * `QueueOf<Def>` so producers get full type safety on `add(name, data)`.
  *
  * @example
- *   const PayinsBag = defineQueueBag({ payins: PayinsQueueDef, alerts: AlertsQueueDef });
- *   constructor(@InjectQueue(PayinsBag) private q: BagOf<typeof PayinsBag>) {}
- *   await this.q.payins.add("initiate-payin", { payinId });
+ *   const tasksBag = defineQueueBag({ tasks: ExampleQueueDef, alerts: AlertsQueueDef });
+ *   constructor(@InjectQueue(tasksBag) private q: BagOf<typeof tasksBag>) {}
+ *   await this.q.tasks.add("initiate-task", { taskId });
  */
 export type BagOf<Bag extends QueueBagDef> = {
   readonly [K in keyof Bag["queues"]]: QueueOf<Bag["queues"][K]>;

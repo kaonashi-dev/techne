@@ -1,6 +1,6 @@
 # MQ ergonomics roadmap
 
-Status as of 2026-05-24. **All eight phases shipped.** This document records what was implemented per phase, where the implementation diverged from the original plan, and what follow-up work remains.
+Status as of 2026-05-24. **All nine phases shipped.** This document records what was implemented per phase, where the implementation diverged from the original plan, and what follow-up work remains.
 
 | # | Phase | Status | PR | Depends on |
 |---|---|---|---|---|
@@ -12,8 +12,9 @@ Status as of 2026-05-24. **All eight phases shipped.** This document records wha
 | 6 | Uniqueness (`@Unique`, `@UniqueUntilProcessing`) | ✅ shipped | [#49](https://github.com/kaonashi-dev/techne/pull/49) | 1 |
 | 7 | Per-job middleware (`RateLimited`, `WithoutOverlapping`, `ThrottlesExceptions`) | ✅ shipped | [#50](https://github.com/kaonashi-dev/techne/pull/50) | 1 |
 | 8 | `dispatchAfterResponse` (Elysia-integrated) | ✅ shipped | [#45](https://github.com/kaonashi-dev/techne/pull/45) | 1 |
+| 9 | Testing helper (`fakeQueue()` + assertions) | ✅ shipped | tbd | 1, 4, 5 |
 
-**Test footprint**: 457 tests pass across 65 files. Of those, 72 belong to MQ-ergonomics phases (split across `tests/mq-*.test.ts`). Build and lint are clean.
+**Test footprint**: 467 tests pass across 66 files. Of those, 82 belong to MQ-ergonomics phases (split across `tests/mq-*.test.ts`). Build and lint are clean.
 
 ---
 
@@ -371,6 +372,34 @@ MyJob.dispatch(payload).delay(5_000).afterResponse();
 
 ---
 
+## Phase 9 — Testing helper *(shipped)*
+
+**Surface** (in `@kaonashi-dev/techne/mq`):
+
+- `fakeQueue()` → `FakeQueue` — recorder that wraps the dispatch layer.
+- `FakeQueue.use(fn)` — install the fake for the duration of `fn`, restore prior context on exit.
+- `assertDispatched(target, predicate?)` — assert by Dispatchable class OR raw `jobName` string, optionally filtered by payload predicate.
+- `assertDispatchedTimes(target, n)`, `assertNotDispatched(target)`, `assertNothingDispatched()`, `assertNothingDispatchedOn(queue)`.
+- `assertChained(steps: DispatchableConstructor[])` — match the full step sequence by class identity.
+- `assertBatched(predicate: (BatchRecord) => boolean)` — predicate over the full batch (total, jobs, callbacks).
+- Inspection: `all()`, `filter(target)`, `chains()`, `batches()` for ad-hoc tests.
+
+**Mechanics**:
+
+- `use()` installs three pieces of context: the dispatcher (via `setDispatcherContext`), a `RecordingChainStore` (via `setChainStore`), and a `RecordingBatchStore` (via `setBatchStore`).
+- The fake resolver returns a stub Queue whose `add(name, data, opts)` pushes onto `records` and returns `{ id: "fake-N" }`.
+- `RecordingChainStore.save` and `RecordingBatchStore.create` retain enough state for `assertChained` and `assertBatched` to reconstruct chains/batches by `__chainId` / `__batchId` metadata on the dispatched records.
+- On `use()` exit: dispatcher context is cleared; chain and batch stores are restored to whatever was set before (typically the memory stores installed by the `mq()` plugin).
+
+**Acceptance**: 10 tests in `tests/mq-testing.test.ts`. 467 total pass. Build + lint clean.
+
+**Divergence from original proposal**: kept the surface intentionally minimal for v1. Did NOT ship:
+- A separate `fakeBus()` namespace — chain/batch assertions live on the same `FakeQueue` object.
+- `assertChainedTimes()` / `assertBatchedTimes()` — straightforward to add when the v1 surface proves itself.
+- `clearAll()` static helper — left to the existing `clear*` exports.
+
+---
+
 ## Actual execution order
 
 Different from the originally recommended order. What actually happened:
@@ -382,9 +411,10 @@ Different from the originally recommended order. What actually happened:
 5. ✅ Phase 5 — batch (memory-only; Redis deferred).
 6. ✅ Phase 6 — uniqueness.
 7. ✅ Phase 7 — middleware.
-8. ✅ Phase 2 — class-level defaults (last; deliberately deferred until consumer feedback shaped the metadata names).
+8. ✅ Phase 2 — class-level defaults (deferred until consumer feedback shaped the metadata names).
+9. ✅ Phase 9 — testing helper (added after Phases 4/5 stabilized so chain/batch assertions could be built on the final shape).
 
-The fact that Phase 2 landed last (despite being smallest) is interesting — it gave the decorator names time to be chosen against real chain/batch/uniqueness call sites rather than in isolation.
+The fact that Phase 2 landed late (despite being smallest) is interesting — it gave the decorator names time to be chosen against real chain/batch/uniqueness call sites rather than in isolation. Phase 9 followed the same logic: ship the underlying surface first, then the test helper that asserts against it.
 
 ---
 

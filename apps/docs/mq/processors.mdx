@@ -52,10 +52,12 @@ const PayinsOn = onFor(PayinsQueueDef);
 
 @Processor(PayinsQueueDef)
 class PayinsProcessor {
-  @PayinsOn("initiate-payin")           // ✓ TS-checked against the def
-  init(job: JobOf<typeof PayinsQueueDef, "initiate-payin">) { /* … */ }
+  @PayinsOn("initiate-payin") // ✓ TS-checked against the def
+  init(job: JobOf<typeof PayinsQueueDef, "initiate-payin">) {
+    /* … */
+  }
 
-  @PayinsOn("not-a-real-job")           // ✗ TS error
+  @PayinsOn("not-a-real-job") // ✗ TS error
   bad() {}
 }
 ```
@@ -93,13 +95,13 @@ handlers and `handle()` exist, named handlers win.
 
 ## When to use Processors vs Dispatchables
 
-| | Processor | Dispatchable |
-|---|---|---|
-| Handlers per class | Many | One |
-| File count | Fewer | More |
-| Pairs naturally with | Contract API + dispatchers map | Class-level decorators (`@Tries`, `@Backoff`, etc.) |
-| Failure lifecycle | `@OnFailure(name)` | `failed()` method |
-| Per-job middleware | (not directly — wrap the body manually) | `middleware()` method |
+|                      | Processor                               | Dispatchable                                        |
+| -------------------- | --------------------------------------- | --------------------------------------------------- |
+| Handlers per class   | Many                                    | One                                                 |
+| File count           | Fewer                                   | More                                                |
+| Pairs naturally with | Contract API + dispatchers map          | Class-level decorators (`@Tries`, `@Backoff`, etc.) |
+| Failure lifecycle    | `@OnFailure(name)`                      | `failed()` method                                   |
+| Per-job middleware   | (not directly — wrap the body manually) | `middleware()` method                               |
 
 Both styles coexist on the same queue, **but each job name must have
 exactly one handler**. Duplicates throw at startup.

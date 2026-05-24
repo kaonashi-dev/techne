@@ -117,8 +117,18 @@
       "group": "MQ",
       "pages": [
         "mq/overview",
+        "mq/contracts",
+        "mq/dispatchables",
         "mq/processors",
+        "mq/lifecycle",
+        "mq/chains",
+        "mq/batches",
+        "mq/uniqueness",
+        "mq/middleware",
+        "mq/after-response",
+        "mq/testing",
         "mq/drivers",
+        "mq/deployments",
         "mq/legacy-queue"
       ]
     },

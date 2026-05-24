@@ -32,9 +32,7 @@ const app = await TechneFactory.create({
 });
 
 // Dispatch from anywhere — single statement, fully typed:
-await SendWelcome.dispatch({ to: "alice@example.com" })
-  .delay(60_000)
-  .tries(3);
+await SendWelcome.dispatch({ to: "alice@example.com" }).delay(60_000).tries(3);
 ```
 
 That's the whole minimum loop: declare the queue contract, mark the job class
@@ -44,9 +42,9 @@ with `@Queueable()`, dispatch with the fluent builder.
 
 Pick the style that fits your codebase. They interoperate freely.
 
-| Style | When to use | Pages |
-|---|---|---|
-| **Dispatchable class** (Laravel-style) | One class per job. Co-locates payload type, queue, and handler body. | [Dispatchables](/mq/dispatchables) |
+| Style                                   | When to use                                                                | Pages                                                    |
+| --------------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------- |
+| **Dispatchable class** (Laravel-style)  | One class per job. Co-locates payload type, queue, and handler body.       | [Dispatchables](/mq/dispatchables)                       |
 | **Contract API** (`@Processor` + `@On`) | Multiple handlers grouped in one processor class. Mirrors NestJS patterns. | [Contracts](/mq/contracts), [Processors](/mq/processors) |
 
 Both share the same fluent dispatch builder, the same lifecycle hooks, the
