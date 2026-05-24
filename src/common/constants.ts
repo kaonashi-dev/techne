@@ -22,6 +22,7 @@ export const MQ_DEFAULT_TRIES = "mq_default_tries";
 export const MQ_DEFAULT_BACKOFF = "mq_default_backoff";
 export const MQ_DEFAULT_TIMEOUT = "mq_default_timeout";
 export const MQ_DEFAULT_QUEUE = "mq_default_queue";
+export const MQ_ON_FAILURE_METADATA = "mq_on_failure";
 export const CATCH_METADATA = "__catch__";
 export const VERSION_METADATA = "__version__";
 export const PUBLIC_METADATA = "__public__";
