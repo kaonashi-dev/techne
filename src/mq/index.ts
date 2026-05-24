@@ -36,3 +36,4 @@ export * from "./batch-store";
 export * from "./batch-context";
 export * from "./decorators/unique.decorator";
 export * from "./middlewares/index";
+export * from "./testing";

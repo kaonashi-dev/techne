@@ -1,0 +1,216 @@
+---
+title: "Testing"
+description: "fakeQueue() with assertion helpers, plus the lower-level primitives for custom test infrastructure."
+---
+
+The MQ module ships a **`fakeQueue()`** helper that records every dispatch,
+chain, and batch made during a test — without ever touching a real driver
+or worker — and exposes assertion methods you'd expect from a mature queue
+testing surface.
+
+## `fakeQueue()` — the recommended path
+
+```ts
+import { fakeQueue } from "@kaonashi-dev/techne/mq";
+
+test("signup schedules a welcome email", async () => {
+  const q = fakeQueue();
+
+  await q.use(async () => {
+    await usersService.signup(input);
+  });
+
+  q.assertDispatched(SendWelcomeEmail);
+});
+```
+
+`q.use(fn)` installs the fake as the active dispatcher, chain store, and
+batch store for the duration of `fn`. Every `Dispatchable.dispatch(...)`,
+`def.dispatchers.x(...)`, `chain(...)`, and `batch(...)` call inside is
+recorded. On exit the prior context is restored.
+
+## Dispatch assertions
+
+```ts
+// Assert by Dispatchable class
+q.assertDispatched(SendWelcomeEmail);
+
+// Assert by raw job name (matches the `static jobName ?? class.name`)
+q.assertDispatched("sendWelcome");
+
+// Assert at least one matching payload
+q.assertDispatched(SendWelcomeEmail, (payload) => payload.to === "alice@example.com");
+
+// Assert exact count
+q.assertDispatchedTimes(SendWelcomeEmail, 1);
+
+// Assert NOT dispatched
+q.assertNotDispatched(GenerateReport);
+
+// Assert nothing was dispatched at all
+q.assertNothingDispatched();
+
+// Assert nothing was dispatched to a specific queue
+q.assertNothingDispatchedOn(AlertsQueueDef);
+q.assertNothingDispatchedOn("fake-alerts");
+```
+
+## Chain assertions
+
+`assertChained` matches the full step sequence by Dispatchable class
+(comparing both queue and job name):
+
+```ts
+test("checkout chains three jobs", async () => {
+  const q = fakeQueue();
+
+  await q.use(async () => {
+    await orderService.checkout(cart);
+  });
+
+  q.assertChained([InitiatePayin, PostProcessPayin, PublishReceipt]);
+});
+```
+
+For richer inspection, `q.chains()` returns the raw `ChainRecord[]`:
+
+```ts
+const chains = q.chains();
+expect(chains).toHaveLength(1);
+expect(chains[0].firstStep.payload).toEqual({ payinId: "pi_1" });
+expect(chains[0].remainingSteps).toHaveLength(2);
+expect(chains[0].catchSpec?.jobName).toBe("notifyOps");
+```
+
+## Batch assertions
+
+`assertBatched` takes a predicate over the full `BatchRecord` — total,
+jobs, callbacks:
+
+```ts
+test("daily digest fans out three jobs", async () => {
+  const q = fakeQueue();
+
+  await q.use(() => digestService.run());
+
+  q.assertBatched((b) => b.total === 3 && b.jobs.length === 3);
+  q.assertBatched((b) => b.callbacks.then?.jobName === "notifySuccess");
+  q.assertBatched((b) => b.callbacks.finally?.jobName === "cleanupTemp");
+});
+```
+
+`q.batches()` returns the raw `BatchRecord[]` for ad-hoc inspection.
+
+## Inspecting recorded dispatches
+
+When the assertion helpers aren't enough, drop down to the raw records:
+
+```ts
+const all = q.all(); // every dispatch in order
+const justEmails = q.filter(SendWelcomeEmail);
+const chains = q.chains();
+const batches = q.batches();
+```
+
+Each `DispatchRecord` carries `{ queueName, jobName, payload, options }` —
+including the `__chainId`, `__chainStepIndex`, `__batchId` side-channel
+metadata if the dispatch was part of a chain or batch.
+
+## Independent fakes per test
+
+Each `fakeQueue()` call returns a fresh recorder. You can use multiple
+fakes within one file as long as `use()` invocations don't overlap (they
+share the module-level dispatcher state):
+
+```ts
+test("two phases", async () => {
+  const phase1 = fakeQueue();
+  const phase2 = fakeQueue();
+
+  await phase1.use(() => signupFlow.run());
+  await phase2.use(() => welcomeFlow.run());
+
+  phase1.assertDispatched(CreateUser);
+  phase2.assertDispatched(SendWelcomeEmail);
+});
+```
+
+## Handler-level tests — `dispatchSync`
+
+`fakeQueue` is producer-side: it asserts on what was _enqueued_. To test
+the handler body itself, use `dispatchSync` (no fake needed):
+
+```ts
+test("InitiatePayin marks the payin as PROCESSING", async () => {
+  const ctx = await TechneFactory.createApplicationContext({
+    plugins: [mq({ queues: [PayinsQueueDef] })],
+    providers: [InitiatePayin, PayinsDao],
+    logger: false,
+  });
+
+  await InitiatePayin.dispatchSync({ payinId: "pi_test" });
+
+  const payin = await ctx.get(PayinsDao).findById("pi_test");
+  expect(payin.status).toBe("PROCESSING");
+
+  await ctx.close();
+});
+```
+
+`dispatchSync` resolves the Dispatchable from the container (so
+constructor DI works), invokes `handle(payload)`, and returns the result.
+No queue, no worker, no retries.
+
+## Low-level primitives
+
+`fakeQueue` is built on the same primitives you can call directly when you
+need finer control:
+
+| Primitive                                                     | What it does                                            |
+| ------------------------------------------------------------- | ------------------------------------------------------- |
+| `withDispatcherContext(resolver, fn)`                         | Swap the queue resolver for the duration of `fn`.       |
+| `setDispatcherContext(resolver)` / `clearDispatcherContext()` | Set / clear the active resolver imperatively.           |
+| `setChainStore(store)` / `clearChainStore()`                  | Replace the chain store (e.g., with your own recorder). |
+| `setBatchStore(store)` / `clearBatchStore()`                  | Replace the batch store.                                |
+| `setDriverContext(driver)` / `clearDriverContext()`           | Override the driver used by uniqueness locks.           |
+| `clearSyncHandlers()`                                         | Drop registered sync handlers between tests.            |
+| `clearMiddlewareState()`                                      | Reset `RateLimited` / `ThrottlesExceptions` counters.   |
+| `runWithDeferredBuffer(fn)` + `flushDeferred()`               | Control the `dispatchAfterResponse` buffer manually.    |
+
+If you bootstrap a full `TechneFactory.createApplicationContext` per test
+and `await ctx.close()` in cleanup, the `mq()` plugin's `onShutdown` hook
+handles the clears for you.
+
+## Patterns
+
+### Capture dispatch options
+
+```ts
+const q = fakeQueue();
+await q.use(() => SendWelcomeEmail.dispatch({ to: "x" }).delay(60_000).tries(3));
+
+const [record] = q.filter(SendWelcomeEmail);
+expect(record.options).toMatchObject({ delay: 60_000, attempts: 3 });
+```
+
+### Assert chain catch handler
+
+```ts
+const q = fakeQueue();
+await q.use(() =>
+  chain([A.dispatch({}), B.dispatch({})])
+    .catch(NotifyOps.dispatch({ event: "failed" }))
+    .dispatch(),
+);
+
+expect(q.chains()[0].catchSpec?.jobName).toBe("NotifyOps");
+```
+
+### Combine producer + handler tests
+
+In integration tests, bootstrap a real `ApplicationContext` with the
+memory driver, dispatch the producer flow, and let the workers process
+naturally. In unit tests, use `fakeQueue` for the producer-side checks
+and `dispatchSync` for the handler-side checks. The framework's own MQ
+test suite (`tests/mq-*.test.ts`) uses both styles depending on the
+phase.

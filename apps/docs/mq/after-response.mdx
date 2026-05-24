@@ -35,10 +35,7 @@ async show(id: string) {
 Apply fluent options first, then defer:
 
 ```ts
-ViewedProfile.dispatch({ userId: id })
-  .delay(5_000)
-  .tries(2)
-  .afterResponse();          // returns void; no await
+ViewedProfile.dispatch({ userId: id }).delay(5_000).tries(2).afterResponse(); // returns void; no await
 ```
 
 ## How it works
@@ -98,7 +95,7 @@ of the normal queue contract — the job is enqueued with its full
 ## When NOT to use
 
 - When the response should **depend** on the dispatch's result. Use `await
-  Job.dispatch(payload)` inline instead.
+Job.dispatch(payload)` inline instead.
 - When the dispatch is critical and failure to enqueue must abort the
   request. Deferred errors are logged, not surfaced.
 - When you're not inside an HTTP request — the fire-and-forget fallback
