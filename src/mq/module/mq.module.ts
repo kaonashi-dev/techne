@@ -14,6 +14,8 @@ import {
   clearDispatcherContext,
   clearDriverContext,
   createResolverFromContainer,
+  enterDeferredBuffer,
+  flushDeferred,
   setDispatcherContext,
   setDriverContext,
 } from "../dispatcher";
@@ -69,6 +71,17 @@ export function mq(options: MqPluginOptions = {}) {
         clearChainStore();
         clearBatchStore();
         clearDriverContext();
+      });
+
+      // Wire per-request deferred dispatch buffer so that
+      // `dispatchAfterResponse()` and `PendingDispatch.afterResponse()` can
+      // enqueue jobs that flush only after the HTTP response has been sent.
+      const elysia = ctx.http() as any;
+      elysia.onRequest(() => {
+        enterDeferredBuffer();
+      });
+      elysia.onAfterResponse(async () => {
+        await flushDeferred();
       });
 
       const registered = new Set<string>();
