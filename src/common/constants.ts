@@ -18,6 +18,7 @@ export const QUEUE_PROCESSOR_METADATA = "queue_processor";
 export const QUEUE_PROCESS_METADATA = "queue_process";
 export const MQ_PROCESSOR_METADATA = "mq_processor";
 export const MQ_PROCESS_METADATA = "mq_process";
+export const MQ_ON_FAILURE_METADATA = "mq_on_failure";
 export const CATCH_METADATA = "__catch__";
 export const VERSION_METADATA = "__version__";
 export const PUBLIC_METADATA = "__public__";
