@@ -33,9 +33,14 @@ export class ChainBuilder {
    * fails permanently (all retries exhausted). Remaining steps after the
    * failed step are skipped.
    */
+<<<<<<< HEAD
   // oxlint-disable-next-line no-thenable -- catch is a fluent API method, not Promise.catch
   catch(handler: PendingDispatch): this {
     handler._parked = true;
+=======
+  catch(handler: PendingDispatch): this {
+    (handler as any)._parked = true;
+>>>>>>> 9cda9d2 (feat(mq): forward-compat scaffolding — chain/batch primitives, job.state getter, driver side-channel fields)
     this._catchSpec = toPendingDispatchSpec(handler);
     return this;
   }

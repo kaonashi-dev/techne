@@ -26,6 +26,11 @@ function normalizeOptions(options: JobsOptions): JobsOptions {
     __batchId: options.__batchId,
     lockKey: options.lockKey,
     lockUntilProcessing: options.lockUntilProcessing,
+    // Chain side-channel fields — must be preserved so the worker can advance the chain.
+    __chainId: options.__chainId,
+    __chainStepIndex: options.__chainStepIndex,
+    // Batch side-channel field — must be preserved so the barrier can count completions.
+    __batchId: options.__batchId,
   };
 }
 

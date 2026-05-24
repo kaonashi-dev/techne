@@ -61,6 +61,8 @@ export class PendingDispatch<TPayload = unknown, TResult = unknown>
    */
   _parked = false;
   private readonly uniqueOptions?: DispatchUniqueOptions;
+  /** When true, awaiting this builder is a no-op (used by batch() to park jobs). */
+  _parked = false;
 
   constructor(init: PendingDispatchInit<TPayload, TResult>) {
     this.queueName = init.queueName;
