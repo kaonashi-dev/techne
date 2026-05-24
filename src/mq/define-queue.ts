@@ -60,8 +60,7 @@ export interface DefineQueueOptions {
   worker?: WorkerOptions;
 }
 
-export interface DefineQueueFromClassOptions<N extends string = string>
-  extends DefineQueueOptions {
+export interface DefineQueueFromClassOptions<N extends string = string> extends DefineQueueOptions {
   /** Override the queue name. Defaults to the class's runtime name. */
   name?: N;
 }
@@ -190,9 +189,7 @@ export type BagOf<Bag extends QueueBagDef> = {
  * Pass the bag to `mq({ queues: [bag] })` and its constituent queues are
  * registered automatically. Bags may be mixed with bare defs in `queues`.
  */
-export function defineQueueBag<const M extends Record<string, QueueDef>>(
-  map: M,
-): QueueBagDef<M> {
+export function defineQueueBag<const M extends Record<string, QueueDef>>(map: M): QueueBagDef<M> {
   const defs: QueueDef[] = [];
   const seen = new Set<string>();
   for (const def of Object.values(map)) {

@@ -17,11 +17,7 @@ import type { MqModuleOptions, RegisterQueueOptions } from "../types";
  * constituent queues are auto-registered), a `RegisterQueueOptions`
  * object, or a bare queue name string.
  */
-export type MqQueueRegistration =
-  | RegisterQueueOptions
-  | QueueDef
-  | QueueBagDef
-  | string;
+export type MqQueueRegistration = RegisterQueueOptions | QueueDef | QueueBagDef | string;
 
 export interface MqPluginOptions extends MqModuleOptions {
   queues?: MqQueueRegistration[];
@@ -47,7 +43,10 @@ export function mq(options: MqPluginOptions = {}) {
       const driver = createMqDriver(moduleOptions.connection);
       ctx.provide(MQ_MODULE_OPTIONS, moduleOptions);
       ctx.provide(MQ_DRIVER, driver);
-      ctx.provide(MQ_QUEUE_BAG, createQueueBag((token) => ctx.resolve(token)));
+      ctx.provide(
+        MQ_QUEUE_BAG,
+        createQueueBag((token) => ctx.resolve(token)),
+      );
 
       const registered = new Set<string>();
       const bags: QueueBagDef[] = [];
