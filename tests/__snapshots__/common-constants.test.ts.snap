@@ -63,6 +63,26 @@ exports[`common/constants snapshot of the public constant surface 1`] = `
     "value": "middleware",
   },
   {
+    "name": "MQ_DEFAULT_BACKOFF",
+    "typeOf": "string",
+    "value": "mq_default_backoff",
+  },
+  {
+    "name": "MQ_DEFAULT_QUEUE",
+    "typeOf": "string",
+    "value": "mq_default_queue",
+  },
+  {
+    "name": "MQ_DEFAULT_TIMEOUT",
+    "typeOf": "string",
+    "value": "mq_default_timeout",
+  },
+  {
+    "name": "MQ_DEFAULT_TRIES",
+    "typeOf": "string",
+    "value": "mq_default_tries",
+  },
+  {
     "name": "MQ_PROCESS_METADATA",
     "typeOf": "string",
     "value": "mq_process",
