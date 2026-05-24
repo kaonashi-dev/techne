@@ -159,8 +159,8 @@ export class PendingDispatch<TPayload = unknown, TResult = unknown>
 
 /**
  * Extract a serialisable step specification from a `PendingDispatch` so it
- * can be stored in a `ChainStore`. Package-internal — not re-exported from
- * the public index.
+ * can be stored in a `ChainStore` or `BatchStore`. Package-internal — not
+ * re-exported from the public index.
  */
 export function toPendingDispatchSpec(pd: PendingDispatch): ChainStepSpec {
   const p = pd as any;
