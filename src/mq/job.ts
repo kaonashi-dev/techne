@@ -14,6 +14,11 @@ export class Job<T = unknown, R = unknown> {
   failedReason?: string;
   stacktrace: string[];
 
+  /** The current persisted state of the job as of the last refresh. */
+  get state(): JobState {
+    return this.raw.state;
+  }
+
   constructor(
     private readonly driver: QueueDriver,
     private raw: JobJson<T, R>,
