@@ -19,6 +19,8 @@ export interface RedisClientAdapter {
     channel: string,
     listener: (message: string) => void,
   ): Promise<() => Promise<void> | void>;
+  /** SET key value NX PX ttlMs — returns true if the key was set (didn't already exist). */
+  setnx(key: string, value: string, ttlMs: number): Promise<boolean>;
   quit(): Promise<void>;
 }
 
@@ -50,6 +52,42 @@ export interface JobsOptions {
   __chainStepIndex?: number;
   /** Internal: batch correlation id — set by batch().dispatch(). */
   __batchId?: string;
+  /** Internal: unique lock key stored on the job for release on completion/failure. */
+  lockKey?: string;
+  /**
+   * Internal: when `true` the unique lock should be released as soon as the
+   * worker claims the job (before `handle()` runs) rather than after completion.
+   */
+  lockUntilProcessing?: boolean;
+  /** Internal: chain correlation id — set by chain().dispatch(). */
+  __chainId?: string;
+  /** Internal: zero-based position of this job in its chain. */
+  __chainStepIndex?: number;
+  /** Internal: batch correlation id — set by batch().dispatch(). */
+  __batchId?: string;
+}
+
+/**
+ * A single step spec extracted from a PendingDispatch for use inside a chain or batch.
+ */
+export interface ChainStepSpec {
+  queueName: string;
+  jobName: string;
+  payload: unknown;
+  options: JobsOptions;
+}
+
+/**
+ * Callback specs attached to a batch. Each spec is dispatched when the batch
+ * reaches its terminal state (all jobs completed or failed).
+ */
+export interface BatchCallbacks {
+  /** Dispatched only if every job in the batch succeeded (failed === 0). */
+  then?: ChainStepSpec;
+  /** Dispatched only if at least one job failed (failed > 0). */
+  catch?: ChainStepSpec;
+  /** Always dispatched when the batch is done, regardless of outcome. */
+  finally?: ChainStepSpec;
 }
 
 /**
@@ -162,6 +200,8 @@ export interface QueueDriver {
     queueName: string,
     listener: (event: QueueEvent) => void,
   ): Promise<() => Promise<void> | void>;
+  acquireUniqueLock(lockKey: string, ttlMs: number): Promise<boolean>;
+  releaseUniqueLock(lockKey: string): Promise<void>;
 }
 
 export interface WorkerOptions extends QueueOptions {

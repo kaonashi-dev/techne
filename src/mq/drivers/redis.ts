@@ -24,6 +24,13 @@ function normalizeOptions(options: JobsOptions): JobsOptions {
     __chainStepIndex: options.__chainStepIndex,
     // Batch side-channel field — must be preserved so the barrier can count completions.
     __batchId: options.__batchId,
+    lockKey: options.lockKey,
+    lockUntilProcessing: options.lockUntilProcessing,
+    // Chain side-channel fields — must be preserved so the worker can advance the chain.
+    __chainId: options.__chainId,
+    __chainStepIndex: options.__chainStepIndex,
+    // Batch side-channel field — must be preserved so the barrier can count completions.
+    __batchId: options.__batchId,
   };
 }
 
@@ -322,6 +329,14 @@ export class RedisQueueDriver implements QueueDriver {
       await this.client.rpush(this.waitKey(queueName), id);
       await this.publish(queueName, { event: "waiting", payload: { jobId: id } });
     }
+  }
+
+  async acquireUniqueLock(lockKey: string, ttlMs: number): Promise<boolean> {
+    return this.client.setnx(`${this.prefix}:unique:${lockKey}`, "1", ttlMs);
+  }
+
+  async releaseUniqueLock(lockKey: string): Promise<void> {
+    await this.client.del(`${this.prefix}:unique:${lockKey}`);
   }
 
   async close(): Promise<void> {

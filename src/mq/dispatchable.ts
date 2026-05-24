@@ -3,9 +3,13 @@ import {
   MQ_DEFAULT_QUEUE,
   MQ_DEFAULT_TIMEOUT,
   MQ_DEFAULT_TRIES,
+  MQ_UNIQUE_METADATA,
+  MQ_UNIQUE_UNTIL_PROCESSING_METADATA,
 } from "../common/constants";
-import { Injectable } from "../decorators/injectable.decorator";
 import { getMetadata } from "../core/metadata-store";
+import { Injectable } from "../decorators/injectable.decorator";
+import type { UniqueOptions } from "./decorators/unique.decorator";
+import type { DispatchUniqueOptions } from "./dispatcher";
 import { PendingDispatch } from "./pending-dispatch";
 import type { BackoffOptions, JobsOptions } from "./types";
 import type { QueueDef } from "./define-queue";
@@ -119,11 +123,24 @@ function buildPendingDispatch<C extends DispatchableConstructor<unknown, unknown
 
   const onQueue = getMetadata<string>(MQ_DEFAULT_QUEUE, cls);
 
+  let uniqueOptions: DispatchUniqueOptions | undefined;
+
+  const unique = getMetadata<UniqueOptions>(MQ_UNIQUE_METADATA, cls);
+  if (unique !== undefined) {
+    uniqueOptions = { ...unique };
+  } else {
+    const uniqueUntil = getMetadata<UniqueOptions>(MQ_UNIQUE_UNTIL_PROCESSING_METADATA, cls);
+    if (uniqueUntil !== undefined) {
+      uniqueOptions = { ...uniqueUntil, untilProcessing: true };
+    }
+  }
+
   return new PendingDispatch<PayloadOf<C>, ResultOf<C>>({
     queueName: onQueue ?? cls.queue.name,
     jobName: cls.jobName ?? cls.name,
     payload: payload as PayloadOf<C>,
     options,
+    uniqueOptions,
   });
 }
 

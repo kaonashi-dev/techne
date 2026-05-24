@@ -98,6 +98,16 @@ exports[`common/constants snapshot of the public constant surface 1`] = `
     "value": "mq_processor",
   },
   {
+    "name": "MQ_UNIQUE_METADATA",
+    "typeOf": "string",
+    "value": "mq_unique",
+  },
+  {
+    "name": "MQ_UNIQUE_UNTIL_PROCESSING_METADATA",
+    "typeOf": "string",
+    "value": "mq_unique_until_processing",
+  },
+  {
     "name": "ON_APPLICATION_BOOTSTRAP",
     "typeOf": "string",
     "value": "onApplicationBootstrap",

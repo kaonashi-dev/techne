@@ -114,6 +114,12 @@ export function createRedisClientAdapter(
     async publish(channel: string, message: string) {
       return await client.publish?.(channel, message);
     },
+    async setnx(key: string, value: string, ttlMs: number) {
+      // Use SET key value NX PX ttlMs — the NX flag makes it a no-op if the
+      // key already exists. A non-null reply means the key was set.
+      const result = await client.set?.(key, value, "NX", "PX", ttlMs);
+      return result != null && result !== false;
+    },
     async subscribe(channel: string, listener: (message: string) => void) {
       if (typeof client.subscribe !== "function") {
         throw new Error("Redis subscriber does not support subscribe()");
