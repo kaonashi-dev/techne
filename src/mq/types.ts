@@ -44,6 +44,20 @@ export interface JobsOptions {
   backoff?: number | BackoffOptions;
   removeOnComplete?: boolean;
   removeOnFail?: boolean;
+  /** Internal: chain correlation id — set by chain().dispatch(). */
+  __chainId?: string;
+  /** Internal: zero-based position of this job in its chain. */
+  __chainStepIndex?: number;
+}
+
+/**
+ * A single step spec extracted from a PendingDispatch for use inside a chain.
+ */
+export interface ChainStepSpec {
+  queueName: string;
+  jobName: string;
+  payload: unknown;
+  options: JobsOptions;
 }
 
 export interface QueueOptions {
