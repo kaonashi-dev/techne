@@ -165,6 +165,10 @@ export class MqRegistry {
               `No Dispatchable registered for job '${job.name}' on queue '${queueName}'`,
             );
           }
+          // Release the unique lock immediately if this is a @UniqueUntilProcessing job.
+          if (job.opts.lockUntilProcessing && job.opts.lockKey) {
+            await this.releaseLock(job.opts.lockKey);
+          }
           const instance = this.container.get<{ handle: (p: unknown) => unknown }>(cls);
           return await instance.handle(job.data);
         },
@@ -174,8 +178,19 @@ export class MqRegistry {
       this.attachChainListeners(worker);
       this.attachBatchListeners(worker);
 
+      // Release the @Unique lock when the job reaches a terminal state.
+      worker.on("completed", (job: Job) => {
+        if (job.opts.lockKey && !job.opts.lockUntilProcessing) {
+          void this.releaseLock(job.opts.lockKey);
+        }
+      });
+
       worker.on("failed", async (job: Job, err: Error) => {
         if (job.state !== "failed") return;
+        // Release the @Unique lock on final failure (not retries).
+        if (job.opts.lockKey && !job.opts.lockUntilProcessing) {
+          await this.releaseLock(job.opts.lockKey);
+        }
         const cls = table.get(job.name);
         if (!cls) return;
         const hasFailedMethod = typeof (cls.prototype as any).failed === "function";
@@ -296,6 +311,14 @@ export class MqRegistry {
         }
       })();
     });
+  }
+
+  private async releaseLock(lockKey: string): Promise<void> {
+    try {
+      await this.driver.releaseUniqueLock(lockKey);
+    } catch (e) {
+      console.error(`[MqRegistry] Failed to release unique lock '${lockKey}':`, e);
+    }
   }
 
   async close(): Promise<void> {

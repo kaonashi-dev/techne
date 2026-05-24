@@ -34,3 +34,4 @@ export * from "./chain-context";
 export * from "./batch";
 export * from "./batch-store";
 export * from "./batch-context";
+export * from "./decorators/unique.decorator";

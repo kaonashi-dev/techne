@@ -1,6 +1,7 @@
+import { JobNotUniqueError } from "./errors";
 import { Queue } from "./queue";
 import { getMqToken } from "./tokens";
-import type { JobsOptions } from "./types";
+import type { JobsOptions, QueueDriver } from "./types";
 
 /**
  * Resolver the dispatch layer uses to fetch a `Queue` by name. Set once
@@ -10,6 +11,33 @@ import type { JobsOptions } from "./types";
  * Storing a single function pointer keeps per-dispatch overhead at one
  * indirect call — no DI walk, no Map lookup.
  */
+// ── Driver context (used for uniqueness lock operations) ──────────────────────
+
+let activeDriver: QueueDriver | undefined;
+
+/** Install the driver used by uniqueness checks. Called once during `mq()` plugin setup. */
+export function setDriverContext(driver: QueueDriver): void {
+  activeDriver = driver;
+}
+
+/** Drop the driver context. For test cleanup. */
+export function clearDriverContext(): void {
+  activeDriver = undefined;
+}
+
+/**
+ * Options controlling job uniqueness. Mirrors the `UniqueOptions` interface
+ * on the decorators — duplicated here so `dispatchToQueue` has no decorator dep.
+ */
+export interface DispatchUniqueOptions {
+  for: number;
+  key?: (payload: unknown) => string;
+  throwIfLocked?: boolean;
+  untilProcessing?: boolean;
+}
+
+// ── Queue resolver context ────────────────────────────────────────────────────
+
 export type QueueResolver = (queueName: string) => Queue;
 
 let activeResolver: QueueResolver | undefined;
@@ -60,13 +88,40 @@ export async function withDispatcherContext<T>(
  * Core enqueue used by every dispatch path (static `Job.dispatch`,
  * `def.dispatchers.x()`, the standalone `dispatch()` helper). Resolves
  * the queue via the active context and forwards to `queue.add()`.
+ *
+ * When `uniqueOptions` is provided the driver's uniqueness lock is acquired
+ * before enqueuing. If the lock is already held the dispatch is silently
+ * dropped (returns `undefined`) unless `throwIfLocked: true` is set.
  */
 export async function dispatchToQueue<T>(
   queueName: string,
   jobName: string,
   payload: T,
   options: JobsOptions = {},
+  uniqueOptions?: DispatchUniqueOptions,
 ): Promise<unknown> {
+  if (uniqueOptions && activeDriver) {
+    const keyStr = uniqueOptions.key
+      ? uniqueOptions.key(payload)
+      : JSON.stringify(payload);
+    const lockKey = `${queueName}:${jobName}:${keyStr}`;
+    const acquired = await activeDriver.acquireUniqueLock(lockKey, uniqueOptions.for);
+    if (!acquired) {
+      if (uniqueOptions.throwIfLocked) {
+        throw new JobNotUniqueError(lockKey);
+      }
+      return undefined;
+    }
+    // Pass the lockKey through the job options so the worker can release it.
+    // When `untilProcessing` is true, the worker releases the lock immediately
+    // after claiming the job (before `handle()` runs).
+    options = {
+      ...options,
+      lockKey,
+      ...(uniqueOptions.untilProcessing ? { lockUntilProcessing: true } : {}),
+    };
+  }
+
   const resolver = getDispatcherContext();
   const queue = resolver(queueName);
   return queue.add(jobName, payload, options);

@@ -1,4 +1,4 @@
-import { dispatchToQueue, getDispatcherContext } from "./dispatcher";
+import { dispatchToQueue, getDispatcherContext, type DispatchUniqueOptions } from "./dispatcher";
 import type { BackoffOptions, ChainStepSpec, JobsOptions } from "./types";
 
 /**
@@ -34,6 +34,7 @@ interface PendingDispatchInit<TPayload, TResult> {
   payload: TPayload;
   enabled?: boolean;
   options?: JobsOptions;
+  uniqueOptions?: DispatchUniqueOptions;
   __resultMarker?: TResult;
 }
 
@@ -59,6 +60,7 @@ export class PendingDispatch<TPayload = unknown, TResult = unknown>
    * an argument rather than awaited directly.
    */
   _parked = false;
+  private readonly uniqueOptions?: DispatchUniqueOptions;
 
   constructor(init: PendingDispatchInit<TPayload, TResult>) {
     this.queueName = init.queueName;
@@ -66,6 +68,7 @@ export class PendingDispatch<TPayload = unknown, TResult = unknown>
     this.payload = init.payload;
     this.enabled = init.enabled ?? true;
     this.options = { ...init.options };
+    this.uniqueOptions = init.uniqueOptions;
   }
 
   /** Override the destination queue (defaults to the class/def's queue). */
@@ -152,7 +155,7 @@ export class PendingDispatch<TPayload = unknown, TResult = unknown>
     const promise =
       this._parked || !this.enabled
         ? Promise.resolve(undefined)
-        : dispatchToQueue(this.queueName, this.jobName, this.payload, this.options);
+        : dispatchToQueue(this.queueName, this.jobName, this.payload, this.options, this.uniqueOptions);
     return promise.then(onFulfilled, onRejected);
   }
 }
