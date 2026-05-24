@@ -1,3 +1,4 @@
+import { JobReleasedError } from "./errors";
 import type { JobJson, JobsOptions, JobState, QueueDriver } from "./types";
 
 export class Job<T = unknown, R = unknown> {
@@ -39,6 +40,15 @@ export class Job<T = unknown, R = unknown> {
 
   static fromJson<T = unknown, R = unknown>(driver: QueueDriver, raw: JobJson<T, R>): Job<T, R> {
     return new Job(driver, raw);
+  }
+
+  /**
+   * Re-enqueue this job after `delaySeconds` without counting as a failure
+   * attempt. Throws `JobReleasedError` which the registry catches and
+   * re-dispatches cleanly.
+   */
+  release(delaySeconds: number): never {
+    throw new JobReleasedError(delaySeconds * 1000);
   }
 
   async updateProgress(progress: number | object): Promise<void> {

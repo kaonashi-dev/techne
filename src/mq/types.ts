@@ -1,3 +1,5 @@
+import type { Job } from "./job";
+
 export type MqDriverType = "memory" | "redis";
 
 export interface RedisClientAdapter {
@@ -189,3 +191,11 @@ export interface MqProcessorMetadata {
 }
 
 export type ProcessMetadata = Record<string, string | undefined>;
+
+/**
+ * A per-job middleware. Implement `handle(job, next)` and call `next()` to
+ * proceed to the next middleware (or the job handler itself).
+ */
+export interface JobMiddleware {
+  handle(job: Job<unknown>, next: () => Promise<unknown>): Promise<unknown>;
+}

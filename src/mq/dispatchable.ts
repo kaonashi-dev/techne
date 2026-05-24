@@ -8,6 +8,7 @@ import type { UniqueOptions } from "./decorators/unique.decorator";
 import type { DispatchUniqueOptions } from "./dispatcher";
 import { PendingDispatch } from "./pending-dispatch";
 import type { QueueDef } from "./define-queue";
+import type { JobMiddleware } from "./types";
 
 /**
  * Marker metadata for `Dispatchable` subclasses. Read by `MqRegistry`
@@ -50,6 +51,12 @@ export abstract class Dispatchable<TPayload = void, TResult = unknown> {
 
   /** Handler body. Implementers receive the payload that was dispatched. */
   abstract handle(payload: TPayload): Promise<TResult> | TResult;
+
+  /**
+   * Return the middleware stack to wrap this job's handler.
+   * Left-to-right order — the first middleware is the outermost wrapper.
+   */
+  middleware?(): JobMiddleware[];
 
   /**
    * Fluent dispatch. Awaiting the returned `PendingDispatch` enqueues
