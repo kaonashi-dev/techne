@@ -106,7 +106,7 @@ test("daily digest fans out three jobs", async () => {
 When the assertion helpers aren't enough, drop down to the raw records:
 
 ```ts
-const all = q.all();                    // every dispatch in order
+const all = q.all(); // every dispatch in order
 const justEmails = q.filter(SendWelcomeEmail);
 const chains = q.chains();
 const batches = q.batches();
@@ -137,7 +137,7 @@ test("two phases", async () => {
 
 ## Handler-level tests — `dispatchSync`
 
-`fakeQueue` is producer-side: it asserts on what was *enqueued*. To test
+`fakeQueue` is producer-side: it asserts on what was _enqueued_. To test
 the handler body itself, use `dispatchSync` (no fake needed):
 
 ```ts
@@ -166,16 +166,16 @@ No queue, no worker, no retries.
 `fakeQueue` is built on the same primitives you can call directly when you
 need finer control:
 
-| Primitive | What it does |
-|---|---|
-| `withDispatcherContext(resolver, fn)` | Swap the queue resolver for the duration of `fn`. |
-| `setDispatcherContext(resolver)` / `clearDispatcherContext()` | Set / clear the active resolver imperatively. |
-| `setChainStore(store)` / `clearChainStore()` | Replace the chain store (e.g., with your own recorder). |
-| `setBatchStore(store)` / `clearBatchStore()` | Replace the batch store. |
-| `setDriverContext(driver)` / `clearDriverContext()` | Override the driver used by uniqueness locks. |
-| `clearSyncHandlers()` | Drop registered sync handlers between tests. |
-| `clearMiddlewareState()` | Reset `RateLimited` / `ThrottlesExceptions` counters. |
-| `runWithDeferredBuffer(fn)` + `flushDeferred()` | Control the `dispatchAfterResponse` buffer manually. |
+| Primitive                                                     | What it does                                            |
+| ------------------------------------------------------------- | ------------------------------------------------------- |
+| `withDispatcherContext(resolver, fn)`                         | Swap the queue resolver for the duration of `fn`.       |
+| `setDispatcherContext(resolver)` / `clearDispatcherContext()` | Set / clear the active resolver imperatively.           |
+| `setChainStore(store)` / `clearChainStore()`                  | Replace the chain store (e.g., with your own recorder). |
+| `setBatchStore(store)` / `clearBatchStore()`                  | Replace the batch store.                                |
+| `setDriverContext(driver)` / `clearDriverContext()`           | Override the driver used by uniqueness locks.           |
+| `clearSyncHandlers()`                                         | Drop registered sync handlers between tests.            |
+| `clearMiddlewareState()`                                      | Reset `RateLimited` / `ThrottlesExceptions` counters.   |
+| `runWithDeferredBuffer(fn)` + `flushDeferred()`               | Control the `dispatchAfterResponse` buffer manually.    |
 
 If you bootstrap a full `TechneFactory.createApplicationContext` per test
 and `await ctx.close()` in cleanup, the `mq()` plugin's `onShutdown` hook

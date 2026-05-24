@@ -15,7 +15,7 @@ import { Dispatchable, Queueable } from "@kaonashi-dev/techne/mq";
 @Queueable()
 class InitiatePayin extends Dispatchable<{ payinId: string }> {
   static queue = PayinsQueueDef;
-  static jobName = "initiate-payin";        // optional; defaults to class name
+  static jobName = "initiate-payin"; // optional; defaults to class name
 
   constructor(private readonly exec: CoPayinsExecutionService) {
     super();
@@ -33,9 +33,7 @@ await TechneFactory.create({
 });
 
 // Dispatch from anywhere:
-await InitiatePayin.dispatch({ payinId: "pi_123" })
-  .delay(60_000)
-  .tries(3);
+await InitiatePayin.dispatch({ payinId: "pi_123" }).delay(60_000).tries(3);
 ```
 
 **`@Queueable()`** applies `@Injectable()` (so the container DI-resolves
@@ -52,14 +50,14 @@ enqueues. Chain methods refine the options first.
 
 ```ts
 await InitiatePayin.dispatch({ payinId })
-  .onQueue("payins-priority")     // override destination queue
-  .delay(60_000)                   // ms
-  .tries(5)                        // max attempts
+  .onQueue("payins-priority") // override destination queue
+  .delay(60_000) // ms
+  .tries(5) // max attempts
   .backoff([10_000, 30_000, 60_000])
-  .timeout(120_000)                // ms
-  .withId("idempotency-key-1")     // driver-level dedupe
-  .dispatchIf(condition)           // skip if false
-  .dispatchUnless(condition);      // skip if true
+  .timeout(120_000) // ms
+  .withId("idempotency-key-1") // driver-level dedupe
+  .dispatchIf(condition) // skip if false
+  .dispatchUnless(condition); // skip if true
 ```
 
 ### Inline execution — `.dispatchSync()`
@@ -78,7 +76,7 @@ a sync handler at the same time it spins up the worker.
 ### Conditional dispatch
 
 ```ts
-await InitiatePayin.dispatchIf(user.optedIn, { payinId });   // shorthand
+await InitiatePayin.dispatchIf(user.optedIn, { payinId }); // shorthand
 await InitiatePayin.dispatchUnless(skip, { payinId });
 ```
 
@@ -94,22 +92,24 @@ import { Tries, Backoff, Timeout, OnQueue } from "@kaonashi-dev/techne/mq";
 @Tries(3)
 @Backoff([10_000, 30_000, 60_000])
 @Timeout(120_000)
-@OnQueue("payins-priority")           // dispatch-time queue override
+@OnQueue("payins-priority") // dispatch-time queue override
 class InitiatePayin extends Dispatchable<{ payinId: string }> {
   static queue = PayinsQueueDef;
-  async handle({ payinId }) { /* … */ }
+  async handle({ payinId }) {
+    /* … */
+  }
 }
 
-await InitiatePayin.dispatch({ payinId });             // tries=3, backoff applied
-await InitiatePayin.dispatch({ payinId }).tries(5);    // per-call wins → tries=5
+await InitiatePayin.dispatch({ payinId }); // tries=3, backoff applied
+await InitiatePayin.dispatch({ payinId }).tries(5); // per-call wins → tries=5
 ```
 
-| Decorator | Effect |
-|---|---|
-| `@Tries(n)` | Default `attempts`. Per-call `.tries()` overrides. |
-| `@Backoff(number \| number[] \| BackoffOptions)` | Default backoff strategy. |
-| `@Timeout(ms)` | Default per-job timeout. |
-| `@OnQueue(name)` | Routes dispatches from this class to `name` instead of `static queue.name`. |
+| Decorator                                        | Effect                                                                      |
+| ------------------------------------------------ | --------------------------------------------------------------------------- |
+| `@Tries(n)`                                      | Default `attempts`. Per-call `.tries()` overrides.                          |
+| `@Backoff(number \| number[] \| BackoffOptions)` | Default backoff strategy.                                                   |
+| `@Timeout(ms)`                                   | Default per-job timeout.                                                    |
+| `@OnQueue(name)`                                 | Routes dispatches from this class to `name` instead of `static queue.name`. |
 
 Per-call methods on the builder **overwrite** rather than merge — predictable.
 
@@ -137,7 +137,13 @@ import { withDispatcherContext } from "@kaonashi-dev/techne/mq";
 test("emits one job", async () => {
   const enqueued: any[] = [];
   await withDispatcherContext(
-    () => ({ add: async (name, data) => { enqueued.push({ name, data }); return {}; } } as any),
+    () =>
+      ({
+        add: async (name, data) => {
+          enqueued.push({ name, data });
+          return {};
+        },
+      }) as any,
     async () => {
       await InitiatePayin.dispatch({ payinId: "pi_test" });
     },

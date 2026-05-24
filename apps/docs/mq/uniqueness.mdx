@@ -13,14 +13,16 @@ silently dropped (or throws, configurable).
 import { Unique } from "@kaonashi-dev/techne/mq";
 
 @Queueable()
-@Unique({ for: 60_000 })                      // TTL in ms
+@Unique({ for: 60_000 }) // TTL in ms
 class SendWelcomeEmail extends Dispatchable<{ userId: string }> {
   static queue = NotificationsQueueDef;
-  async handle({ userId }) { /* … */ }
+  async handle({ userId }) {
+    /* … */
+  }
 }
 
-await SendWelcomeEmail.dispatch({ userId: "u1" });   // enqueues
-await SendWelcomeEmail.dispatch({ userId: "u1" });   // dropped — same key, lock held
+await SendWelcomeEmail.dispatch({ userId: "u1" }); // enqueues
+await SendWelcomeEmail.dispatch({ userId: "u1" }); // dropped — same key, lock held
 ```
 
 The lock is acquired at **dispatch time** and released when the job
@@ -36,7 +38,9 @@ a more specific identifier:
 @Unique({ for: 60_000, key: (p) => p.userId })
 class GenerateMonthlyReport extends Dispatchable<{ userId: string; month: string }> {
   static queue = ReportsQueueDef;
-  async handle({ userId, month }) { /* … */ }
+  async handle({ userId, month }) {
+    /* … */
+  }
 }
 
 // Both dispatches dedupe on userId alone — the second is dropped:
@@ -67,7 +71,9 @@ import { UniqueUntilProcessing } from "@kaonashi-dev/techne/mq";
 @UniqueUntilProcessing({ for: 30_000 })
 class SyncInventory extends Dispatchable<void> {
   static queue = InventoryQueueDef;
-  async handle() { /* long-running */ }
+  async handle() {
+    /* long-running */
+  }
 }
 ```
 

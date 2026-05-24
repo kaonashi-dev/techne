@@ -4,7 +4,7 @@ description: "Fan-out + barrier with batch([...]).then().catch().finally().dispa
 ---
 
 A **batch** enqueues N jobs in parallel and fires callback jobs when the
-batch as a whole completes. Use it when you need to know that *all* of
+batch as a whole completes. Use it when you need to know that _all_ of
 several jobs finished before doing something else.
 
 ## Basic batch
@@ -27,10 +27,10 @@ Returns a `BatchHandle` you can use to inspect or control the batch.
 
 ## Callbacks
 
-| Callback | Fires when |
-|---|---|
-| `.then(pd)` | All jobs completed AND `failed === 0`. |
-| `.catch(pd)` | All jobs completed AND `failed > 0`. |
+| Callback       | Fires when                                   |
+| -------------- | -------------------------------------------- |
+| `.then(pd)`    | All jobs completed AND `failed === 0`.       |
+| `.catch(pd)`   | All jobs completed AND `failed > 0`.         |
 | `.finally(pd)` | All jobs completed, after `then` or `catch`. |
 
 Each callback is a `PendingDispatch` — a normal job that gets dispatched

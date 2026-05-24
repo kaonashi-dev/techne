@@ -20,10 +20,10 @@ import { defineQueue } from "@kaonashi-dev/techne/mq";
 export const PayinsQueueDef = defineQueue({
   name: "payins",
   jobs: {
-    "initiate-payin":         {} as { payinId: string },
-    "post-process-payin":     {} as { payinId: string; newStatus: string },
+    "initiate-payin": {} as { payinId: string },
+    "post-process-payin": {} as { payinId: string; newStatus: string },
     "payin-expiration-check": {} as { payinId: string },
-    "settle-payins":          {} as Record<string, never>,
+    "settle-payins": {} as Record<string, never>,
   },
 });
 ```
@@ -35,7 +35,7 @@ class PayinsQueue {
   initiatePayin(_: { payinId: string }) {}
   postProcessPayin(_: { payinId: string; newStatus: string }) {}
   payinExpirationCheck(_: { payinId: string }) {}
-  settle() {}                    // no payload → Record<string, never>
+  settle() {} // no payload → Record<string, never>
 }
 
 export const PayinsQueueDef = defineQueue(PayinsQueue, { name: "payins" });
@@ -68,9 +68,7 @@ list. No new class hierarchy needed:
 ```ts
 const { initiatePayin, settle } = PayinsQueueDef.dispatchers;
 
-await initiatePayin({ payinId: "pi_123" })
-  .delay(60_000)
-  .tries(3);
+await initiatePayin({ payinId: "pi_123" }).delay(60_000).tries(3);
 
 await settle().onQueue("payins-priority");
 ```
@@ -89,8 +87,8 @@ Useful when one provider needs to dispatch into several queues.
 import { defineQueueBag, InjectQueue, type BagOf } from "@kaonashi-dev/techne/mq";
 
 export const AppQueues = defineQueueBag({
-  payins:  PayinsQueueDef,
-  alerts:  AlertsQueueDef,
+  payins: PayinsQueueDef,
+  alerts: AlertsQueueDef,
   reports: ReportsQueueDef,
 });
 
@@ -108,7 +106,7 @@ class OrchestratorService {
 }
 
 await TechneFactory.create({
-  plugins: [mq({ queues: [AppQueues] })],   // auto-registers all 3 queues
+  plugins: [mq({ queues: [AppQueues] })], // auto-registers all 3 queues
   providers: [OrchestratorService],
 });
 ```
@@ -135,9 +133,9 @@ constructor(@InjectQueue("legacy") private readonly q: Queue) {}
 
 ## Types reference
 
-| Helper | What it gives you |
-|---|---|
-| `QueueOf<typeof def>` | Typed `add(name, data)` for a single queue. |
-| `JobOf<typeof def, "name">` | Runtime `Job<payload>` for a specific job. |
-| `BagOf<typeof bag>` | `{ [userKey]: QueueOf<def> }` for a bag. |
+| Helper                             | What it gives you                                  |
+| ---------------------------------- | -------------------------------------------------- |
+| `QueueOf<typeof def>`              | Typed `add(name, data)` for a single queue.        |
+| `JobOf<typeof def, "name">`        | Runtime `Job<payload>` for a specific job.         |
+| `BagOf<typeof bag>`                | `{ [userKey]: QueueOf<def> }` for a bag.           |
 | `QueueBagOf<[typeof a, typeof b]>` | `{ [def.name]: QueueOf<def> }` for an ad-hoc list. |

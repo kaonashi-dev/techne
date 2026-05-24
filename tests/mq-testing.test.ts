@@ -108,9 +108,7 @@ describe("fakeQueue", () => {
     });
 
     expect(() => q.assertDispatched(InitiatePayin)).not.toThrow();
-    expect(() => q.assertDispatched(PostProcessPayin)).toThrow(
-      /PostProcessPayin.*0 matching/,
-    );
+    expect(() => q.assertDispatched(PostProcessPayin)).toThrow(/PostProcessPayin.*0 matching/);
     expect(() => q.assertDispatched("initiatePayin")).not.toThrow();
     expect(() => q.assertDispatched("nope")).toThrow(/'nope'.*0 matching/);
   });
@@ -124,17 +122,11 @@ describe("fakeQueue", () => {
     });
 
     expect(() =>
-      q.assertDispatched(
-        InitiatePayin,
-        (p) => (p as { payinId: string }).payinId === "pi_2",
-      ),
+      q.assertDispatched(InitiatePayin, (p) => (p as { payinId: string }).payinId === "pi_2"),
     ).not.toThrow();
 
     expect(() =>
-      q.assertDispatched(
-        InitiatePayin,
-        (p) => (p as { payinId: string }).payinId === "pi_99",
-      ),
+      q.assertDispatched(InitiatePayin, (p) => (p as { payinId: string }).payinId === "pi_99"),
     ).toThrow(/did not match/);
   });
 
@@ -168,9 +160,7 @@ describe("fakeQueue", () => {
 
     expect(() => q.assertNothingDispatchedOn(AlertsQueueDef)).not.toThrow();
     expect(() => q.assertNothingDispatchedOn("fake-alerts")).not.toThrow();
-    expect(() => q.assertNothingDispatchedOn(PayinsQueueDef)).toThrow(
-      /fake-payins.*got 1/,
-    );
+    expect(() => q.assertNothingDispatchedOn(PayinsQueueDef)).toThrow(/fake-payins.*got 1/);
   });
 
   test("assertChained matches the full step sequence by class", async () => {
@@ -184,19 +174,15 @@ describe("fakeQueue", () => {
       ]).dispatch();
     });
 
-    expect(() =>
-      q.assertChained([InitiatePayin, PostProcessPayin, PublishReceipt]),
-    ).not.toThrow();
+    expect(() => q.assertChained([InitiatePayin, PostProcessPayin, PublishReceipt])).not.toThrow();
 
     // Wrong order
-    expect(() =>
-      q.assertChained([PostProcessPayin, InitiatePayin, PublishReceipt]),
-    ).toThrow(/none matched/);
-
-    // Wrong length
-    expect(() => q.assertChained([InitiatePayin, PostProcessPayin])).toThrow(
+    expect(() => q.assertChained([PostProcessPayin, InitiatePayin, PublishReceipt])).toThrow(
       /none matched/,
     );
+
+    // Wrong length
+    expect(() => q.assertChained([InitiatePayin, PostProcessPayin])).toThrow(/none matched/);
   });
 
   test("chains() exposes catchSpec and remaining steps", async () => {
@@ -232,9 +218,7 @@ describe("fakeQueue", () => {
         .dispatch();
     });
 
-    expect(() =>
-      q.assertBatched((b) => b.total === 3 && b.jobs.length === 3),
-    ).not.toThrow();
+    expect(() => q.assertBatched((b) => b.total === 3 && b.jobs.length === 3)).not.toThrow();
 
     expect(() =>
       q.assertBatched((b) => b.callbacks.then?.jobName === "settlePayins"),
@@ -244,8 +228,7 @@ describe("fakeQueue", () => {
   });
 
   test("restores the prior dispatcher / chain store / batch store on exit", async () => {
-    const customResolver: QueueResolver = () =>
-      ({ add: async () => ({ id: "real" }) }) as never;
+    const customResolver: QueueResolver = () => ({ add: async () => ({ id: "real" }) }) as never;
     const customChainStore = new MemoryChainStore();
     const customBatchStore = new MemoryBatchStore();
 
