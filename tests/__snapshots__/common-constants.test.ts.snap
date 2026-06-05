@@ -173,6 +173,11 @@ exports[`common/constants snapshot of the public constant surface 1`] = `
     "value": "scope_options",
   },
   {
+    "name": "SINGLE_ACTION_HANDLER",
+    "typeOf": "string",
+    "value": "handle",
+  },
+  {
     "name": "VERSION_METADATA",
     "typeOf": "string",
     "value": "__version__",
