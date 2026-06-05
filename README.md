@@ -192,6 +192,34 @@ class UsersController {
 }
 ```
 
+### Single-action controllers
+
+For an endpoint that only needs one route, place the verb decorator on the class
+itself and put the logic in a `handle` method — no separate method decorator
+required (akin to Laravel's invokable controllers or Tempest's single-route
+controllers).
+
+```ts
+import { Body, Controller, Get, Param, Post } from "@kaonashi-dev/techne/common";
+
+@Get("/reports/:id")
+class ShowReport {
+  handle(@Param("id") id: string) {
+    return { id };
+  }
+}
+
+// `@Controller` is optional; when present, its prefix composes with the route.
+// Class-level guards/middleware apply to the single `handle` route.
+@Controller("admin")
+@Post("/reports")
+class CreateReport {
+  handle(@Body() body: any) {
+    return { created: body.title };
+  }
+}
+```
+
 ### Dependency Injection
 
 ```ts
