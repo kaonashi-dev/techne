@@ -2,6 +2,8 @@ export const INJECTABLE_METADATA = "injectable";
 export const CONTROLLER_METADATA = "controller_prefix";
 export const SCOPE_OPTIONS_METADATA = "scope_options";
 export const ROUTES_METADATA = "routes";
+// Method a single-action (class-level route) controller binds its route to.
+export const SINGLE_ACTION_HANDLER = "handle";
 export const PARAMS_METADATA = "params";
 export const MIDDLEWARE_METADATA = "middleware";
 export const GUARDS_METADATA = "guards";
