@@ -11,6 +11,7 @@ import {
   generateDto,
   generateHook,
   generateDockerfile,
+  generateCommand,
   createProject,
 } from "./generators";
 
@@ -227,6 +228,8 @@ Usage:
   techne build|b [entry] --target <bun|node|browser> [--out <file>] [--minify] [--precompile]  (JS bundle)
   techne deploy --target docker [--out Dockerfile] [--port N] [--bun-version V] [--dry-run] [--force]
   techne doctor
+  techne run <command> [args...]
+  techne list
   techne generate|g <type> <name>
 
 Available generators:
@@ -239,6 +242,7 @@ Available generators:
   filter
   hook
   dto
+  command         (writes a console command class)
   docker          (writes Dockerfile + .dockerignore; supports --port, --bun-version, --out, --force, --dry-run)
   client          (writes a typed RPC route map; supports --out, defaults to src/routes.generated.ts)
 
@@ -257,11 +261,8 @@ Deploy targets:
   `);
 }
 
-async function runGenerateClient() {
-  const out = flagValue("--out") ?? "src/routes.generated.ts";
+async function loadUserConfig(): Promise<any> {
   const cwd = process.cwd();
-
-  // Find a techne.config.{ts,js,mjs} so we know how to boot the user's app.
   const CANDIDATES = ["techne.config.ts", "techne.config.js", "techne.config.mjs"];
   let configPath: string | undefined;
   for (const name of CANDIDATES) {
@@ -277,14 +278,21 @@ async function runGenerateClient() {
     );
     process.exit(1);
   }
+  const cfgMod = await import(configPath!);
+  const config = cfgMod?.default;
+  if (!config) {
+    fail(`techne.config.ts must export a default flat app config.`);
+    process.exit(1);
+  }
+  return config;
+}
+
+async function runGenerateClient() {
+  const out = flagValue("--out") ?? "src/routes.generated.ts";
+  const cwd = process.cwd();
 
   try {
-    const cfgMod = await import(configPath);
-    const config = cfgMod?.default;
-    if (!config) {
-      fail(`techne.config.ts must export a default flat app config.`);
-      process.exit(1);
-    }
+    const config = await loadUserConfig();
 
     // Lazy-import to keep CLI startup fast for unrelated commands.
     const { TechneFactory } = await import("../factory/techne-factory");
@@ -397,6 +405,25 @@ async function main() {
     await doctor();
   } else if (command === "deploy") {
     await runDeploy();
+  } else if (command === "run") {
+    const name = args[1];
+    if (!name) {
+      console.error("Usage: techne run <command> [args...]");
+      process.exit(1);
+    }
+    const config = await loadUserConfig();
+    const { TechneFactory } = await import("../factory/techne-factory");
+    const app = await TechneFactory.createConsoleApplication({ ...config, logger: false });
+    const code = await app.run(name, args.slice(2));
+    await app.close();
+    process.exit(code);
+  } else if (command === "list") {
+    const config = await loadUserConfig();
+    const { TechneFactory } = await import("../factory/techne-factory");
+    const app = await TechneFactory.createConsoleApplication({ ...config, logger: false });
+    app.list();
+    await app.close();
+    process.exit(0);
   } else if (command === "generate" || command === "g") {
     const type = args[1];
 
@@ -448,6 +475,9 @@ async function main() {
         break;
       case "dto":
         await generateDto(name);
+        break;
+      case "command":
+        await generateCommand(name);
         break;
       default:
         console.error(`Unknown generator type: ${type}`);
