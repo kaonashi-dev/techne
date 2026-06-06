@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
-import { createProject } from "../src/cli/generators";
+import { createProject, generateCommand } from "../src/cli/generators";
 describe("CLI project generator", () => {
   let originalCwd: string;
   let tempRoot: string;
@@ -59,6 +59,28 @@ describe("CLI project generator", () => {
     expect(gitignore).toContain("node_modules");
     expect(gitignore).toContain("dist");
   });
+  test("generateCommand writes a command file", async () => {
+    await generateCommand("Greet");
+    const content = await fs.readFile(
+      path.join(tempRoot, "src", "commands", "greet.command.ts"),
+      "utf8",
+    );
+    expect(content).toContain("@ConsoleCommand(");
+    expect(content).toContain("@Argument(");
+    expect(content).toContain("@kaonashi-dev/techne/console");
+    expect(content).toContain("class GreetCommand");
+  });
+
+  test("generateCommand strips Command suffix", async () => {
+    await generateCommand("MigrateCommand");
+    const content = await fs.readFile(
+      path.join(tempRoot, "src", "commands", "migrate.command.ts"),
+      "utf8",
+    );
+    expect(content).toContain("class MigrateCommand");
+    expect(content).toContain('"migrate"');
+  });
+
   test("fails when target directory is not empty", async () => {
     const projectDir = path.join(tempRoot, "existing-project");
     await fs.mkdir(projectDir, { recursive: true });
