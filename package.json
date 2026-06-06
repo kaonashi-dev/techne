@@ -71,6 +71,11 @@
       "bun": "./src/contract/index.ts",
       "import": "./src/contract/index.ts",
       "types": "./dist/types/contract/index.d.ts"
+    },
+    "./console": {
+      "bun": "./src/console/index.ts",
+      "import": "./src/console/index.ts",
+      "types": "./dist/types/console/index.d.ts"
     }
   },
   "bin": {

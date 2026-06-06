@@ -18,6 +18,9 @@ import type { TechneConfig } from "../core/define-techne-config";
 import type { Feature } from "../core/define-feature";
 import type { PluginDefinition } from "../core/plugins/define-plugin";
 import { loadPrecompiledRoutesForScanner } from "../cli/precompile";
+import { ConsoleRegistry } from "../console/console-registry";
+import { ConsoleApplication } from "../console/console-application";
+import { Console, BunConsole } from "../console/console.service";
 
 const TECHNE_CONFIG_CANDIDATES = [
   "techne.config.ts",
@@ -167,6 +170,8 @@ export interface AppBootstrapConfig extends TechneApplicationOptions {
   providers?: any[];
   features?: Feature[];
   plugins?: PluginDefinition<any>[];
+  /** Console command classes to register (folded into providers). */
+  commands?: any[];
   /**
    * Determines which subsystems start. Defaults to `"all"`.
    * Can also be set via the `TECHNE_MODE` environment variable;
@@ -356,6 +361,58 @@ export class TechneFactory {
     return new TechneApplicationContext(scanner, container, mqRegistry).init();
   }
 
+  public static async createConsoleApplication(
+    config: AppBootstrapConfig,
+    opts?: { console?: Console },
+  ): Promise<ConsoleApplication> {
+    const loggerEnabled = config?.logger !== false;
+    Logger.setEnabled(loggerEnabled);
+    TechneFactory.applyLoggerConfig(config?.logger);
+
+    const container = config?.container || new Container();
+    const scanner = new Scanner({ logger: loggerEnabled, container });
+    scanner.scanFlat(this.flattenBootstrapConfig(config));
+    TechneFactory.registerLoggerProviders(container);
+
+    container.set(Console, opts?.console ?? new BunConsole());
+
+    const adapter = new ElysiaAdapter({
+      logger: loggerEnabled,
+      container,
+      validation: config?.validation,
+      hasProblemFilter: true,
+    });
+    const routesResolver = new RoutesResolver(scanner);
+    const pluginApp = new TechneApplication(
+      adapter,
+      scanner,
+      container,
+      routesResolver,
+      routesResolver.executionContext,
+      undefined,
+      { mode: "server", userOptions: config as Record<string, unknown> },
+    );
+
+    await this.registerPluginsPhased(pluginApp, config.plugins ?? []);
+
+    this.initializeStaticProviders(scanner, container, loggerEnabled);
+    await scanner.callLifecycleHook("onModuleInit");
+
+    const buses = new BusRegistry(container);
+    buses.register();
+    buses.registerFromClasses([...scanner.getProviders(), ...scanner.getControllers()]);
+
+    if (container.has(MQ_DRIVER)) {
+      const mqRegistry = new MqRegistry(container, container.get(MQ_DRIVER));
+      mqRegistry.register();
+    }
+
+    const registry = new ConsoleRegistry(container);
+    registry.registerFromClasses([...scanner.getProviders(), ...scanner.getControllers()]);
+
+    return new ConsoleApplication(scanner, container, registry, container.get(Console));
+  }
+
   /**
    * Register plugins partitioned by their `ready` phase. The default
    * `"before-routes"` phase runs here (before routes are mapped) so plugins
@@ -485,6 +542,10 @@ export class TechneFactory {
           for (const p of fp) providers.push(p);
         }
       }
+    }
+
+    if (config.commands) {
+      for (const c of config.commands) providers.push(c);
     }
 
     return { controllers, providers };

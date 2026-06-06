@@ -23,6 +23,16 @@ exports[`common/constants snapshot of the public constant surface 1`] = `
     "value": "command_handler",
   },
   {
+    "name": "CONSOLE_COMMAND_METADATA",
+    "typeOf": "string",
+    "value": "console_command",
+  },
+  {
+    "name": "CONSOLE_PARAMS_METADATA",
+    "typeOf": "string",
+    "value": "console_params",
+  },
+  {
     "name": "CONTROLLER_METADATA",
     "typeOf": "string",
     "value": "controller_prefix",

@@ -257,6 +257,32 @@ export type ${schemaName} = Static<typeof ${schemaName}>;
   console.log(`CREATE ${name}.dto.ts`);
 }
 
+export async function generateCommand(name: string) {
+  const base = name.replace(/Command$/i, "");
+  const className = `${capitalize(base)}Command`;
+  const kebab = base
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1-$2")
+    .replace(/([a-z\d])([A-Z])/g, "$1-$2")
+    .toLowerCase();
+  const content = `import { Injectable } from "@kaonashi-dev/techne/common";
+import { ConsoleCommand, Argument, Console } from "@kaonashi-dev/techne/console";
+
+@Injectable()
+export class ${className} {
+  constructor(private readonly console: Console) {}
+
+  @ConsoleCommand("${kebab}", { description: "Run the ${kebab} command" })
+  handle(@Argument("name") name: string) {
+    this.console.success(\`Hello, \${name}!\`);
+  }
+}
+`;
+  const outDir = path.join(process.cwd(), "src", "commands");
+  await fs.mkdir(outDir, { recursive: true });
+  await fs.writeFile(path.join(outDir, `${kebab}.command.ts`), content);
+  console.log(`CREATE src/commands/${kebab}.command.ts`);
+}
+
 export async function generateResource(name: string) {
   const dir = path.join(process.cwd(), "src", name);
   await fs.mkdir(dir, { recursive: true });
