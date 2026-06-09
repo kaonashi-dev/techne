@@ -1,6 +1,6 @@
 import { TypeCompiler } from "@sinclair/typebox/compiler";
 import { CATCH_METADATA } from "../../common/constants";
-import { ForbiddenException } from "../../exceptions";
+import { ForbiddenException, TooManyRequestsException } from "../../exceptions";
 import type { ExceptionFilter } from "../../interfaces/exception-filter.interface";
 import type { ResponseHook } from "../../interfaces/response-hook.interface";
 import { Logger } from "../../services/logger.service";
@@ -9,6 +9,19 @@ import type { ParamMetadata } from "../../decorators/params.decorator";
 import { HandlerMetadataStorage } from "./handler-metadata-storage";
 import { RouterResponseController } from "./router-response-controller";
 import type { DiscoveredRouteDefinition } from "./router-explorer";
+import { InMemoryTokenBucketStore, type RateLimitOptions } from "../../security/rate-limit";
+import { resolveClientIp, type TrustProxyOptions } from "../../security/client-ip";
+import { applyHeader } from "../../platform/headers";
+
+/**
+ * Key-resolution settings shared with per-route rate-limit hooks. Mirrors
+ * the global limiter's configuration so a `@RateLimit` route identifies
+ * clients exactly like the global limiter does.
+ */
+export interface RateLimitKeyDefaults {
+  keyExtractor?: (ctx: any) => string | undefined;
+  trustProxy?: boolean | TrustProxyOptions;
+}
 
 type RequestHandlerContext = any;
 type RouteContextInfo = {
@@ -321,6 +334,7 @@ export class RouterExecutionContext {
   private readonly logger = new Logger("RouterExecutionContext");
   private globalFilters: ExceptionFilter[] = [];
   private globalGuards: any[] = [];
+  private rateLimitKeyDefaults?: RateLimitKeyDefaults;
   // Monotonically bumped whenever the corresponding `globalX` array reference
   // is replaced via `setGlobalX`. `refreshRouteCache` compares against the
   // per-cache snapshot to skip the filter merge + partition when nothing has
@@ -355,6 +369,15 @@ export class RouterExecutionContext {
     return this.globalGuards;
   }
 
+  /**
+   * Shares the global limiter's key-resolution settings with per-route
+   * `@RateLimit` hooks. Called by the factory before routes are registered;
+   * without it, per-route hooks fall back to the socket address only.
+   */
+  public setRateLimitKeyDefaults(defaults: RateLimitKeyDefaults): void {
+    this.rateLimitKeyDefaults = defaults;
+  }
+
   public resetRoutes(): void {
     this.routeCaches.length = 0;
   }
@@ -367,11 +390,29 @@ export class RouterExecutionContext {
     const mergedGuards =
       this.globalGuards.length === 0 ? route.guards : [...this.globalGuards, ...route.guards];
     const guardHook = this.createGuardHook(mergedGuards, container, controllerClass, handlerRef);
-    const beforeHandle = guardHook
-      ? [guardHook, ...route.middlewares]
-      : route.middlewares.length === 0
-        ? undefined
-        : route.middlewares;
+
+    // Per-route @RateLimit(options) override: prepend a rate-limit hook before
+    // the guard. Decorated routes (both `false` and options objects) are
+    // exempted from the GLOBAL limiter via the adapter's exemption list
+    // (populated by RoutesResolver), so an override is the route's only limiter.
+    const perRouteRateLimitHook =
+      route.rateLimitMeta && typeof route.rateLimitMeta === "object"
+        ? this.createPerRouteRateLimitHook(route.rateLimitMeta)
+        : undefined;
+
+    let beforeHandle: any[] | undefined;
+    if (perRouteRateLimitHook && guardHook) {
+      beforeHandle = [perRouteRateLimitHook, guardHook, ...route.middlewares];
+    } else if (perRouteRateLimitHook) {
+      beforeHandle =
+        route.middlewares.length === 0
+          ? [perRouteRateLimitHook]
+          : [perRouteRateLimitHook, ...route.middlewares];
+    } else if (guardHook) {
+      beforeHandle = [guardHook, ...route.middlewares];
+    } else {
+      beforeHandle = route.middlewares.length === 0 ? undefined : route.middlewares;
+    }
 
     const cache: RouteRuntimeCache = {
       container,
@@ -1040,5 +1081,54 @@ export class RouterExecutionContext {
   ): unknown {
     if (touchedContextual) container.clearContext(context);
     return this.responseController.mapException(context, error);
+  }
+
+  /**
+   * Creates a `beforeHandle` hook that enforces a per-route rate-limit policy.
+   * Denials use the versioning-middleware idiom — `mapException` (which sets
+   * `set.status`) plus a returned body — NOT a throw, because `beforeHandle`
+   * throws bypass the RFC 7807 mapping.
+   *
+   * Each call creates an independent `InMemoryTokenBucketStore` so per-route
+   * limiters are isolated from the global store and from each other. The
+   * hook is synchronous: the dedicated store never returns a promise.
+   */
+  private createPerRouteRateLimitHook(
+    options: Pick<RateLimitOptions, "limit" | "windowMs" | "burst">,
+  ): (context: RequestHandlerContext) => unknown {
+    const limit = options.limit;
+    const windowMs = options.windowMs;
+    const burst = options.burst ?? limit;
+    const store = new InMemoryTokenBucketStore();
+    const policy = { limit, windowMs, burst };
+    // Key resolution follows the global limiter's trust configuration (set
+    // by the factory when `rateLimit` is configured). Forwarding headers are
+    // never consulted without an explicit `trustProxy` opt-in. Unresolvable
+    // callers (`app.handle()` without a socket) share one sentinel bucket.
+    const keyDefaults = this.rateLimitKeyDefaults;
+
+    return (context: RequestHandlerContext) => {
+      const key =
+        keyDefaults?.keyExtractor?.(context) ??
+        resolveClientIp(context, keyDefaults?.trustProxy ?? false) ??
+        "__per-route__";
+
+      const decision = store.consume(key, policy);
+      if (decision.allowed) return;
+
+      const retryAfter = Math.max(0, Math.ceil((decision.resetMs - Date.now()) / 1000));
+      // mapException sets status 429 + problem+json content-type on ctx.set
+      // (replacing set.headers), so the RateLimit headers go on afterwards.
+      const body = this.responseController.mapException(
+        context,
+        new TooManyRequestsException("Rate limit exceeded"),
+      );
+      const set = context.set;
+      applyHeader(set, "retry-after", String(retryAfter));
+      applyHeader(set, "ratelimit-limit", String(decision.limit));
+      applyHeader(set, "ratelimit-remaining", "0");
+      applyHeader(set, "ratelimit-reset", String(Math.ceil(decision.resetMs / 1000)));
+      return body;
+    };
   }
 }

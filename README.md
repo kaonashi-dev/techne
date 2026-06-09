@@ -452,6 +452,49 @@ resolveClientIp(ctx, { hops: 2 });                 // 2 trusted proxies
 resolveClientIp(ctx, { header: "x-real-ip" });     // alternate header
 ```
 
+### Rate limiting
+
+The `rateLimit` option enables a global token-bucket limiter that runs in the
+fused `onRequest` hook — before routing, guards, and body parsing. Capacity is
+`burst ?? limit`; tokens refill at the sustained rate of `limit` per
+`windowMs`. Denials return RFC 7807 429 documents with `Retry-After` and IETF
+`RateLimit-*` headers; allowed responses carry `RateLimit-Remaining` (disable
+with `headers: false`). Omitted entirely: zero hooks, zero per-request cost.
+
+```ts
+const app = await TechneFactory.create({
+  controllers: [UsersController],
+  rateLimit: {
+    limit: 100,            // sustained requests per window
+    windowMs: 60_000,
+    burst: 150,            // optional spike capacity (default: limit)
+    trustProxy: false,     // consult X-Forwarded-For only when explicitly enabled
+    exclude: ["/healthz"], // prefix-matched paths the limiter skips
+    // store: new RedisRateLimitStore(),  // any RateLimitStore implementation
+  },
+});
+```
+
+Clients are keyed by IP via `resolveClientIp` (or a custom `keyExtractor`).
+The default `InMemoryTokenBucketStore` is per-process and LRU-capped at 10k
+keys — implement `RateLimitStore` for multi-instance deployments. Requests
+with no resolvable IP (e.g. `app.handle()` in tests) are allowed fail-open
+with a one-time warning.
+
+Per-route overrides via the `@RateLimit` decorator (method or controller
+level). A decorated route is exempt from the global limiter — its own policy
+is the only one that applies:
+
+```ts
+@RateLimit({ limit: 10, windowMs: 60_000 })  // tighter (or looser) than global
+@Post("/login")
+login() {}
+
+@RateLimit(false)                            // fully exempt from rate limiting
+@Get("/status")
+status() {}
+```
+
 ## Logging
 
 Techne ships with a lightweight structured `Logger` exported from

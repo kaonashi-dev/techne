@@ -4,6 +4,10 @@ import { Container, globalContainer } from "../core/container";
 import type { CompiledRouteDefinition } from "../core/router/router-execution-context";
 import type { CorsOptions } from "../core/http-options";
 import { applyHeader, applyHeaders } from "./headers";
+import type { CompiledRateLimitPolicy, RateLimitDecision } from "../security/rate-limit";
+import { resolveClientIp } from "../security/client-ip";
+import { RouterResponseController } from "../core/router/router-response-controller";
+import { TooManyRequestsException } from "../exceptions";
 
 // Resolve `Bun.randomUUIDv7` once at module load. Bun has shipped it since
 // 1.1, so the cross-runtime fallback isn't worth the per-request lookup &
@@ -50,6 +54,12 @@ interface ElysiaAdapterOptions {
    * skip these headers.
    */
   securityHeaders?: Readonly<Record<string, string>>;
+  /**
+   * Compiled global rate-limit policy, produced by `compileRateLimitPolicy()`.
+   * When present, evaluated in the fused `onRequest` hook after the drain
+   * check. When absent, zero hooks and zero per-request cost.
+   */
+  rateLimit?: CompiledRateLimitPolicy;
 }
 
 interface CompiledCorsOptions {
@@ -99,6 +109,13 @@ interface TechneRequestStore {
   traceId: string | undefined;
   /** W3C traceparent parent-id / span-id (16 hex chars) (L12). */
   spanId: string | undefined;
+  /**
+   * Rate-limit decision from the global limiter's `onRequest` check.
+   * Stashed here so `onAfterHandle` can inject `RateLimit-Remaining` without
+   * a second store lookup. `undefined` when no limiter is configured, the
+   * route is excluded, or no key was resolvable.
+   */
+  rateLimitDecision: RateLimitDecision | undefined;
 }
 
 // Hoisted to module scope so the validation error path doesn't allocate a
@@ -141,6 +158,16 @@ export class ElysiaAdapter {
    * for it. See {@link computeNeedsRequestId}.
    */
   private readonly needsRequestId: boolean;
+  /** One-time "no IP resolvable" warning when using `app.handle()` without sockets. */
+  private warnedNoIp = false;
+  /**
+   * Compiled matcher for paths exempted from the global limiter via
+   * `@RateLimit` decorators. `undefined` until the first exemption arrives,
+   * so the common no-decorator case pays a single undefined check.
+   */
+  private rateLimitExemptPattern?: RegExp;
+  /** Maps limiter denials to canonical RFC 7807 problem documents. */
+  private readonly problemMapper = new RouterResponseController();
 
   constructor(private options?: ElysiaAdapterOptions) {
     this.container = options?.container || globalContainer;
@@ -205,6 +232,32 @@ export class ElysiaAdapter {
     return true;
   }
 
+  /**
+   * Registers route paths the global rate limiter must skip. Called at
+   * route-registration time by `RoutesResolver` for every route carrying a
+   * `@RateLimit` decorator: `@RateLimit(false)` exempts the route entirely,
+   * and `@RateLimit({...})` routes are governed solely by their per-route
+   * policy — running the global limiter too would double-count and silently
+   * cap looser per-route limits.
+   *
+   * Paths match exactly, with `:param` segments matching any single path
+   * segment. Exemption is per-path, so it applies to every HTTP method
+   * registered on that path. No-op when no rate limiter is configured.
+   */
+  public addRateLimitExemptions(paths: string[]): void {
+    if (!this.options?.rateLimit || paths.length === 0) return;
+    const alternatives: string[] = [];
+    if (this.rateLimitExemptPattern) {
+      // Strip the `^(?:` ... `)$` wrapper to merge prior alternatives.
+      alternatives.push(this.rateLimitExemptPattern.source.slice(4, -2));
+    }
+    for (const path of paths) {
+      const escaped = path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      alternatives.push(escaped.replace(/:[A-Za-z0-9_]+/g, "[^/]+"));
+    }
+    this.rateLimitExemptPattern = new RegExp(`^(?:${alternatives.join("|")})$`);
+  }
+
   private createApp() {
     const app = new Elysia();
     this.corsHooksInstalled = false;
@@ -232,18 +285,27 @@ export class ElysiaAdapter {
     const loggingEnabled = this.loggerEnabled;
     const exhaustive = this.options?.validation?.exhaustive === true;
     const securityHeaders = this.options?.securityHeaders;
+    const rateLimitPolicy = this.options?.rateLimit;
     // `setupInflightTracking` historically registered an `onRequest` even
     // when `!trackInflight` purely to short-circuit drains during graceful
     // shutdown. The drain check is independent of counting, so it stays on
     // unconditionally.
     const onRequestActive = true;
-    const onAfterHandleActive = trackInflight || needsRequestId || securityHeaders !== undefined;
+    const onAfterHandleActive =
+      trackInflight ||
+      needsRequestId ||
+      securityHeaders !== undefined ||
+      rateLimitPolicy !== undefined;
     const onErrorActive = true; // validation error mapping is always-on
 
-    const needsStore = trackInflight || needsRequestId;
+    const needsStore = trackInflight || needsRequestId || rateLimitPolicy !== undefined;
 
     if (onRequestActive) {
-      app.onRequest((ctx: any) => {
+      // The core stays synchronous: apps without a rate limiter register it
+      // directly so they never pay promise allocation in the hottest hook
+      // (zero-cost contract). The async wrapper below is registered only
+      // when a limiter is configured.
+      const onRequestCore = (ctx: any): Response | undefined => {
         if (this.isDraining) {
           return new Response(null, {
             status: 503,
@@ -274,6 +336,7 @@ export class ElysiaAdapter {
             inflightCounted: false,
             traceId,
             spanId,
+            rateLimitDecision: undefined,
           };
           ctx.store = store;
 
@@ -332,7 +395,20 @@ export class ElysiaAdapter {
             }
           }
         }
-      });
+        return undefined;
+      };
+
+      if (rateLimitPolicy) {
+        // `needsStore` is always true here, so `ctx.store` is shaped by the
+        // core before the limiter reads it.
+        app.onRequest(async (ctx: any) => {
+          const early = onRequestCore(ctx);
+          if (early !== undefined) return early;
+          return this.applyRateLimit(ctx, ctx.store as TechneRequestStore, rateLimitPolicy);
+        });
+      } else {
+        app.onRequest(onRequestCore);
+      }
     }
 
     if (onAfterHandleActive) {
@@ -341,6 +417,17 @@ export class ElysiaAdapter {
         // so the request-id echo below can keep mutating in place.
         if (securityHeaders) {
           applyHeaders(ctx.set, securityHeaders);
+        }
+
+        // Inject RateLimit-* success headers when the limiter is active.
+        if (rateLimitPolicy && rateLimitPolicy.headers) {
+          const store = ctx.store as TechneRequestStore | undefined;
+          const decision = store?.rateLimitDecision;
+          if (decision) {
+            applyHeader(ctx.set, "ratelimit-limit", String(decision.limit));
+            applyHeader(ctx.set, "ratelimit-remaining", String(decision.remaining));
+            applyHeader(ctx.set, "ratelimit-reset", String(Math.ceil(decision.resetMs / 1000)));
+          }
         }
 
         if (trackInflight) {
@@ -475,6 +562,79 @@ export class ElysiaAdapter {
     if (typeof requestId !== "string" || requestId.length === 0) return;
     if (!ctx.set) return;
     applyHeader(ctx.set, "x-request-id", requestId);
+  }
+
+  /**
+   * Applies the global rate limit for a single request. Returns a 429
+   * `Response` when the limit is exceeded, or `undefined` when the request
+   * is allowed (or excluded / no-IP). Stashes the `RateLimitDecision` on
+   * `ctx.store.rateLimitDecision` so `onAfterHandle` can inject headers
+   * without a second store lookup.
+   */
+  private async applyRateLimit(
+    ctx: any,
+    store: TechneRequestStore,
+    policy: CompiledRateLimitPolicy,
+  ): Promise<Response | undefined> {
+    // Routes opted out via @RateLimit decorators: exact path match with
+    // `:param` segments wild. Checked before the user exclusions because
+    // decorator metadata is the more specific signal.
+    const path = this.getRequestPath(ctx.request.url);
+    const exemptPattern = this.rateLimitExemptPattern;
+    if (exemptPattern !== undefined && exemptPattern.test(path)) return undefined;
+    // User-configured exclusions (prefix match, e.g. health endpoints).
+    for (const prefix of policy.exclude) {
+      if (path.startsWith(prefix)) return undefined;
+    }
+
+    // Resolve key.
+    let key = policy.keyExtractor(ctx);
+    if (key === undefined) {
+      key = resolveClientIp(ctx, policy.trustProxy);
+    }
+    if (key === undefined) {
+      // No IP resolvable (app.handle path without socket): fail-open.
+      if (!this.warnedNoIp) {
+        this.warnedNoIp = true;
+        this.logger.warn(
+          "Rate limiter could not resolve a client IP — request allowed (fail-open). " +
+            "This typically happens when using app.handle() directly. Pass trustProxy or " +
+            "a custom keyExtractor to silence this warning.",
+          "RateLimit",
+        );
+      }
+      return undefined;
+    }
+
+    const decision = await policy.store.consume(key, policy);
+
+    if (!decision.allowed) {
+      const retryAfter = Math.max(0, Math.ceil((decision.resetMs - Date.now()) / 1000));
+      const headers: Record<string, string> = {
+        "content-type": "application/problem+json",
+        "retry-after": String(retryAfter),
+      };
+      if (policy.headers) {
+        headers["ratelimit-limit"] = String(decision.limit);
+        headers["ratelimit-remaining"] = "0";
+        headers["ratelimit-reset"] = String(Math.ceil(decision.resetMs / 1000));
+      }
+      // Canonical RFC 7807 body (github docs/errors type URL, requestId,
+      // instance) via the shared mapper. We still return a raw Response —
+      // onRequest short-circuits bypass onAfterHandle, so ctx.set mutations
+      // made by mapException are irrelevant here.
+      const body = this.problemMapper.mapException(
+        ctx,
+        new TooManyRequestsException("Rate limit exceeded"),
+      );
+      return new Response(JSON.stringify(body), { status: 429, headers });
+    }
+
+    // Allowed: stash decision for success-path header injection.
+    if (policy.headers) {
+      store.rateLimitDecision = decision;
+    }
+    return undefined;
   }
 
   private setupCors(app: Elysia) {

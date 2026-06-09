@@ -23,10 +23,23 @@ export class RoutesResolver {
     this.executionContext.resetRoutes();
 
     const discoveredRoutes = this.precompiledRoutes ?? this.explorer.explore();
+    const exemptPaths: string[] = [];
+
     for (const route of discoveredRoutes) {
       for (const expandedRoute of this.expandRoute(route, options)) {
+        // Every @RateLimit-decorated route opts out of the GLOBAL limiter:
+        // `false` is a full exemption, and an options object means the route
+        // is governed solely by its per-route policy — running the global
+        // limiter too would double-count and silently cap looser overrides.
+        if (expandedRoute.rateLimitMeta !== undefined) {
+          exemptPaths.push(expandedRoute.fullPath);
+        }
         routes.push(this.executionContext.create(expandedRoute, container));
       }
+    }
+
+    if (exemptPaths.length > 0) {
+      adapter.addRateLimitExemptions(exemptPaths);
     }
 
     adapter.registerRoutes(routes);
