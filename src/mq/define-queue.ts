@@ -1,7 +1,12 @@
+import type { TSchema } from "@sinclair/typebox";
+import { TypeCompiler, type TypeCheck } from "@sinclair/typebox/compiler";
 import type { Job } from "./job";
 import { PendingDispatch } from "./pending-dispatch";
 import type { Queue } from "./queue";
 import type { BackoffOptions, JobsOptions, WorkerOptions } from "./types";
+import { QueuePayloadValidationError } from "./errors";
+import { setDispatchValidators } from "./dispatch-validation";
+import { getOrCreateDtoSchema } from "../schema/dto";
 
 export type JobMap = Record<string, unknown>;
 
@@ -13,11 +18,30 @@ export interface DispatchDefaults {
   onQueue?: string;
 }
 
+/**
+ * Schema value accepted in `QueueDefInput.schemas`: either a class decorated
+ * with `@Dto()` (resolved via the DTO registry) or a raw TypeBox `TSchema`.
+ */
+export type JobSchema = (new (...args: any[]) => any) | TSchema;
+
 export interface QueueDefInput<N extends string, T extends JobMap> {
   name: N;
   jobs: T;
   /** Per-job dispatch defaults. Keys must match declared job names. */
   defaults?: { [K in keyof T & string]?: DispatchDefaults };
+  /**
+   * Optional per-job validation schemas. Each value is either a `@Dto`-decorated
+   * class or a raw TypeBox `TSchema`. Validators are compiled once at
+   * `defineQueue` call time (boot).
+   *
+   * Only jobs listed here are validated; omitting a job name is valid and pays
+   * zero overhead. Keys must be a subset of `jobs` keys — a boot-time check
+   * throws `TypeError` if an unknown job name is referenced.
+   *
+   * NOTE: schemas describe the **post-JSON-roundtrip** wire shape; `Date`
+   * fields arrive as strings and should be typed as `Type.String()`.
+   */
+  schemas?: { [K in keyof T & string]?: JobSchema };
 }
 
 /**
@@ -31,6 +55,14 @@ export type DispatcherFn<TPayload> = (
 export type DispatchersOf<T extends JobMap> = {
   readonly [K in keyof T & string]: DispatcherFn<T[K]>;
 };
+
+/**
+ * When and where payload validation is applied.
+ * - `"dispatch"` — validate before enqueuing (synchronous throw on bad payload).
+ * - `"consume"` — validate inside the worker before calling the handler.
+ * - `"both"` — validate at both dispatch and consume time.
+ */
+export type QueueValidateMode = "dispatch" | "consume" | "both";
 
 export interface QueueDef<N extends string = string, T extends JobMap = JobMap> {
   readonly name: N;
@@ -47,6 +79,17 @@ export interface QueueDef<N extends string = string, T extends JobMap = JobMap> 
    *   await initiateTask({ taskId }).delay(60_000).tries(3);
    */
   readonly dispatchers: DispatchersOf<T>;
+  /**
+   * TypeBox compiled validators, keyed by job name. Only present when the
+   * queue was defined with a `schemas` entry for that job.
+   * @internal
+   */
+  readonly compiledValidators?: ReadonlyMap<string, TypeCheck<TSchema>>;
+  /**
+   * Controls when validation runs. Absent means no validation (back-compat).
+   * @internal
+   */
+  readonly validateMode?: QueueValidateMode;
 }
 
 /**
@@ -91,6 +134,16 @@ export interface DefineQueueOptions {
    * overrides passed to `@Processor(def, opts)` win.
    */
   worker?: WorkerOptions;
+  /**
+   * When to run payload validation. Requires `schemas` in the queue definition
+   * input. Absent means no validation (zero overhead, full back-compat).
+   *
+   * - `"dispatch"` — validate before enqueuing; throws synchronously on failure.
+   * - `"consume"` — validate inside the worker before calling the handler;
+   *   failures flow into `@OnFailure` / `Dispatchable.failed()`.
+   * - `"both"` — validate at both points.
+   */
+  validate?: QueueValidateMode;
 }
 
 export interface DefineQueueFromClassOptions<N extends string = string> extends DefineQueueOptions {
@@ -166,7 +219,52 @@ export function defineQueue(
     }
     return finalizeQueueDef(name, jobs, options.worker);
   }
-  return finalizeQueueDef(input.name, input.jobs, options.worker, input.defaults);
+  return finalizeQueueDef(
+    input.name,
+    input.jobs,
+    options.worker,
+    input.defaults,
+    input.schemas,
+    options.validate,
+  );
+}
+
+function compileJobSchema(
+  queueName: string,
+  jobName: string,
+  schema: JobSchema,
+): TypeCheck<TSchema> {
+  // If it's a constructor (class), resolve through the DTO registry.
+  if (typeof schema === "function") {
+    const dtoSchema = getOrCreateDtoSchema(schema as new (...args: any[]) => any);
+    if (dtoSchema) {
+      return TypeCompiler.Compile(dtoSchema);
+    }
+    // A class without DTO metadata would silently validate nothing — make
+    // the misconfiguration loud at boot, like the unknown-schema-key check.
+    throw new TypeError(
+      `defineQueue('${queueName}'): schema class '${schema.name || "(anonymous)"}' for job ` +
+        `'${jobName}' has no DTO metadata. Decorate it with @Dto() / @Is* property ` +
+        `decorators, or pass a raw TypeBox TSchema.`,
+    );
+  }
+  // Raw TypeBox TSchema
+  return TypeCompiler.Compile(schema as TSchema);
+}
+
+/**
+ * Run compiled validators against a payload and throw `QueuePayloadValidationError`
+ * if validation fails. No-op when no validator is registered for the job.
+ */
+export function validateQueuePayload(queueDef: QueueDef, jobName: string, payload: unknown): void {
+  const validator = queueDef.compiledValidators?.get(jobName);
+  if (!validator) return;
+  if (validator.Check(payload)) return;
+  const errors = [...validator.Errors(payload)].map((e) => ({
+    path: e.path,
+    message: e.message,
+  }));
+  throw new QueuePayloadValidationError(jobName, queueDef.name, errors);
 }
 
 function finalizeQueueDef(
@@ -174,11 +272,59 @@ function finalizeQueueDef(
   jobs: JobMap,
   workerOptions?: WorkerOptions,
   defaults?: Record<string, DispatchDefaults | undefined>,
+  schemas?: Record<string, JobSchema | undefined>,
+  validateMode?: QueueValidateMode,
 ): QueueDef {
+  // Boot-time safety check: every schema key must also exist in jobs.
+  if (schemas) {
+    for (const schemaKey of Object.keys(schemas)) {
+      if (!(schemaKey in jobs)) {
+        throw new TypeError(
+          `defineQueue('${name}'): schemas key '${schemaKey}' does not exist in jobs. ` +
+            `Valid job names: ${Object.keys(jobs).join(", ") || "(none)"}`,
+        );
+      }
+    }
+  }
+
+  // Compile validators once at boot time.
+  let compiledValidators: Map<string, TypeCheck<TSchema>> | undefined;
+  if (schemas) {
+    compiledValidators = new Map();
+    for (const [jobName, schema] of Object.entries(schemas)) {
+      if (schema !== undefined) {
+        compiledValidators.set(jobName, compileJobSchema(name, jobName, schema));
+      }
+    }
+    if (compiledValidators.size === 0) compiledValidators = undefined;
+  }
+
+  // Determine whether dispatch-time validation is needed.
+  const runDispatchValidation = validateMode === "dispatch" || validateMode === "both";
+
+  // Register (or clear) the queue's dispatch validators so the low-level
+  // `Queue.add`/`addBulk` path enforces the same schemas as the typed
+  // dispatchers below.
+  setDispatchValidators(
+    name,
+    runDispatchValidation && compiledValidators ? compiledValidators : undefined,
+  );
+
   const dispatchers: Record<string, DispatcherFn<unknown>> = {};
   for (const jobName of Object.keys(jobs)) {
     const jobDefaults = defaults?.[jobName];
     dispatchers[jobName] = ((payload?: unknown) => {
+      // Dispatch-time validation: run synchronously before building the builder.
+      if (runDispatchValidation && compiledValidators) {
+        const validator = compiledValidators.get(jobName);
+        if (validator && !validator.Check(payload)) {
+          const errors = [...validator.Errors(payload)].map((e) => ({
+            path: e.path,
+            message: e.message,
+          }));
+          throw new QueuePayloadValidationError(jobName, name, errors);
+        }
+      }
       const opts: JobsOptions & { timeout?: number } = {};
       if (jobDefaults) {
         if (jobDefaults.tries !== undefined) opts.attempts = jobDefaults.tries;
@@ -204,6 +350,8 @@ function finalizeQueueDef(
     jobs: Object.freeze({ ...jobs }) as JobMap,
     workerOptions,
     dispatchers: Object.freeze(dispatchers) as DispatchersOf<JobMap>,
+    ...(compiledValidators ? { compiledValidators } : {}),
+    ...(validateMode ? { validateMode } : {}),
   }) as QueueDef;
 }
 

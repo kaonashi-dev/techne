@@ -141,6 +141,37 @@ enum Format {
 handle(@Option("format", { enum: Format, default: Format.Json }) format: Format) {}
 ```
 
+### `@Options(DtoClass)` — validated flag bags
+
+For commands with many flags, `@Options(DtoClass)` collects every `--flag`
+into a single object, coerces each value from the DTO's property types, and
+validates it with the compiled DTO validator. The first violation surfaces as
+a `ConsoleArgumentError` (exit code `2`), like any other argument error:
+
+```ts
+import { Dto, IsInteger, IsOptional, IsString, Min, MinLength } from "@kaonashi-dev/techne/common";
+
+@Dto()
+class DeployOptions {
+  @IsString()
+  @MinLength(3)
+  environment!: string;
+
+  @IsOptional()
+  @IsInteger()
+  @Min(1)
+  replicas?: number;
+}
+
+@ConsoleCommand("deploy")
+handle(@Options(DeployOptions) opts: DeployOptions) {
+  // bunx techne run deploy --environment staging --replicas 3
+}
+```
+
+`@Options` composes with positional `@Argument`s; it only consumes `--flag`
+pairs. A strict DTO (the default) also rejects unknown flags.
+
 ## The `Console` service
 
 `Console` is an abstract DI token. In a running command it resolves to

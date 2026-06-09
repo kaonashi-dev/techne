@@ -62,3 +62,31 @@ export function Option(name: string, opts: OptionOptions = {}): ParameterDecorat
     });
   };
 }
+
+/**
+ * Collect all `--flag value` pairs from the CLI into a single typed and
+ * validated bag. The `DtoClass` must be decorated with `@Dto()` (or at
+ * minimum have `@Is*` property decorators from the schema package).
+ *
+ * At resolution time the argument resolver:
+ * 1. Picks up all options from `ParsedArgv.options`.
+ * 2. Coerces each value based on `design:type` metadata on the DTO class.
+ * 3. Validates using the compiled DTO validator.
+ * 4. Throws `ConsoleArgumentError` with the first validation error on failure.
+ *
+ * @example
+ *   @ConsoleCommand("deploy")
+ *   class DeployCommand {
+ *     run(@Options(DeployOptionsDto) opts: DeployOptionsDto) {}
+ *   }
+ */
+export function Options(dtoClass: new (...args: any[]) => any): ParameterDecorator {
+  return (target, propertyKey, index) => {
+    if (!propertyKey) return;
+    addConsoleParam(target, String(propertyKey), index, {
+      kind: "options-bag" as ConsoleParamKind,
+      name: "__options_bag__",
+      dtoClass,
+    });
+  };
+}
