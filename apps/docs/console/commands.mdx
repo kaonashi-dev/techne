@@ -1,0 +1,184 @@
+---
+title: "Commands"
+description: "@ConsoleCommand, @Argument, @Option, the Console output service, command naming, and type coercion."
+---
+
+A console command is a method on an `@Injectable()` class. Decorate the method
+with `@ConsoleCommand` and its parameters with `@Argument` / `@Option`. The
+class is resolved from the DI container, so constructor injection works
+exactly as it does in controllers and services.
+
+## `@ConsoleCommand`
+
+```ts
+@ConsoleCommand(name?: string, options?: {
+  description?: string;
+  aliases?: string[];
+  hidden?: boolean;
+  middleware?: any[];
+})
+```
+
+```ts
+@Injectable()
+export class CacheCommand {
+  constructor(private readonly console: Console) {}
+
+  @ConsoleCommand("cache:clear", {
+    description: "Flush the application cache",
+    aliases: ["cc"],
+  })
+  handle() {
+    this.console.success("Cache cleared.");
+  }
+}
+```
+
+- **`aliases`** register alternate names — `techne run cc` resolves to
+  `cache:clear`. Duplicate names or aliases throw at registration time.
+- **`hidden: true`** keeps the command runnable but omits it from
+  `techne list`.
+- **`middleware`** runs DI-resolved [console middleware](#middleware) around
+  the command.
+
+### Command naming
+
+If you pass an explicit name (`@ConsoleCommand("db:seed")`) that name is used
+verbatim. Otherwise the name is derived from the class:
+
+- The class name is stripped of a trailing `Command` and kebab-cased —
+  `SeedCommand` → `seed`.
+- If the class declares **more than one** command method, each name is
+  suffixed with the kebab-cased method name — `seed:rollback`.
+
+Explicit, namespaced names (`db:seed`, `users:export`) are recommended for
+clarity.
+
+## Arguments and options
+
+Two parameter decorators map argv onto your handler parameters:
+
+| Decorator             | Source                       | Default required? |
+| --------------------- | ---------------------------- | ----------------- |
+| `@Argument("name")`   | Positional, in declared order | **Yes**          |
+| `@Option("name")`     | A `--name` flag               | No                |
+
+```ts
+@ConsoleCommand("users:export")
+async handle(
+  @Argument("format") format: string,           // positional, required
+  @Argument("path", { default: "out" }) path: string, // positional, optional
+  @Option("limit", { default: 100 }) limit: number,   // --limit 500
+  @Option("force", { aliases: ["f"] }) force: boolean, // --force / -f
+) {}
+```
+
+```bash
+bunx @kaonashi-dev/techne run users:export csv ./dump --limit 500 -f
+```
+
+### Argument options
+
+```ts
+@Argument(name, {
+  description?: string;
+  required?: boolean;   // default true; ignored when `default` is set
+  default?: unknown;    // supplying a default makes the argument optional
+  enum?: Record<string, string | number>;
+})
+```
+
+A missing required argument exits with code `2` and a
+`Missing required argument <name>` message.
+
+### Option options
+
+```ts
+@Option(name, {
+  description?: string;
+  required?: boolean;   // default false
+  default?: unknown;
+  enum?: Record<string, string | number>;
+  aliases?: string[];   // short flags, e.g. ["f"] → -f
+})
+```
+
+A `boolean`-typed option that is absent resolves to its `default` or `false`,
+so flags never need an explicit value.
+
+### Accepted flag forms
+
+The argv parser understands all of the following after the command name:
+
+| Form              | Result                                            |
+| ----------------- | ------------------------------------------------- |
+| `--key=value`     | `key` = `"value"`                                 |
+| `--key value`     | `key` = `"value"`                                 |
+| `-k value`        | `k` = `"value"`                                   |
+| `--flag`          | `flag` = `true`                                   |
+| `--no-flag`       | `flag` = `false`                                  |
+| `--key a --key b` | `key` = `["a", "b"]` (repeats collect into array) |
+| `-- <rest>`       | Everything after `--` is treated as positional    |
+
+### Type coercion
+
+Raw argv strings are coerced using the parameter's TypeScript type, read via
+`design:paramtypes` reflection:
+
+- **`number`** → parsed with `Number`; a non-numeric value exits with code `2`.
+- **`boolean`** → `true` for `true` / `"true"` / `"1"`, otherwise `false`.
+- **`enum`** → validated against the values (and keys) of the `enum` map you
+  pass; an out-of-range value exits with code `2` and lists the allowed
+  values.
+
+```ts
+enum Format {
+  Json = "json",
+  Csv = "csv",
+}
+
+@ConsoleCommand("users:export")
+handle(@Option("format", { enum: Format, default: Format.Json }) format: Format) {}
+```
+
+## The `Console` service
+
+`Console` is an abstract DI token. In a running command it resolves to
+`BunConsole`, which writes ANSI-colored output (auto-disabled when stdout is
+not a TTY); in tests it is swapped for [`BufferedConsole`](/console/testing).
+Inject it and use the semantic helpers instead of `console.log`:
+
+```ts
+this.console.write("no newline");
+this.console.writeln("a line");        // alias: line()
+this.console.info("informational");    // cyan
+this.console.success("done");          // green ✓
+this.console.warning("heads up");      // yellow ⚠
+this.console.error("it broke");        // red ✗ (stderr)
+```
+
+## Middleware
+
+Per-command middleware wraps execution and can short-circuit by returning an
+exit code. A middleware is a DI-resolved class implementing `ConsoleMiddleware`:
+
+```ts
+import type { ConsoleMiddleware, ConsoleInvocation, ConsoleNext } from "@kaonashi-dev/techne/console";
+
+@Injectable()
+class ConfirmProduction implements ConsoleMiddleware {
+  async handle(inv: ConsoleInvocation, next: ConsoleNext): Promise<number> {
+    if (process.env.NODE_ENV === "production" && !inv.parsed.options.force) {
+      this.console.warning("Refusing to run in production without --force.");
+      return 2;
+    }
+    return next(inv);
+  }
+}
+
+@ConsoleCommand("db:wipe", { middleware: [ConfirmProduction] })
+handle() {/* ... */}
+```
+
+The built-in help (`--help`) and unknown-command rescue middleware always run
+first, followed by any per-command middleware you register.

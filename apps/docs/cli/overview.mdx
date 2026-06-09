@@ -21,6 +21,8 @@ bunx @kaonashi-dev/techne --help
 | [`test`](/cli/test)               | Run the test suite                                        |
 | [`deploy`](/cli/deploy)           | Emit deployment scaffolding (currently `--target docker`) |
 | [`doctor`](/cli/doctor)           | Diagnose `tsconfig` / project layout                      |
+| [`run`](/cli/run)                 | Run a registered [console command](/console/overview)     |
+| [`list`](/cli/list)               | List registered console commands                          |
 | [`generate` / `g`](/cli/generate) | Scaffold framework files                                  |
 
 ## Generators
@@ -36,6 +38,7 @@ bunx @kaonashi-dev/techne --help
 | `filter`     | An exception filter                                 |
 | `hook`       | A `ResponseHook` skeleton                           |
 | `dto`        | A typed DTO class                                   |
+| `command`    | A [console command](/console/overview) class        |
 | `docker`     | Multi-stage Bun Dockerfile + `.dockerignore`        |
 | `client`     | A typed contract client (`Routes` + `createClient`) |
 

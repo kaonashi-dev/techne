@@ -1,0 +1,56 @@
+---
+title: "Testing commands"
+description: "Drive console commands in-memory with createConsoleTester() and assert on output and exit codes."
+---
+
+`createConsoleTester()` boots a console application with output captured by an
+in-memory `BufferedConsole`, so you can invoke commands and assert on their
+exit code and text without spawning a process.
+
+```ts
+import { createConsoleTester } from "@kaonashi-dev/techne/console";
+import { SeedCommand } from "../src/commands/db-seed.command";
+
+const tester = await createConsoleTester({
+  commands: [SeedCommand],
+});
+
+const result = await tester.call("db:seed", ["users", "--count", "3"]);
+
+result.assertSuccess().assertSee("Seeded users.");
+
+await tester.close();
+```
+
+It accepts the same flat config you pass to `TechneFactory.create()` —
+`commands`, `providers`, `controllers`, `features`, `plugins` — and forces the
+logger off. Pair it with [`Test.createTestingModule`](/testing/overview)-style
+fakes by listing override providers in the config.
+
+## The `call` API
+
+`call(name, args)` runs a command and returns a chainable result. `args`
+accepts an array of tokens or a single string (split on whitespace).
+
+```ts
+const result = await tester.call("users:export", "csv --limit 5");
+```
+
+| Member               | Description                                                  |
+| -------------------- | ------------------------------------------------------------ |
+| `result.code`        | The numeric exit code                                        |
+| `result.output`      | Captured stdout **and** stderr, concatenated                 |
+| `assertExitCode(n)`  | Throws unless the exit code equals `n`; returns `result`     |
+| `assertSuccess()`    | Shorthand for `assertExitCode(0)`                            |
+| `assertSee(text)`    | Throws unless `output` contains `text`; returns `result`     |
+
+The assertions chain, and failures throw with the full captured output, so a
+broken expectation tells you exactly what the command printed:
+
+```ts
+await tester.call("db:seed", []) // missing required <table>
+  .then((r) => r.assertExitCode(2).assertSee("Missing required argument <table>"));
+```
+
+Call `tester.close()` when you're done to fire `onModuleDestroy` lifecycle
+hooks on your providers.

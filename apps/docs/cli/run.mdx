@@ -1,0 +1,32 @@
+---
+title: "techne run"
+description: "Boot a headless application context and run a registered console command."
+---
+
+```bash
+# Run a console command with arguments and options
+bunx @kaonashi-dev/techne run db:seed users --count 50
+```
+
+`run` loads your `techne.config.ts`, boots a **headless** application
+context — providers, plugins, and `onModuleInit` hooks initialize, but no HTTP
+server listens and no MQ workers start — and dispatches the named
+[console command](/console/overview). The command's return value becomes the
+process exit code, and `onModuleDestroy` fires before the process exits.
+
+Everything after the command name is forwarded as arguments and options:
+
+```bash
+bunx @kaonashi-dev/techne run users:export csv ./dump --limit 500 -f
+```
+
+Pass `--help` (or `-h`) to print generated usage for a command:
+
+```bash
+bunx @kaonashi-dev/techne run db:seed --help
+```
+
+Unknown command names exit with code `2` and suggest the closest matches. See
+[Console overview](/console/overview) for exit codes, help output, and the
+full command authoring guide, and [`techne list`](/cli/list) to enumerate
+what's registered.

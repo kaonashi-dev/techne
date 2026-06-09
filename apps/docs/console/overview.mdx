@@ -1,0 +1,143 @@
+---
+title: "Console overview"
+description: "Define domain CLI commands with @ConsoleCommand, full DI, and run them through the techne binary."
+---
+
+The Console module lets you define first-class CLI commands — `db:seed`,
+`users:export`, `cache:clear` — as ordinary DI-managed classes and run them
+through the `techne` binary. It mirrors Laravel's Artisan commands and
+Tempest's `#[ConsoleCommand]`: a method becomes a command, its parameters
+become typed arguments and options, and the framework wires up parsing,
+coercion, help text, and exit codes for you.
+
+Everything lives under `@kaonashi-dev/techne/console`.
+
+## Quick start
+
+A command is an `@Injectable()` class with one or more methods marked
+`@ConsoleCommand`. Inject the [`Console`](/console/commands#the-console-service)
+service for output and any other provider you need.
+
+```ts
+// src/commands/db-seed.command.ts
+import { Injectable } from "@kaonashi-dev/techne/common";
+import { Argument, ConsoleCommand, Console, Option } from "@kaonashi-dev/techne/console";
+
+@Injectable()
+export class SeedCommand {
+  constructor(
+    private readonly console: Console,
+    private readonly db: DatabaseService,
+  ) {}
+
+  @ConsoleCommand("db:seed", { description: "Seed a table with sample rows" })
+  async handle(
+    @Argument("table") table: string,
+    @Option("count", { default: 10 }) count: number,
+  ) {
+    this.console.info(`Seeding ${count} rows into ${table}…`);
+    await this.db.seed(table, count);
+    this.console.success(`Seeded ${table}.`);
+  }
+}
+```
+
+Register it under `commands` in `techne.config.ts` (the field is folded into
+the DI container alongside `providers`):
+
+```ts
+// techne.config.ts
+import { defineTechneConfig } from "@kaonashi-dev/techne/core";
+import { SeedCommand } from "./commands/db-seed.command";
+
+export default defineTechneConfig({
+  commands: [SeedCommand],
+});
+```
+
+Then run it:
+
+```bash
+bunx @kaonashi-dev/techne run db:seed users --count 50
+# › Seeding 50 rows into users…
+# ✓ Seeded users.
+```
+
+`techne run` boots a **headless** application context — your providers,
+plugins, and lifecycle hooks initialize, but no HTTP server listens and no MQ
+workers start. The same context is torn down (`onModuleDestroy`) when the
+command finishes.
+
+## Running commands
+
+| Command                      | What it does                                              |
+| ---------------------------- | --------------------------------------------------------- |
+| [`techne run <name> [args]`](/cli/run) | Boots the app and runs the named command       |
+| [`techne list`](/cli/list)   | Lists every registered (non-hidden) command              |
+| `techne generate command <Name>` | Scaffolds `src/commands/<kebab>.command.ts`          |
+
+```bash
+bunx @kaonashi-dev/techne list
+# Available commands:
+#
+#   db:seed                  Seed a table with sample rows
+```
+
+## Exit codes
+
+The number a command returns becomes the process exit code. Returning nothing
+is treated as success.
+
+| Code | Meaning                                                              |
+| ---- | ------------------------------------------------------------------- |
+| `0`  | Success — returned `void`/`undefined`, or an explicit `0`           |
+| `1`  | Error — the handler threw (the message is printed to stderr)        |
+| `2`  | Invalid usage — unknown command, or a missing/invalid argument      |
+
+```ts
+import { ExitCode } from "@kaonashi-dev/techne/console";
+
+@ConsoleCommand("health:check")
+async handle(): Promise<number> {
+  return (await this.api.ping()) ? ExitCode.SUCCESS : ExitCode.ERROR;
+}
+```
+
+Returning any other finite number passes through, clamped to `0..255`.
+
+## Help & suggestions
+
+Every command supports `--help` / `-h`, which prints generated usage from the
+registered arguments and options:
+
+```bash
+bunx @kaonashi-dev/techne run db:seed --help
+# Usage: techne run db:seed <table> [options]
+#
+# Seed a table with sample rows
+#
+# Arguments:
+#   table                 (required)
+#
+# Options:
+#   --count               (default: 10)
+#   --help, -h           Show this help message
+```
+
+A misspelled command name exits with code `2` and suggests the closest
+matches (Levenshtein distance ≤ 3):
+
+```bash
+bunx @kaonashi-dev/techne run db:sed
+# ✗ Unknown command: "db:sed"
+#
+# Did you mean one of these?
+#   techne run db:seed
+```
+
+## Next steps
+
+- **[Commands](/console/commands)** — `@ConsoleCommand`, `@Argument`,
+  `@Option`, the `Console` service, naming rules, and type coercion.
+- **[Testing](/console/testing)** — drive commands in-memory with
+  `createConsoleTester()` and assert on output and exit codes.

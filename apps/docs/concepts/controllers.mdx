@@ -34,3 +34,41 @@ class UsersController {
 Per-route options like `body`, `params`, `query`, and `response` accept
 TypeBox schemas — see [Validation](/http/validation) for details. For URI
 versioning, see [Routing](/http/routing).
+
+## Single-action controllers
+
+When an endpoint only needs one route, place the verb decorator on the **class**
+itself and put the logic in a `handle` method — no separate method decorator is
+required. This mirrors Laravel's invokable controllers and Tempest's
+single-route controllers.
+
+```ts
+import { Body, Controller, Get, Param, Post } from "@kaonashi-dev/techne/common";
+
+@Get("/reports/:id")
+class ShowReport {
+  handle(@Param("id") id: string) {
+    return { id };
+  }
+}
+```
+
+`@Controller` is **optional** for a single-action controller. When present, its
+prefix composes with the route, and any class-level guards or middleware apply
+to the `handle` route:
+
+```ts
+@Controller("admin")
+@Post("/reports")
+class CreateReport {
+  handle(@Body() body: CreateReportDto) {
+    return { created: body.title };
+  }
+}
+// → POST /admin/reports
+```
+
+Parameter decorators (`@Param`, `@Query`, `@Body`) and per-route schemas work
+on `handle` exactly as they do on a regular controller method. The class must
+still be listed in `controllers: [...]`; omitting the `handle` method throws a
+clear error at registration time.

@@ -10,6 +10,15 @@ in the repo root. Notable highlights below.
 
 ### Added
 
+- **Console Commands** subsystem under `@kaonashi-dev/techne/console`:
+  `@ConsoleCommand`, `@Argument`, `@Option`, the `Console` output service,
+  `TechneFactory.createConsoleApplication()`, the `commands` config field, and
+  the `techne run` / `techne list` / `g command` CLI verbs. See
+  [Console overview](/console/overview).
+- **Single-action (invokable) controllers**: place an HTTP-verb decorator
+  directly on a controller class and implement a `handle` method. `@Controller`
+  is optional and composes its prefix when present. See
+  [Controllers](/concepts/controllers#single-action-controllers).
 - `ResponseHook` and `@OnResponse()` for the Techne v1 flat HTTP response-hook
   metadata surface.
 

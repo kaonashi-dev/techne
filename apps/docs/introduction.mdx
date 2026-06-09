@@ -24,7 +24,7 @@ The recommended mental model is:
 
 - `@kaonashi-dev/techne/common` for decorators, exceptions, DTO/schema helpers, and request lifecycle interfaces.
 - `@kaonashi-dev/techne/core` for bootstrap and infrastructure APIs.
-- `@kaonashi-dev/techne/config`, `/jwt`, `/swagger`, `/health`, `/testing`, `/cqrs`, and `/mq` for specialized features.
+- `@kaonashi-dev/techne/config`, `/jwt`, `/swagger`, `/health`, `/testing`, `/cqrs`, `/mq`, and `/console` for specialized features.
 
 ### Import Map
 
@@ -35,6 +35,7 @@ The recommended mental model is:
 | Testing utilities                                 | `@kaonashi-dev/techne/testing` |
 | CQRS buses and event store                        | `@kaonashi-dev/techne/cqrs`    |
 | Queue and worker primitives                       | `@kaonashi-dev/techne/mq`      |
+| Console (CLI) command subsystem                   | `@kaonashi-dev/techne/console` |
 
 `@kaonashi-dev/techne` is now a minimal bootstrap entrypoint. Use it only when you explicitly want the smallest possible surface.
 
