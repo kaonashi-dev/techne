@@ -18,6 +18,7 @@ bunx @kaonashi-dev/techne g middleware logger
 bunx @kaonashi-dev/techne g guard auth
 bunx @kaonashi-dev/techne g filter http-exception
 bunx @kaonashi-dev/techne g dto create-user
+bunx @kaonashi-dev/techne g command db-seed
 
 # Scaffold a multi-stage Bun Dockerfile (+ .dockerignore)
 bunx @kaonashi-dev/techne g docker --port 3000
@@ -36,6 +37,7 @@ bunx @kaonashi-dev/techne g docker --port 3000
 | `filter`     | An HTTP exception filter                                            |
 | `hook`       | A `ResponseHook` skeleton                                           |
 | `dto`        | A typed DTO class                                                   |
+| `command`    | A console command class (see [Console](/console/overview))          |
 | `docker`     | Multi-stage Bun Dockerfile + `.dockerignore`                        |
 | `client`     | A typed contract client (see [contract codegen](/contract/codegen)) |
 

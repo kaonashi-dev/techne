@@ -1,0 +1,24 @@
+---
+title: "techne list"
+description: "List every registered (non-hidden) console command with its description."
+---
+
+```bash
+# List all registered console commands
+bunx @kaonashi-dev/techne list
+```
+
+`list` boots the same headless context as [`techne run`](/cli/run) and prints
+every registered [console command](/console/overview) — name and
+description — sorted alphabetically:
+
+```
+Available commands:
+
+  cache:clear              Flush the application cache
+  db:seed                  Seed a table with sample rows
+  users:export             Export users to a file
+```
+
+Commands marked `@ConsoleCommand(name, { hidden: true })` are runnable but
+omitted from this list.
