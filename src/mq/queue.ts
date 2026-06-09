@@ -1,4 +1,5 @@
 import { createMqDriver } from "./driver";
+import { validateDispatchPayload } from "./dispatch-validation";
 import { Job } from "./job";
 import type { JobJson, JobState, JobsOptions, QueueDriver, QueueOptions } from "./types";
 
@@ -14,6 +15,10 @@ export class Queue<T = unknown, R = unknown> {
   }
 
   async add(name: string, data: T, opts: JobsOptions = {}): Promise<Job<T, R>> {
+    // Dispatch-time schema validation (defineQueue `validate: "dispatch" |
+    // "both"`) — enforced here too so direct Queue.add calls can't bypass
+    // the typed dispatchers' contract.
+    validateDispatchPayload(this.name, name, data);
     const job = await this.driver.add(this.name, name, data, this.mergeOptions(opts));
     return Job.fromJson<T, R>(this.driver, job as JobJson<T, R>);
   }
@@ -21,6 +26,9 @@ export class Queue<T = unknown, R = unknown> {
   async addBulk(
     jobs: Array<{ name: string; data: T; opts?: JobsOptions }>,
   ): Promise<Array<Job<T, R>>> {
+    for (const job of jobs) {
+      validateDispatchPayload(this.name, job.name, job.data);
+    }
     const added = await this.driver.addBulk(
       this.name,
       jobs.map((job) => ({

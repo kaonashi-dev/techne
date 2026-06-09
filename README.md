@@ -739,6 +739,36 @@ const app = await TechneFactory.create({
 });
 ```
 
+### Queue payload validation
+
+`defineQueue` accepts optional per-job `schemas` (a `@Dto` class or a raw
+TypeBox `TSchema`) plus a `validate` mode. Validators compile once at
+definition time; queues without schemas pay nothing:
+
+```ts
+const TasksQueue = defineQueue(
+  {
+    name: "tasks",
+    jobs: { "initiate-task": {} as InitiateTask },
+    schemas: { "initiate-task": InitiateTaskDto },
+  },
+  { validate: "dispatch" }, // "dispatch" | "consume" | "both"; omit to disable
+);
+
+// Throws QueuePayloadValidationError synchronously at the producer:
+await TasksQueue.dispatchers["initiate-task"]({ taskId: 123 as any });
+```
+
+- `"dispatch"` — rejected before enqueuing. Enforced on the typed dispatchers
+  **and** on direct `Queue.add`/`addBulk` calls, so the low-level path can't
+  bypass the contract.
+- `"consume"` — the worker throws `QueuePayloadValidationError` before the
+  handler runs; it flows into the normal `@OnFailure`/`failed()` lifecycle.
+- Schemas describe the **wire shape** (payloads JSON-roundtrip through the
+  driver — `Date` fields arrive as strings).
+- Misconfiguration is loud at boot: unknown job names in `schemas` and schema
+  classes without DTO metadata both throw `TypeError` from `defineQueue`.
+
 ## Health & Graceful Shutdown
 
 `TechneFactory.create()` auto-registers two health endpoints:

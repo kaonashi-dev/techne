@@ -1,10 +1,11 @@
-import { Type, type TSchema } from "@sinclair/typebox";
+import type { TSchema } from "@sinclair/typebox";
 import { TypeCompiler, type TypeCheck } from "@sinclair/typebox/compiler";
 import type { Job } from "./job";
 import { PendingDispatch } from "./pending-dispatch";
 import type { Queue } from "./queue";
 import type { BackoffOptions, JobsOptions, WorkerOptions } from "./types";
 import { QueuePayloadValidationError } from "./errors";
+import { setDispatchValidators } from "./dispatch-validation";
 import { getOrCreateDtoSchema } from "../schema/dto";
 
 export type JobMap = Record<string, unknown>;
@@ -228,15 +229,24 @@ export function defineQueue(
   );
 }
 
-function compileJobSchema(schema: JobSchema): TypeCheck<TSchema> {
-  // If it's a constructor (class), try the DTO registry first, then build raw.
+function compileJobSchema(
+  queueName: string,
+  jobName: string,
+  schema: JobSchema,
+): TypeCheck<TSchema> {
+  // If it's a constructor (class), resolve through the DTO registry.
   if (typeof schema === "function") {
     const dtoSchema = getOrCreateDtoSchema(schema as new (...args: any[]) => any);
     if (dtoSchema) {
       return TypeCompiler.Compile(dtoSchema);
     }
-    // Fallback: treat constructor as unknown (no properties metadata)
-    return TypeCompiler.Compile(Type.Object({}) as TSchema);
+    // A class without DTO metadata would silently validate nothing — make
+    // the misconfiguration loud at boot, like the unknown-schema-key check.
+    throw new TypeError(
+      `defineQueue('${queueName}'): schema class '${schema.name || "(anonymous)"}' for job ` +
+        `'${jobName}' has no DTO metadata. Decorate it with @Dto() / @Is* property ` +
+        `decorators, or pass a raw TypeBox TSchema.`,
+    );
   }
   // Raw TypeBox TSchema
   return TypeCompiler.Compile(schema as TSchema);
@@ -246,11 +256,7 @@ function compileJobSchema(schema: JobSchema): TypeCheck<TSchema> {
  * Run compiled validators against a payload and throw `QueuePayloadValidationError`
  * if validation fails. No-op when no validator is registered for the job.
  */
-export function validateQueuePayload(
-  queueDef: QueueDef,
-  jobName: string,
-  payload: unknown,
-): void {
+export function validateQueuePayload(queueDef: QueueDef, jobName: string, payload: unknown): void {
   const validator = queueDef.compiledValidators?.get(jobName);
   if (!validator) return;
   if (validator.Check(payload)) return;
@@ -287,15 +293,22 @@ function finalizeQueueDef(
     compiledValidators = new Map();
     for (const [jobName, schema] of Object.entries(schemas)) {
       if (schema !== undefined) {
-        compiledValidators.set(jobName, compileJobSchema(schema));
+        compiledValidators.set(jobName, compileJobSchema(name, jobName, schema));
       }
     }
     if (compiledValidators.size === 0) compiledValidators = undefined;
   }
 
   // Determine whether dispatch-time validation is needed.
-  const runDispatchValidation =
-    validateMode === "dispatch" || validateMode === "both";
+  const runDispatchValidation = validateMode === "dispatch" || validateMode === "both";
+
+  // Register (or clear) the queue's dispatch validators so the low-level
+  // `Queue.add`/`addBulk` path enforces the same schemas as the typed
+  // dispatchers below.
+  setDispatchValidators(
+    name,
+    runDispatchValidation && compiledValidators ? compiledValidators : undefined,
+  );
 
   const dispatchers: Record<string, DispatcherFn<unknown>> = {};
   for (const jobName of Object.keys(jobs)) {

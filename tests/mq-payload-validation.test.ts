@@ -28,6 +28,7 @@ import {
   type Job,
 } from "../src/mq";
 import { QueuePayloadValidationError } from "../src/mq/errors";
+import { Queue } from "../src/mq/queue";
 import { Dto, IsString, IsNumber, IsOptional, MinLength } from "../src/schema";
 
 // ── Test DTO ──────────────────────────────────────────────────────────────────
@@ -375,5 +376,68 @@ describe("Queue payload validation", () => {
         { validate: "dispatch" },
       ),
     ).toThrow(/non-existent-job/);
+  });
+
+  test("schema class without DTO metadata → TypeError at defineQueue time", () => {
+    class NotADto {}
+
+    expect(() =>
+      defineQueue(
+        {
+          name: "pv-not-a-dto",
+          jobs: { "initiate-task": {} as { taskId: string } },
+          schemas: { "initiate-task": NotADto },
+        },
+        { validate: "dispatch" },
+      ),
+    ).toThrow(/no DTO metadata/);
+  });
+
+  // ── Direct Queue.add path ─────────────────────────────────────────────────
+
+  test("direct Queue.add enforces dispatch validation (no dispatcher bypass)", async () => {
+    defineQueue(
+      {
+        name: "pv-direct-add",
+        jobs: { "initiate-task": {} as { taskId: string } },
+        schemas: { "initiate-task": InitiateTaskDto },
+      },
+      { validate: "dispatch" },
+    );
+
+    const queue = new Queue("pv-direct-add");
+    closers.push(() => queue.close());
+
+    await expect(queue.add("initiate-task", { taskId: "" })).rejects.toThrow(
+      QueuePayloadValidationError,
+    );
+    // Valid payloads still flow through.
+    const job = await queue.add("initiate-task", { taskId: "task-9" });
+    expect(job).toBeDefined();
+    // Jobs without a schema are not validated.
+    const queue2 = new Queue("pv-direct-add-unregistered");
+    closers.push(() => queue2.close());
+    await queue2.add("anything", { whatever: true });
+  });
+
+  test("addBulk enforces dispatch validation per job", async () => {
+    defineQueue(
+      {
+        name: "pv-bulk-add",
+        jobs: { "initiate-task": {} as { taskId: string } },
+        schemas: { "initiate-task": InitiateTaskDto },
+      },
+      { validate: "dispatch" },
+    );
+
+    const queue = new Queue("pv-bulk-add");
+    closers.push(() => queue.close());
+
+    await expect(
+      queue.addBulk([
+        { name: "initiate-task", data: { taskId: "ok" } },
+        { name: "initiate-task", data: { taskId: "" } },
+      ]),
+    ).rejects.toThrow(QueuePayloadValidationError);
   });
 });
