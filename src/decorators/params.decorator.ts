@@ -44,7 +44,8 @@ function getParameterMetatype(
   return paramTypes?.[parameterIndex];
 }
 
-function _addParam(
+/** @internal Shared by every param decorator (including `@Cookie`). */
+export function _addParam(
   target: object,
   propertyKey: string,
   parameterIndex: number,

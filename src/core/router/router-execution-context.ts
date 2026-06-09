@@ -398,9 +398,7 @@ export class RouterExecutionContext {
   public setGlobalMiddlewares(
     middlewares: Array<Function | { fn: Function; exemptMetaKey?: string }>,
   ): void {
-    this.globalMiddlewares = middlewares.map((m) =>
-      typeof m === "function" ? { fn: m } : m,
-    );
+    this.globalMiddlewares = middlewares.map((m) => (typeof m === "function" ? { fn: m } : m));
   }
 
   public resetRoutes(): void {

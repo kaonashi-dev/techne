@@ -3,7 +3,8 @@ import { TechneFactory } from "../src/factory/techne-factory";
 import { Controller } from "../src/decorators/controller.decorator";
 import { Get, Post, Put } from "../src/decorators/routes.decorator";
 import { CsrfExempt } from "../src/decorators/csrf-exempt.decorator";
-import { compileCsrfOptions, csrfProtection } from "../src/security/csrf";
+import { compileCsrfOptions } from "../src/security/csrf";
+import { __setIsProduction } from "../src/core/router/router-response-controller";
 
 // ---------------------------------------------------------------------------
 // compileCsrfOptions unit tests
@@ -11,15 +12,19 @@ import { compileCsrfOptions, csrfProtection } from "../src/security/csrf";
 
 describe("compileCsrfOptions()", () => {
   test("uses __Host-csrf in production, csrf otherwise", () => {
-    const prev = process.env.NODE_ENV;
+    // CSRF reads the framework-wide cached production flag, so tests flip it
+    // via __setIsProduction (the error-contract test pattern) rather than
+    // mutating NODE_ENV at runtime.
+    const prevProduction = (Bun.env.NODE_ENV ?? "") === "production";
+    try {
+      __setIsProduction(false);
+      expect(compileCsrfOptions().cookieName).toBe("csrf");
 
-    process.env.NODE_ENV = "development";
-    expect(compileCsrfOptions().cookieName).toBe("csrf");
-
-    process.env.NODE_ENV = "production";
-    expect(compileCsrfOptions().cookieName).toBe("__Host-csrf");
-
-    process.env.NODE_ENV = prev;
+      __setIsProduction(true);
+      expect(compileCsrfOptions().cookieName).toBe("__Host-csrf");
+    } finally {
+      __setIsProduction(prevProduction);
+    }
   });
 
   test("custom cookieName is respected", () => {
@@ -95,7 +100,8 @@ class ExemptClassController {
 }
 
 /** Extract the csrf cookie value from a Set-Cookie response header. */
-function extractCsrfCookie(res: Response, cookieName = "csrf"): string | undefined {
+// oxlint-disable-next-line no-unused-vars -- kept for ad-hoc debugging of cookie flows
+function _extractCsrfCookie(res: Response, cookieName = "csrf"): string | undefined {
   const setCookieHeader = res.headers.get("set-cookie");
   if (!setCookieHeader) return undefined;
   // Multiple Set-Cookie headers may be joined by comma in the Web Fetch API
@@ -346,9 +352,7 @@ describe("CSRF middleware — integration", () => {
     expect(setCookie).not.toContain("csrf");
 
     // POST with no token: passes (no CSRF middleware)
-    const postRes = await app.handle(
-      new Request("http://localhost/api", { method: "POST" }),
-    );
+    const postRes = await app.handle(new Request("http://localhost/api", { method: "POST" }));
     expect(postRes.status).toBe(200);
   });
 });

@@ -1,6 +1,9 @@
 import { timingSafeEqual } from "node:crypto";
 import { ForbiddenException } from "../exceptions";
-import { RouterResponseController } from "../core/router/router-response-controller";
+import {
+  isProductionEnv,
+  RouterResponseController,
+} from "../core/router/router-response-controller";
 
 export interface CsrfOptions {
   /**
@@ -43,7 +46,7 @@ interface CompiledCsrfOptions {
 
 /** Compile CSRF options once at boot; the result is a frozen config object. */
 export function compileCsrfOptions(opts: CsrfOptions = {}): CompiledCsrfOptions {
-  const isProduction = (process.env.NODE_ENV ?? "") === "production";
+  const isProduction = isProductionEnv();
   const defaultCookieName = isProduction ? "__Host-csrf" : "csrf";
 
   const cookieOverrides = opts.cookie ?? {};
@@ -51,9 +54,7 @@ export function compileCsrfOptions(opts: CsrfOptions = {}): CompiledCsrfOptions 
     cookieName: opts.cookieName ?? defaultCookieName,
     headerName: opts.headerName ?? "x-csrf-token",
     methods: Object.freeze(
-      new Set(
-        (opts.methods ?? ["POST", "PUT", "PATCH", "DELETE"]).map((m) => m.toUpperCase()),
-      ),
+      new Set((opts.methods ?? ["POST", "PUT", "PATCH", "DELETE"]).map((m) => m.toUpperCase())),
     ) as ReadonlySet<string>,
     exclude: Object.freeze(opts.exclude ?? []),
     cookie: Object.freeze({
@@ -67,6 +68,20 @@ export function compileCsrfOptions(opts: CsrfOptions = {}): CompiledCsrfOptions 
   });
 
   return compiled;
+}
+
+/**
+ * Extracts the pathname from a request URL without allocating a `URL`
+ * object (the adapter's `getRequestPath` idiom — this runs per request
+ * when `exclude` paths are configured).
+ */
+function getRequestPathname(url: string): string {
+  const protocolIndex = url.indexOf("://");
+  if (protocolIndex === -1) return url;
+  const pathStart = url.indexOf("/", protocolIndex + 3);
+  if (pathStart === -1) return "/";
+  const queryStart = url.indexOf("?", pathStart);
+  return queryStart === -1 ? url.slice(pathStart) : url.slice(pathStart, queryStart);
 }
 
 /**
@@ -126,6 +141,9 @@ function mintToken(): string {
  *   with a timing-safe comparison. A mismatch returns 403 problem+json.
  * - Routes decorated with `@CsrfExempt()` are skipped entirely.
  * - Paths listed in `exclude` are skipped entirely.
+ *
+ * Runs as a global middleware AFTER guards, so authentication failures
+ * (401) take precedence over CSRF mismatches (403).
  */
 export function csrfProtection(opts: CsrfOptions = {}) {
   const config = compileCsrfOptions(opts);
@@ -137,8 +155,7 @@ export function csrfProtection(opts: CsrfOptions = {}) {
 
     // --- Path exclusions ---
     if (config.exclude.length > 0) {
-      const url = new URL(request.url);
-      const pathname = url.pathname;
+      const pathname = getRequestPathname(request.url);
       for (const prefix of config.exclude) {
         if (pathname === prefix || pathname.startsWith(prefix + "/")) {
           return;
