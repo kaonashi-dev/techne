@@ -8,6 +8,7 @@ import type {
   VersioningOptions,
 } from "../core/http-options";
 import { compileSecurityHeaders, type SecurityHeadersOptions } from "../security/security-headers";
+import { compileRateLimitPolicy, type RateLimitOptions } from "../security/rate-limit";
 import { Scanner } from "../core/scanner";
 import { Container, getClassScope, getProviderScope, isCustomProvider } from "../core/container";
 import { Scope } from "../core/scope";
@@ -170,6 +171,11 @@ export interface TechneApplicationOptions {
    * `Bun.serve` when `listen()` binds a real socket.
    */
   server?: TechneServerOptions;
+  /**
+   * Global HTTP rate limiter using a continuous-refill token bucket.
+   * When absent, no rate-limiting hooks are registered (zero-cost contract).
+   */
+  rateLimit?: RateLimitOptions;
 }
 
 export interface TechneValidationOptions {
@@ -256,6 +262,9 @@ export class TechneFactory {
       requestId: (effectiveOptions as { requestId?: boolean })?.requestId,
       securityHeaders: effectiveOptions?.securityHeaders
         ? compileSecurityHeaders(effectiveOptions.securityHeaders)
+        : undefined,
+      rateLimit: effectiveOptions?.rateLimit
+        ? compileRateLimitPolicy(effectiveOptions.rateLimit)
         : undefined,
     });
     const precompiledRoutes = config

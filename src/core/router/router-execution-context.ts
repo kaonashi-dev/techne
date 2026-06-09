@@ -9,6 +9,8 @@ import type { ParamMetadata } from "../../decorators/params.decorator";
 import { HandlerMetadataStorage } from "./handler-metadata-storage";
 import { RouterResponseController } from "./router-response-controller";
 import type { DiscoveredRouteDefinition } from "./router-explorer";
+import { InMemoryTokenBucketStore, type RateLimitOptions } from "../../security/rate-limit";
+import { resolveClientIp } from "../../security/client-ip";
 
 type RequestHandlerContext = any;
 type RouteContextInfo = {
@@ -367,11 +369,27 @@ export class RouterExecutionContext {
     const mergedGuards =
       this.globalGuards.length === 0 ? route.guards : [...this.globalGuards, ...route.guards];
     const guardHook = this.createGuardHook(mergedGuards, container, controllerClass, handlerRef);
-    const beforeHandle = guardHook
-      ? [guardHook, ...route.middlewares]
-      : route.middlewares.length === 0
-        ? undefined
-        : route.middlewares;
+
+    // Per-route @RateLimit(options) override: prepend a rate-limit hook before the guard.
+    // @RateLimit(false) exemption is handled by the adapter's exclude list (set via
+    // addRateLimitExemptions from RoutesResolver) — no beforeHandle needed there.
+    const perRouteRateLimitHook =
+      route.rateLimitMeta && typeof route.rateLimitMeta === "object"
+        ? this.createPerRouteRateLimitHook(route.rateLimitMeta)
+        : undefined;
+
+    let beforeHandle: any[] | undefined;
+    if (perRouteRateLimitHook && guardHook) {
+      beforeHandle = [perRouteRateLimitHook, guardHook, ...route.middlewares];
+    } else if (perRouteRateLimitHook) {
+      beforeHandle = route.middlewares.length === 0
+        ? [perRouteRateLimitHook]
+        : [perRouteRateLimitHook, ...route.middlewares];
+    } else if (guardHook) {
+      beforeHandle = [guardHook, ...route.middlewares];
+    } else {
+      beforeHandle = route.middlewares.length === 0 ? undefined : route.middlewares;
+    }
 
     const cache: RouteRuntimeCache = {
       container,
@@ -1040,5 +1058,52 @@ export class RouterExecutionContext {
   ): unknown {
     if (touchedContextual) container.clearContext(context);
     return this.responseController.mapException(context, error);
+  }
+
+  /**
+   * Creates a `beforeHandle` hook that enforces a per-route rate-limit policy.
+   * The hook returns a 429 `Response` directly (NOT a throw) per the
+   * critical constraint — `beforeHandle` throws bypass RFC 7807 treatment.
+   *
+   * Each call creates an independent `InMemoryTokenBucketStore` so per-route
+   * limiters are isolated from the global store and from each other.
+   */
+  private createPerRouteRateLimitHook(
+    options: Pick<RateLimitOptions, "limit" | "windowMs" | "burst">,
+  ): (context: RequestHandlerContext) => unknown {
+    const limit = options.limit;
+    const windowMs = options.windowMs;
+    const burst = options.burst ?? limit;
+    const store = new InMemoryTokenBucketStore();
+    const policy = { limit, windowMs, burst };
+
+    return async (context: RequestHandlerContext) => {
+      // Resolve key: try the socket IP, fall back to X-Forwarded-For, then
+      // a fixed sentinel that groups all unresolvable callers together.
+      const key = resolveClientIp(context, false) ?? resolveClientIp(context, true) ?? "__per-route__";
+
+      const decision = await store.consume(key, policy);
+      if (!decision.allowed) {
+        const retryAfter = Math.max(0, Math.ceil((decision.resetMs - Date.now()) / 1000));
+        return new Response(
+          JSON.stringify({
+            type: "https://techne.dev/errors/too-many-requests",
+            title: "Too Many Requests",
+            status: 429,
+            detail: "Rate limit exceeded.",
+          }),
+          {
+            status: 429,
+            headers: {
+              "content-type": "application/problem+json",
+              "retry-after": String(retryAfter),
+              "ratelimit-limit": String(decision.limit),
+              "ratelimit-remaining": "0",
+              "ratelimit-reset": String(Math.ceil(decision.resetMs / 1000)),
+            },
+          },
+        );
+      }
+    };
   }
 }
