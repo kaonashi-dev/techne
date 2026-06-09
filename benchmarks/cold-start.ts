@@ -19,7 +19,7 @@
  * The driver script is embedded inline so this file is self-contained.
  */
 
-import { isQuick, emitResults, type ScenarioResult } from "./scenarios";
+import { isJson, isQuick, emitResults, type ScenarioResult } from "./scenarios";
 import { join } from "node:path";
 
 const DRIVER_PATH = join(import.meta.dir, "_cold-start-driver.ts");
@@ -136,10 +136,32 @@ export async function runColdStartBench(): Promise<ScenarioResult[]> {
   const out: ScenarioResult[] = [];
   for (const n of sizes) {
     const runs: ColdRun[] = [];
+    let failed = false;
     for (let i = 0; i < runsPerN; i++) {
-      runs.push(await spawnOnce(n));
+      try {
+        runs.push(await spawnOnce(n));
+      } catch (err) {
+        if (!isJson()) console.error(`  [cold-start N=${n}] spawn failed: ${err}`);
+        failed = true;
+        break;
+      }
     }
-    out.push(aggregate(`N=${n}`, runs));
+    if (failed || runs.length === 0) {
+      out.push({
+        name: "Cold start",
+        request: `N=${n} (spawn unavailable)`,
+        total: 0,
+        rps: 0,
+        avgUs: 0,
+        minUs: 0,
+        maxUs: 0,
+        p50Us: 0,
+        p95Us: 0,
+        p99Us: 0,
+      });
+    } else {
+      out.push(aggregate(`N=${n}`, runs));
+    }
   }
   return out;
 }
