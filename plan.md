@@ -1,8 +1,8 @@
 # Security Hardening Roadmap — HTTP, Middleware, Validation
 
-> Status: **Phase 1 in progress** on branch `feat/security-headers-and-server-limits`.
-> Approved plan; phases ship as separate PRs in order P1 → P2 → P3 → P4 → P5
-> (P3/P5 only need P1's option plumbing and can be developed in parallel with P2/P4).
+> Status: **COMPLETE** — all 5 phases merged to `main` (2026-06-09).
+> P1 #58, P2 #61, P3 #59, P4 #60, P5 #62, each with post-review fix commits.
+> Integrated suite: 702 tests green; lint/typecheck clean.
 
 ## Context
 
@@ -179,8 +179,11 @@ Each phase ships as its own PR with a descriptive title/branch (no plan codes), 
 ## Progress
 
 - [x] Plan approved
-- [x] **Phase 1** — `feat/security-headers-and-server-limits` (security module, adapter/factory/listen wiring, 22 tests, README — PR pending review)
-- [ ] Phase 2 — HTTP rate limiting
-- [ ] Phase 3 — header DTOs, strip-unknown, upload validation
-- [ ] Phase 4 — cookie helpers + CSRF
-- [ ] Phase 5 — queue/MQ payload + console arg validation
+- [x] **Phase 1** — PR #58 security headers, native server limits, `resolveClientIp` — merged
+- [x] **Phase 2** — PR #61 HTTP rate limiting (`rateLimit` option + `@RateLimit`) — merged with review fixes
+- [x] **Phase 3** — PR #59 header DTOs, strip-unknown, upload validation — merged with review fixes
+- [x] **Phase 4** — PR #60 cookies + CSRF double-submit — merged with review fixes
+- [x] **Phase 5** — PR #62 queue payload + console `@Options` validation — merged with review fixes
+
+Combined `beforeHandle` order on `main`: per-route rate-limit → strip-unknown →
+guards → global middlewares (CSRF) → route middlewares.
