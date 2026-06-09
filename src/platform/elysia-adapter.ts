@@ -6,6 +6,8 @@ import type { CorsOptions } from "../core/http-options";
 import { applyHeader, applyHeaders } from "./headers";
 import type { CompiledRateLimitPolicy, RateLimitDecision } from "../security/rate-limit";
 import { resolveClientIp } from "../security/client-ip";
+import { RouterResponseController } from "../core/router/router-response-controller";
+import { TooManyRequestsException } from "../exceptions";
 
 // Resolve `Bun.randomUUIDv7` once at module load. Bun has shipped it since
 // 1.1, so the cross-runtime fallback isn't worth the per-request lookup &
@@ -158,6 +160,14 @@ export class ElysiaAdapter {
   private readonly needsRequestId: boolean;
   /** One-time "no IP resolvable" warning when using `app.handle()` without sockets. */
   private warnedNoIp = false;
+  /**
+   * Compiled matcher for paths exempted from the global limiter via
+   * `@RateLimit` decorators. `undefined` until the first exemption arrives,
+   * so the common no-decorator case pays a single undefined check.
+   */
+  private rateLimitExemptPattern?: RegExp;
+  /** Maps limiter denials to canonical RFC 7807 problem documents. */
+  private readonly problemMapper = new RouterResponseController();
 
   constructor(private options?: ElysiaAdapterOptions) {
     this.container = options?.container || globalContainer;
@@ -223,19 +233,29 @@ export class ElysiaAdapter {
   }
 
   /**
-   * Adds the given paths to the global rate limiter's exclusion list.
-   * Called at route-registration time by `RoutesResolver` when it discovers
-   * routes decorated with `@RateLimit(false)`. No-op when no rate limiter is
-   * configured (zero-cost contract).
+   * Registers route paths the global rate limiter must skip. Called at
+   * route-registration time by `RoutesResolver` for every route carrying a
+   * `@RateLimit` decorator: `@RateLimit(false)` exempts the route entirely,
+   * and `@RateLimit({...})` routes are governed solely by their per-route
+   * policy — running the global limiter too would double-count and silently
+   * cap looser per-route limits.
+   *
+   * Paths match exactly, with `:param` segments matching any single path
+   * segment. Exemption is per-path, so it applies to every HTTP method
+   * registered on that path. No-op when no rate limiter is configured.
    */
   public addRateLimitExemptions(paths: string[]): void {
-    const policy = this.options?.rateLimit;
-    if (!policy || paths.length === 0) return;
-    for (const p of paths) {
-      if (!policy.exclude.includes(p)) {
-        policy.exclude.push(p);
-      }
+    if (!this.options?.rateLimit || paths.length === 0) return;
+    const alternatives: string[] = [];
+    if (this.rateLimitExemptPattern) {
+      // Strip the `^(?:` ... `)$` wrapper to merge prior alternatives.
+      alternatives.push(this.rateLimitExemptPattern.source.slice(4, -2));
     }
+    for (const path of paths) {
+      const escaped = path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      alternatives.push(escaped.replace(/:[A-Za-z0-9_]+/g, "[^/]+"));
+    }
+    this.rateLimitExemptPattern = new RegExp(`^(?:${alternatives.join("|")})$`);
   }
 
   private createApp() {
@@ -272,13 +292,20 @@ export class ElysiaAdapter {
     // unconditionally.
     const onRequestActive = true;
     const onAfterHandleActive =
-      trackInflight || needsRequestId || securityHeaders !== undefined || rateLimitPolicy !== undefined;
+      trackInflight ||
+      needsRequestId ||
+      securityHeaders !== undefined ||
+      rateLimitPolicy !== undefined;
     const onErrorActive = true; // validation error mapping is always-on
 
     const needsStore = trackInflight || needsRequestId || rateLimitPolicy !== undefined;
 
     if (onRequestActive) {
-      app.onRequest(async (ctx: any) => {
+      // The core stays synchronous: apps without a rate limiter register it
+      // directly so they never pay promise allocation in the hottest hook
+      // (zero-cost contract). The async wrapper below is registered only
+      // when a limiter is configured.
+      const onRequestCore = (ctx: any): Response | undefined => {
         if (this.isDraining) {
           return new Response(null, {
             status: 503,
@@ -367,14 +394,21 @@ export class ElysiaAdapter {
               store.startUs = Bun.nanoseconds();
             }
           }
-
-          // --- GLOBAL RATE LIMIT ---
-          if (rateLimitPolicy) {
-            const rateLimitResult = await this.applyRateLimit(ctx, store, rateLimitPolicy);
-            if (rateLimitResult !== undefined) return rateLimitResult;
-          }
         }
-      });
+        return undefined;
+      };
+
+      if (rateLimitPolicy) {
+        // `needsStore` is always true here, so `ctx.store` is shaped by the
+        // core before the limiter reads it.
+        app.onRequest(async (ctx: any) => {
+          const early = onRequestCore(ctx);
+          if (early !== undefined) return early;
+          return this.applyRateLimit(ctx, ctx.store as TechneRequestStore, rateLimitPolicy);
+        });
+      } else {
+        app.onRequest(onRequestCore);
+      }
     }
 
     if (onAfterHandleActive) {
@@ -542,8 +576,13 @@ export class ElysiaAdapter {
     store: TechneRequestStore,
     policy: CompiledRateLimitPolicy,
   ): Promise<Response | undefined> {
-    // Check path exclusions.
+    // Routes opted out via @RateLimit decorators: exact path match with
+    // `:param` segments wild. Checked before the user exclusions because
+    // decorator metadata is the more specific signal.
     const path = this.getRequestPath(ctx.request.url);
+    const exemptPattern = this.rateLimitExemptPattern;
+    if (exemptPattern !== undefined && exemptPattern.test(path)) return undefined;
+    // User-configured exclusions (prefix match, e.g. health endpoints).
     for (const prefix of policy.exclude) {
       if (path.startsWith(prefix)) return undefined;
     }
@@ -580,15 +619,15 @@ export class ElysiaAdapter {
         headers["ratelimit-remaining"] = "0";
         headers["ratelimit-reset"] = String(Math.ceil(decision.resetMs / 1000));
       }
-      return new Response(
-        JSON.stringify({
-          type: "https://techne.dev/errors/too-many-requests",
-          title: "Too Many Requests",
-          status: 429,
-          detail: "Rate limit exceeded.",
-        }),
-        { status: 429, headers },
+      // Canonical RFC 7807 body (github docs/errors type URL, requestId,
+      // instance) via the shared mapper. We still return a raw Response —
+      // onRequest short-circuits bypass onAfterHandle, so ctx.set mutations
+      // made by mapException are irrelevant here.
+      const body = this.problemMapper.mapException(
+        ctx,
+        new TooManyRequestsException("Rate limit exceeded"),
       );
+      return new Response(JSON.stringify(body), { status: 429, headers });
     }
 
     // Allowed: stash decision for success-path header injection.

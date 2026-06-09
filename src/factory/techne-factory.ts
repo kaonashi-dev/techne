@@ -248,6 +248,9 @@ export class TechneFactory {
     scanner.scanFlat(this.flattenBootstrapConfig(merged));
     TechneFactory.registerLoggerProviders(container);
 
+    const compiledRateLimit = effectiveOptions?.rateLimit
+      ? compileRateLimitPolicy(effectiveOptions.rateLimit)
+      : undefined;
     const adapter = new ElysiaAdapter({
       logger: loggerEnabled,
       container,
@@ -263,9 +266,7 @@ export class TechneFactory {
       securityHeaders: effectiveOptions?.securityHeaders
         ? compileSecurityHeaders(effectiveOptions.securityHeaders)
         : undefined,
-      rateLimit: effectiveOptions?.rateLimit
-        ? compileRateLimitPolicy(effectiveOptions.rateLimit)
-        : undefined,
+      rateLimit: compiledRateLimit,
     });
     const precompiledRoutes = config
       ? undefined
@@ -274,6 +275,14 @@ export class TechneFactory {
     routesResolver.executionContext.setValidateResponses(
       effectiveOptions?.validateResponses === true,
     );
+    if (compiledRateLimit) {
+      // Per-route @RateLimit hooks identify clients with the same extractor
+      // and trust-proxy settings as the global limiter.
+      routesResolver.executionContext.setRateLimitKeyDefaults({
+        keyExtractor: compiledRateLimit.keyExtractor,
+        trustProxy: compiledRateLimit.trustProxy,
+      });
+    }
     const app = new TechneApplication(
       adapter,
       scanner,

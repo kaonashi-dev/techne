@@ -27,9 +27,11 @@ export class RoutesResolver {
 
     for (const route of discoveredRoutes) {
       for (const expandedRoute of this.expandRoute(route, options)) {
-        // Collect @RateLimit(false) exempt paths before creating the compiled route
-        // so the adapter's onRequest exclusion list is populated at boot time.
-        if (expandedRoute.rateLimitMeta === false) {
+        // Every @RateLimit-decorated route opts out of the GLOBAL limiter:
+        // `false` is a full exemption, and an options object means the route
+        // is governed solely by its per-route policy — running the global
+        // limiter too would double-count and silently cap looser overrides.
+        if (expandedRoute.rateLimitMeta !== undefined) {
           exemptPaths.push(expandedRoute.fullPath);
         }
         routes.push(this.executionContext.create(expandedRoute, container));

@@ -16,4 +16,12 @@ A problem+json response with `type` of `https://github.com/kaonashi-dev/techne/b
 }
 ```
 
+Rate-limited responses produced by the built-in limiter (`rateLimit` option or
+`@RateLimit` decorator) additionally carry these headers:
+
+- `Retry-After` — seconds until the next request would be allowed.
+- `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset` — IETF draft
+  rate-limit headers (`RateLimit-Reset` is an epoch timestamp in seconds).
+  Suppressed when the limiter is configured with `headers: false`.
+
 For the full error contract and `HttpException` reference, see the [Techne README](../../README.md#exceptions).
