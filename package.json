@@ -76,6 +76,11 @@
       "bun": "./src/console/index.ts",
       "import": "./src/console/index.ts",
       "types": "./dist/types/console/index.d.ts"
+    },
+    "./security": {
+      "bun": "./src/security/index.ts",
+      "import": "./src/security/index.ts",
+      "types": "./dist/types/security/index.d.ts"
     }
   },
   "bin": {

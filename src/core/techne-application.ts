@@ -10,6 +10,7 @@ import type {
   CorsOptions,
   GlobalPrefixOptions,
   RouteRegistrationOptions,
+  TechneServerOptions,
   VersioningOptions,
 } from "./http-options";
 import type { ElysiaAdapter } from "../platform/elysia-adapter";
@@ -44,6 +45,8 @@ interface TechneApplicationInternalOptions {
   shutdown?: Partial<ShutdownOptions>;
   health?: Partial<HealthOptions>;
   mode?: TechneMode;
+  /** Native Bun.serve limits forwarded through Elysia's object-form `listen()`. */
+  server?: TechneServerOptions;
   /**
    * Raw user-supplied options (cors, prefix, etc.). Made available to plugins
    * via `PluginContext.options` as a frozen, read-only view.
@@ -98,6 +101,7 @@ export class TechneApplication {
   private readonly shutdownOptions: ShutdownOptions;
   private readonly healthOptions: HealthOptions;
   private readonly mode: TechneMode;
+  private readonly serverOptions?: TechneServerOptions;
   private readonly userOptions: Readonly<Record<string, unknown>>;
   private readonly registered = new Map<string, RegisteredPlugin>();
   private readyHandlers: Array<() => void | Promise<void>> = [];
@@ -128,6 +132,7 @@ export class TechneApplication {
       checks: options?.health?.checks ?? DEFAULT_HEALTH.checks,
     };
     this.mode = options?.mode ?? "all";
+    this.serverOptions = options?.server;
     this.userOptions = Object.freeze({ ...options?.userOptions });
   }
 
@@ -201,7 +206,13 @@ export class TechneApplication {
       callback?.();
       return this;
     }
-    this.adapter.getInstance().listen(resolvedPort, callback);
+    if (this.serverOptions) {
+      // Object-form listen: Elysia forwards extra fields to `Bun.serve`, so
+      // maxRequestBodySize/idleTimeout are enforced natively at the socket.
+      this.adapter.getInstance().listen({ port: resolvedPort, ...this.serverOptions }, callback);
+    } else {
+      this.adapter.getInstance().listen(resolvedPort, callback);
+    }
     return this;
   }
 

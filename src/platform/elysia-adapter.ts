@@ -3,6 +3,7 @@ import { Logger, requestContext, type RequestContext } from "../services/logger.
 import { Container, globalContainer } from "../core/container";
 import type { CompiledRouteDefinition } from "../core/router/router-execution-context";
 import type { CorsOptions } from "../core/http-options";
+import { applyHeader, applyHeaders } from "./headers";
 
 // Resolve `Bun.randomUUIDv7` once at module load. Bun has shipped it since
 // 1.1, so the cross-runtime fallback isn't worth the per-request lookup &
@@ -41,6 +42,14 @@ interface ElysiaAdapterOptions {
    * the request-id hook is registered so problem responses can stamp the id.
    */
   hasProblemFilter?: boolean;
+  /**
+   * Boot-compiled security response headers (lowercase names), produced by
+   * `compileSecurityHeaders()`. When present, stamped on every response in
+   * the fused `onAfterHandle`/`onError` hooks. Raw `Response` short-circuits
+   * (CORS preflight 204, draining 503) bypass those hooks and intentionally
+   * skip these headers.
+   */
+  securityHeaders?: Readonly<Record<string, string>>;
 }
 
 interface CompiledCorsOptions {
@@ -222,12 +231,13 @@ export class ElysiaAdapter {
     const needsRequestId = this.needsRequestId;
     const loggingEnabled = this.loggerEnabled;
     const exhaustive = this.options?.validation?.exhaustive === true;
+    const securityHeaders = this.options?.securityHeaders;
     // `setupInflightTracking` historically registered an `onRequest` even
     // when `!trackInflight` purely to short-circuit drains during graceful
     // shutdown. The drain check is independent of counting, so it stays on
     // unconditionally.
     const onRequestActive = true;
-    const onAfterHandleActive = trackInflight || needsRequestId;
+    const onAfterHandleActive = trackInflight || needsRequestId || securityHeaders !== undefined;
     const onErrorActive = true; // validation error mapping is always-on
 
     const needsStore = trackInflight || needsRequestId;
@@ -327,6 +337,12 @@ export class ElysiaAdapter {
 
     if (onAfterHandleActive) {
       app.onAfterHandle((ctx: any) => {
+        // Security headers go first: applyHeaders copies on the null branch,
+        // so the request-id echo below can keep mutating in place.
+        if (securityHeaders) {
+          applyHeaders(ctx.set, securityHeaders);
+        }
+
         if (trackInflight) {
           const store = ctx.store as TechneRequestStore;
           if (store.inflightCounted) {
@@ -366,6 +382,12 @@ export class ElysiaAdapter {
 
     if (onErrorActive) {
       app.onError((ctx: any) => {
+        // Stamp security headers on the error path too — error responses
+        // (404s included) bypass `onAfterHandle` and need them most.
+        if (securityHeaders) {
+          applyHeaders(ctx.set, securityHeaders);
+        }
+
         if (trackInflight) {
           const store = ctx.store as TechneRequestStore | undefined;
           if (store && store.inflightCounted) {
@@ -444,31 +466,15 @@ export class ElysiaAdapter {
   private echoInboundRequestId(ctx: any): void {
     const inbound = ctx?.request?.headers?.get?.("x-request-id");
     if (typeof inbound !== "string" || inbound.length === 0) return;
-    const set = ctx.set;
-    if (!set) return;
-    const existing = set.headers;
-    if (existing == null) {
-      set.headers = { "x-request-id": inbound };
-    } else if (existing instanceof Headers) {
-      existing.set("x-request-id", inbound);
-    } else {
-      (existing as Record<string, string>)["x-request-id"] = inbound;
-    }
+    if (!ctx.set) return;
+    applyHeader(ctx.set, "x-request-id", inbound);
   }
 
   private echoRequestId(ctx: any): void {
     const requestId = ctx?.store?.requestId;
     if (typeof requestId !== "string" || requestId.length === 0) return;
-    const set = ctx.set;
-    if (!set) return;
-    const existing = set.headers;
-    if (existing == null) {
-      set.headers = { "x-request-id": requestId };
-    } else if (existing instanceof Headers) {
-      existing.set("x-request-id", requestId);
-    } else {
-      (existing as Record<string, string>)["x-request-id"] = requestId;
-    }
+    if (!ctx.set) return;
+    applyHeader(ctx.set, "x-request-id", requestId);
   }
 
   private setupCors(app: Elysia) {
