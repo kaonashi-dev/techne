@@ -13,3 +13,5 @@ export * from "./version.decorator";
 export * from "./public.decorator";
 export * from "./roles.decorator";
 export * from "./inject-logger.decorator";
+export * from "./cookie.decorator";
+export * from "./csrf-exempt.decorator";

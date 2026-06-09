@@ -9,6 +9,7 @@ import type { ParamMetadata } from "../../decorators/params.decorator";
 import { HandlerMetadataStorage } from "./handler-metadata-storage";
 import { RouterResponseController } from "./router-response-controller";
 import type { DiscoveredRouteDefinition } from "./router-explorer";
+import { Reflector } from "../reflector";
 
 type RequestHandlerContext = any;
 type RouteContextInfo = {
@@ -85,6 +86,10 @@ interface RouteRuntimeCache {
 
 const EMPTY_ARRAY: readonly never[] = Object.freeze([]);
 
+// Module-level Reflector instance used to read exempt metadata at route
+// registration time. Allocated once to avoid per-route allocations.
+const routerReflector = new Reflector();
+
 const JSON_CONTENT_TYPE: Readonly<Record<string, string>> = Object.freeze({
   "content-type": "application/json; charset=utf-8",
 });
@@ -158,6 +163,29 @@ function createExtractor(
       return name ? (ctx: any) => ctx.headers?.[name] : (ctx: any) => ctx.headers;
     case "request":
       return (ctx: any) => ctx.request;
+    case "cookie": {
+      const cookieName = name;
+      return (ctx: any) => {
+        if (!cookieName) return undefined;
+        // Try Elysia's structured cookie jar first
+        const jar = ctx.cookie;
+        if (jar && typeof jar === "object") {
+          const entry = jar[cookieName];
+          if (entry && typeof entry === "object" && "value" in entry) return entry.value;
+          if (typeof entry === "string") return entry;
+        }
+        // Fall back to raw Cookie header parsing
+        const raw = ctx.request?.headers?.get?.("cookie");
+        if (!raw) return undefined;
+        for (const pair of raw.split(";")) {
+          const idx = pair.indexOf("=");
+          if (idx < 0) continue;
+          const k = pair.slice(0, idx).trim();
+          if (k === cookieName) return decodeURIComponent(pair.slice(idx + 1).trim());
+        }
+        return undefined;
+      };
+    }
     case "custom": {
       if (fast) return null;
       const factory = param.factory;
@@ -321,6 +349,7 @@ export class RouterExecutionContext {
   private readonly logger = new Logger("RouterExecutionContext");
   private globalFilters: ExceptionFilter[] = [];
   private globalGuards: any[] = [];
+  private globalMiddlewares: Array<{ fn: Function; exemptMetaKey?: string }> = [];
   // Monotonically bumped whenever the corresponding `globalX` array reference
   // is replaced via `setGlobalX`. `refreshRouteCache` compares against the
   // per-cache snapshot to skip the filter merge + partition when nothing has
@@ -355,6 +384,25 @@ export class RouterExecutionContext {
     return this.globalGuards;
   }
 
+  /**
+   * Register global middleware functions (e.g. CSRF protection) to run in
+   * every route's `beforeHandle` array, after guards. Must be called before
+   * routes are registered.
+   *
+   * Each entry is either a plain function or an object with:
+   * - `fn`: the middleware function
+   * - `exemptMetaKey`: optional Reflect metadata key; if that key is set to
+   *   a truthy value on the handler method or controller class, this specific
+   *   middleware is omitted from that route's `beforeHandle`.
+   */
+  public setGlobalMiddlewares(
+    middlewares: Array<Function | { fn: Function; exemptMetaKey?: string }>,
+  ): void {
+    this.globalMiddlewares = middlewares.map((m) =>
+      typeof m === "function" ? { fn: m } : m,
+    );
+  }
+
   public resetRoutes(): void {
     this.routeCaches.length = 0;
   }
@@ -367,11 +415,40 @@ export class RouterExecutionContext {
     const mergedGuards =
       this.globalGuards.length === 0 ? route.guards : [...this.globalGuards, ...route.guards];
     const guardHook = this.createGuardHook(mergedGuards, container, controllerClass, handlerRef);
-    const beforeHandle = guardHook
-      ? [guardHook, ...route.middlewares]
-      : route.middlewares.length === 0
-        ? undefined
+    // Global middlewares (e.g. CSRF) run after guards but before per-route middlewares.
+    // Middlewares that declare an `exemptMetaKey` are omitted when that key is set on
+    // the handler method or controller class (e.g. @CsrfExempt()).
+    let filteredGlobalMiddlewares: Function[];
+    if (this.globalMiddlewares.length > 0) {
+      const exemptChecks =
+        this.globalMiddlewares.length > 0 &&
+        this.globalMiddlewares.some((m) => m.exemptMetaKey !== undefined);
+      if (exemptChecks) {
+        filteredGlobalMiddlewares = this.globalMiddlewares
+          .filter((m) => {
+            if (!m.exemptMetaKey) return true;
+            const exempt = routerReflector.getAllAndOverride<boolean>(m.exemptMetaKey, [
+              handlerRef,
+              controllerClass,
+            ]);
+            return !exempt;
+          })
+          .map((m) => m.fn);
+      } else {
+        filteredGlobalMiddlewares = this.globalMiddlewares.map((m) => m.fn);
+      }
+    } else {
+      filteredGlobalMiddlewares = [];
+    }
+    const allMiddlewares =
+      filteredGlobalMiddlewares.length > 0
+        ? [...filteredGlobalMiddlewares, ...route.middlewares]
         : route.middlewares;
+    const beforeHandle = guardHook
+      ? [guardHook, ...allMiddlewares]
+      : allMiddlewares.length === 0
+        ? undefined
+        : allMiddlewares;
 
     const cache: RouteRuntimeCache = {
       container,
