@@ -43,11 +43,9 @@ function coerceOptionsBag(
 
   for (const [key, value] of Object.entries(raw)) {
     // Determine the design:type of the property on the DTO class.
-    const designType = Reflect.getMetadata(
-      "design:type",
-      (dtoClass as any).prototype,
-      key,
-    ) as Function | undefined;
+    const designType = Reflect.getMetadata("design:type", (dtoClass as any).prototype, key) as
+      | Function
+      | undefined;
 
     if (designType === Number) {
       const n = Number(value);
@@ -84,14 +82,14 @@ export function resolveArguments(params: ConsoleParamMeta[], parsed: ParsedArgv)
         args[p.index] = { ...parsed.options };
         continue;
       }
-      const bag = coerceOptionsBag(parsed.options as Record<string, string | boolean | string[]>, dtoClass);
+      const bag = coerceOptionsBag(
+        parsed.options as Record<string, string | boolean | string[]>,
+        dtoClass,
+      );
       const error = firstValidationError(bag, dtoClass);
       if (error) {
-        const firstConstraint = error.constraints
-          ? Object.values(error.constraints)[0]
-          : undefined;
-        const msg =
-          firstConstraint ?? `Validation failed for option '${error.property}'`;
+        const firstConstraint = error.constraints ? Object.values(error.constraints)[0] : undefined;
+        const msg = firstConstraint ?? `Validation failed for option '${error.property}'`;
         throw new ConsoleArgumentError(msg);
       }
       args[p.index] = bag;

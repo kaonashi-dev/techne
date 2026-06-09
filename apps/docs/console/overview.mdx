@@ -31,10 +31,7 @@ export class SeedCommand {
   ) {}
 
   @ConsoleCommand("db:seed", { description: "Seed a table with sample rows" })
-  async handle(
-    @Argument("table") table: string,
-    @Option("count", { default: 10 }) count: number,
-  ) {
+  async handle(@Argument("table") table: string, @Option("count", { default: 10 }) count: number) {
     this.console.info(`Seeding ${count} rows into ${table}…`);
     await this.db.seed(table, count);
     this.console.success(`Seeded ${table}.`);
@@ -70,11 +67,11 @@ command finishes.
 
 ## Running commands
 
-| Command                      | What it does                                              |
-| ---------------------------- | --------------------------------------------------------- |
-| [`techne run <name> [args]`](/cli/run) | Boots the app and runs the named command       |
-| [`techne list`](/cli/list)   | Lists every registered (non-hidden) command              |
-| `techne generate command <Name>` | Scaffolds `src/commands/<kebab>.command.ts`          |
+| Command                                | What it does                                |
+| -------------------------------------- | ------------------------------------------- |
+| [`techne run <name> [args]`](/cli/run) | Boots the app and runs the named command    |
+| [`techne list`](/cli/list)             | Lists every registered (non-hidden) command |
+| `techne generate command <Name>`       | Scaffolds `src/commands/<kebab>.command.ts` |
 
 ```bash
 bunx @kaonashi-dev/techne list
@@ -88,11 +85,11 @@ bunx @kaonashi-dev/techne list
 The number a command returns becomes the process exit code. Returning nothing
 is treated as success.
 
-| Code | Meaning                                                              |
-| ---- | ------------------------------------------------------------------- |
-| `0`  | Success — returned `void`/`undefined`, or an explicit `0`           |
-| `1`  | Error — the handler threw (the message is printed to stderr)        |
-| `2`  | Invalid usage — unknown command, or a missing/invalid argument      |
+| Code | Meaning                                                        |
+| ---- | -------------------------------------------------------------- |
+| `0`  | Success — returned `void`/`undefined`, or an explicit `0`      |
+| `1`  | Error — the handler threw (the message is printed to stderr)   |
+| `2`  | Invalid usage — unknown command, or a missing/invalid argument |
 
 ```ts
 import { ExitCode } from "@kaonashi-dev/techne/console";

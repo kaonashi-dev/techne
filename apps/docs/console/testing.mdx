@@ -36,19 +36,20 @@ accepts an array of tokens or a single string (split on whitespace).
 const result = await tester.call("users:export", "csv --limit 5");
 ```
 
-| Member               | Description                                                  |
-| -------------------- | ------------------------------------------------------------ |
-| `result.code`        | The numeric exit code                                        |
-| `result.output`      | Captured stdout **and** stderr, concatenated                 |
-| `assertExitCode(n)`  | Throws unless the exit code equals `n`; returns `result`     |
-| `assertSuccess()`    | Shorthand for `assertExitCode(0)`                            |
-| `assertSee(text)`    | Throws unless `output` contains `text`; returns `result`     |
+| Member              | Description                                              |
+| ------------------- | -------------------------------------------------------- |
+| `result.code`       | The numeric exit code                                    |
+| `result.output`     | Captured stdout **and** stderr, concatenated             |
+| `assertExitCode(n)` | Throws unless the exit code equals `n`; returns `result` |
+| `assertSuccess()`   | Shorthand for `assertExitCode(0)`                        |
+| `assertSee(text)`   | Throws unless `output` contains `text`; returns `result` |
 
 The assertions chain, and failures throw with the full captured output, so a
 broken expectation tells you exactly what the command printed:
 
 ```ts
-await tester.call("db:seed", []) // missing required <table>
+await tester
+  .call("db:seed", []) // missing required <table>
   .then((r) => r.assertExitCode(2).assertSee("Missing required argument <table>"));
 ```
 
