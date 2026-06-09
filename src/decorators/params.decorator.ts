@@ -3,7 +3,15 @@ import { PARAMS_METADATA } from "../common/constants";
 import { getOrCreateControllerDescriptor } from "../core/metadata-store";
 import type { ResponseHookContext } from "../interfaces/response-hook.interface";
 
-export type ParamType = "body" | "param" | "query" | "headers" | "request" | "file" | "custom";
+export type ParamType =
+  | "body"
+  | "param"
+  | "query"
+  | "headers"
+  | "request"
+  | "file"
+  | "custom"
+  | "cookie";
 
 /** Factory signature used by `createParamDecorator`. */
 export type CustomParamFactory<TData = any, TOutput = any> = (
