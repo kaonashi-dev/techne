@@ -1,4 +1,4 @@
-export type ConsoleParamKind = "argument" | "option";
+export type ConsoleParamKind = "argument" | "option" | "options-bag";
 
 export interface ConsoleCommandMeta {
   name: string;
@@ -18,6 +18,11 @@ export interface ConsoleParamMeta {
   default?: unknown;
   enum?: Record<string, string | number>;
   metatype?: Function;
+  /**
+   * For `kind === "options-bag"`: the DTO class used to collect and validate
+   * all `--flag` pairs into a single typed object.
+   */
+  dtoClass?: new (...args: any[]) => any;
 }
 
 export interface CommandEntry {
