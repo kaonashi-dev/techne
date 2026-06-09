@@ -5,6 +5,7 @@ import type {
   CorsOptions,
   GlobalPrefixOptions,
   TechneServerOptions,
+  TechneValidationOptions,
   VersioningOptions,
 } from "../core/http-options";
 import { compileSecurityHeaders, type SecurityHeadersOptions } from "../security/security-headers";
@@ -178,18 +179,6 @@ export interface TechneApplicationOptions {
   rateLimit?: RateLimitOptions;
 }
 
-export interface TechneValidationOptions {
-  /**
-   * When `true`, the validation error response includes every error reported
-   * by the schema. When omitted/`false` (default), only the first error is
-   * returned.
-   *
-   * The wire shape (`errors: [...]`) is unchanged — the default response just
-   * carries a single-element array instead of the full set.
-   */
-  exhaustive?: boolean;
-}
-
 export interface AppBootstrapConfig extends TechneApplicationOptions {
   controllers?: any[];
   providers?: any[];
@@ -282,6 +271,11 @@ export class TechneFactory {
         keyExtractor: compiledRateLimit.keyExtractor,
         trustProxy: compiledRateLimit.trustProxy,
       });
+    }
+    if (effectiveOptions?.validation?.stripUnknown === true) {
+      // Must precede route registration: schemas resolve to their lenient
+      // variant and strip hooks compile during `initializeRoutes`.
+      routesResolver.setStripUnknownDefault(true);
     }
     const app = new TechneApplication(
       adapter,

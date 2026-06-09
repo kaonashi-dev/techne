@@ -680,6 +680,7 @@ export class ElysiaAdapter {
         if (route.schema.query) elysiaOptions.query = route.schema.query;
         if (route.schema.params) elysiaOptions.params = route.schema.params;
         if (route.schema.response) elysiaOptions.response = route.schema.response;
+        if (route.schema.headers) elysiaOptions.headers = route.schema.headers;
       }
 
       if (route.beforeHandle && route.beforeHandle.length > 0) {

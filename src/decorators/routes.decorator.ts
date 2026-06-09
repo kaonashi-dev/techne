@@ -13,6 +13,13 @@ export type RouteSchema = {
   query?: unknown;
   params?: unknown;
   response?: unknown;
+  /**
+   * TypeBox schema for request headers validation. Must use
+   * `additionalProperties: true` (or omit it) to tolerate standard headers
+   * like `host`, `accept`, `user-agent`, etc. Use `buildHeaderSchemaFromClass`
+   * to derive this automatically from a DTO class.
+   */
+  headers?: unknown;
 };
 
 export interface RouteMetadata {

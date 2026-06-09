@@ -1,11 +1,12 @@
 import { TypeCompiler } from "@sinclair/typebox/compiler";
 import { CATCH_METADATA } from "../../common/constants";
-import { ForbiddenException, TooManyRequestsException } from "../../exceptions";
+import { ForbiddenException, HttpException, TooManyRequestsException } from "../../exceptions";
 import type { ExceptionFilter } from "../../interfaces/exception-filter.interface";
 import type { ResponseHook } from "../../interfaces/response-hook.interface";
 import { Logger } from "../../services/logger.service";
 import { compileStringifier } from "../../schema/fast-stringify";
 import type { ParamMetadata } from "../../decorators/params.decorator";
+import { stripUnknownProperties, isDtoStripUnknown } from "../../schema/dto";
 import { HandlerMetadataStorage } from "./handler-metadata-storage";
 import { RouterResponseController } from "./router-response-controller";
 import type { DiscoveredRouteDefinition } from "./router-explorer";
@@ -150,19 +151,86 @@ function createExtractor(
   switch (param.type) {
     case "body":
       return name ? (ctx: any) => ctx.body?.[name] : (ctx: any) => ctx.body;
-    case "file":
+    case "file": {
+      const fileOptions = param.fileOptions;
       return (ctx: any) => {
         const body = ctx.body;
+        let file: unknown;
         if (name) {
-          if (body instanceof FormData) return body.get(name);
-          return body?.[name];
-        }
-        if (body instanceof FormData) {
+          if (body instanceof FormData) file = body.get(name);
+          else file = body?.[name];
+        } else if (body instanceof FormData) {
           const first = body.entries().next();
-          return first.done ? undefined : first.value[1];
+          file = first.done ? undefined : first.value[1];
+        } else {
+          file = body;
         }
-        return body;
+
+        if (!fileOptions) return file;
+
+        const fieldName = name ?? "file";
+        const required = fileOptions.required !== false; // default: required
+
+        if (file == null) {
+          if (required) {
+            throw new HttpException(
+              // `path` matches the TypeBox ValidationError shape used by the
+              // DTO 422 contract (`/property` JSON-pointer style).
+              { errors: [{ path: `/${fieldName}`, message: `File "${fieldName}" is required` }] },
+              422,
+            );
+          }
+          return file;
+        }
+
+        if (!(file instanceof Blob)) {
+          // Not a Blob — pass through (backwards compat for JSON-body tests)
+          return file;
+        }
+
+        if (fileOptions.maxSize !== undefined && (file as Blob).size > fileOptions.maxSize) {
+          const mb = (fileOptions.maxSize / 1_048_576).toFixed(0);
+          throw new HttpException(
+            {
+              errors: [
+                {
+                  path: `/${fieldName}`,
+                  message: `File exceeds maximum size of ${mb}MB`,
+                },
+              ],
+            },
+            422,
+          );
+        }
+
+        if (fileOptions.mimeTypes && fileOptions.mimeTypes.length > 0) {
+          const fileMime = (file as Blob).type ?? "";
+          const allowed = fileOptions.mimeTypes.some((pattern) => {
+            if (pattern === fileMime) return true;
+            if (pattern.endsWith("/*")) {
+              const baseType = pattern.slice(0, -2);
+              return fileMime.startsWith(`${baseType}/`);
+            }
+            return false;
+          });
+          if (!allowed) {
+            throw new HttpException(
+              {
+                errors: [
+                  {
+                    path: `/${fieldName}`,
+                    message: `File type "${fileMime}" is not allowed. Allowed: ${fileOptions.mimeTypes.join(", ")}`,
+                  },
+                ],
+              },
+              422,
+            );
+          }
+        }
+
+        return file;
       };
+    }
     case "param":
       return name ? (ctx: any) => ctx.params?.[name] : (ctx: any) => ctx.params;
     case "query":
@@ -343,11 +411,18 @@ export class RouterExecutionContext {
   private globalGuardsVersion = 0;
   private routesRegistered = false;
   private validateResponses = false;
+  /** Factory-level `validation.stripUnknown` default (per-DTO options win). */
+  private stripUnknownDefault = false;
 
   constructor(private readonly responseController: RouterResponseController) {}
 
   public setValidateResponses(value: boolean): void {
     this.validateResponses = value;
+  }
+
+  /** Must be called before routes are registered — hooks compile at `create()`. */
+  public setStripUnknownDefault(value: boolean): void {
+    this.stripUnknownDefault = value;
   }
 
   public setGlobalFilters(filters: ExceptionFilter[]) {
@@ -391,28 +466,27 @@ export class RouterExecutionContext {
       this.globalGuards.length === 0 ? route.guards : [...this.globalGuards, ...route.guards];
     const guardHook = this.createGuardHook(mergedGuards, container, controllerClass, handlerRef);
 
-    // Per-route @RateLimit(options) override: prepend a rate-limit hook before
-    // the guard. Decorated routes (both `false` and options objects) are
-    // exempted from the GLOBAL limiter via the adapter's exemption list
-    // (populated by RoutesResolver), so an override is the route's only limiter.
+    // Per-route @RateLimit(options) override: runs before everything else so
+    // a denied request pays nothing further. Decorated routes (both `false`
+    // and options objects) are exempted from the GLOBAL limiter via the
+    // adapter's exemption list (populated by RoutesResolver), so an override
+    // is the route's only limiter.
     const perRouteRateLimitHook =
       route.rateLimitMeta && typeof route.rateLimitMeta === "object"
         ? this.createPerRouteRateLimitHook(route.rateLimitMeta)
         : undefined;
 
-    let beforeHandle: any[] | undefined;
-    if (perRouteRateLimitHook && guardHook) {
-      beforeHandle = [perRouteRateLimitHook, guardHook, ...route.middlewares];
-    } else if (perRouteRateLimitHook) {
-      beforeHandle =
-        route.middlewares.length === 0
-          ? [perRouteRateLimitHook]
-          : [perRouteRateLimitHook, ...route.middlewares];
-    } else if (guardHook) {
-      beforeHandle = [guardHook, ...route.middlewares];
-    } else {
-      beforeHandle = route.middlewares.length === 0 ? undefined : route.middlewares;
-    }
+    // Strip-unknown beforeHandle when the body DTO opts in (or the global
+    // default applies). Runs before the guard so it sees the cleaned body.
+    const stripUnknownHook = this.buildStripUnknownHook(route.paramsMetadata);
+
+    // Order: rate-limit → strip-unknown → guard → user middlewares.
+    const allBeforeHandle: any[] = [];
+    if (perRouteRateLimitHook) allBeforeHandle.push(perRouteRateLimitHook);
+    if (stripUnknownHook) allBeforeHandle.push(stripUnknownHook);
+    if (guardHook) allBeforeHandle.push(guardHook);
+    allBeforeHandle.push(...route.middlewares);
+    const beforeHandle = allBeforeHandle.length === 0 ? undefined : allBeforeHandle;
 
     const cache: RouteRuntimeCache = {
       container,
@@ -954,6 +1028,34 @@ export class RouterExecutionContext {
       }
       return args;
     };
+  }
+
+  /**
+   * Builds a boot-compiled `beforeHandle` function that strips unknown
+   * top-level properties from `ctx.body` when the body DTO has
+   * `@Dto({ stripUnknown: true })`.
+   *
+   * Returns `undefined` when no body param on this route uses strip-unknown.
+   *
+   * **Note:** v1 strip-unknown is top-level properties only.
+   */
+  private buildStripUnknownHook(paramsMetadata: ParamMetadata[]): ((ctx: any) => void) | undefined {
+    for (const param of paramsMetadata) {
+      if (param.type !== "body") continue;
+      const dtoClass = param.dtoClass ?? param.metatype;
+      if (!dtoClass) continue;
+      if (!isDtoStripUnknown(dtoClass, this.stripUnknownDefault)) continue;
+
+      // Capture the DTO class at route-compile time so the hook is a pure
+      // function of the captured class — no per-request lookups needed.
+      const capturedClass = dtoClass;
+      return (ctx: any) => {
+        if (ctx.body && typeof ctx.body === "object" && !Array.isArray(ctx.body)) {
+          ctx.body = stripUnknownProperties(ctx.body as Record<string, unknown>, capturedClass);
+        }
+      };
+    }
+    return undefined;
   }
 
   private createGuardHook(
