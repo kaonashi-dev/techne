@@ -18,6 +18,8 @@ import {
   type HandlerDescriptor,
 } from "../metadata-store";
 import type { Scanner } from "../scanner";
+import { RATE_LIMIT_METADATA } from "../../decorators/rate-limit.decorator";
+import type { RateLimitOptions } from "../../security/rate-limit";
 
 export interface DiscoveredRouteDefinition extends RouteMetadata {
   controller: any;
@@ -28,6 +30,12 @@ export interface DiscoveredRouteDefinition extends RouteMetadata {
   responseHooks: any[];
   paramsMetadata: ParamMetadata[];
   versions: string[];
+  /**
+   * Per-route rate-limit metadata from `@RateLimit()`. `undefined` means no
+   * decorator was present; `false` means exempt from the global limiter;
+   * an options object defines a per-route override policy.
+   */
+  rateLimitMeta?: Pick<RateLimitOptions, "limit" | "windowMs" | "burst"> | false;
 }
 
 interface AggregateMeta {
@@ -85,6 +93,12 @@ export class RouterExplorer {
 
       const controllerRoutes: DiscoveredRouteDefinition[] = [];
 
+      // Read controller-level @RateLimit once for all handlers on this controller.
+      const controllerRateLimitMeta:
+        | Pick<RateLimitOptions, "limit" | "windowMs" | "burst">
+        | false
+        | undefined = Reflect.getMetadata(RATE_LIMIT_METADATA, controller);
+
       for (const route of aggregate.routes) {
         const handler = aggregate.getHandler(route.handlerName);
         const paramTypes =
@@ -104,6 +118,15 @@ export class RouterExplorer {
         // body schema was provided on the route decorator.
         const schema = this.resolveSchema(route, paramsMetadata);
 
+        // Handler-level metadata takes precedence over controller-level.
+        const handlerFn = controller.prototype[route.handlerName];
+        const handlerRateLimitMeta:
+          | Pick<RateLimitOptions, "limit" | "windowMs" | "burst">
+          | false
+          | undefined = handlerFn ? Reflect.getMetadata(RATE_LIMIT_METADATA, handlerFn) : undefined;
+        const rateLimitMeta =
+          handlerRateLimitMeta !== undefined ? handlerRateLimitMeta : controllerRateLimitMeta;
+
         controllerRoutes.push({
           ...route,
           schema,
@@ -115,6 +138,7 @@ export class RouterExplorer {
           responseHooks: [...aggregate.responseHooks, ...handler.responseHooks],
           paramsMetadata,
           versions: handler.versions ?? aggregate.versions,
+          rateLimitMeta,
         });
       }
 
