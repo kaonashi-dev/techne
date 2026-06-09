@@ -4,6 +4,8 @@ import { Container, globalContainer } from "../core/container";
 import type { CompiledRouteDefinition } from "../core/router/router-execution-context";
 import type { CorsOptions } from "../core/http-options";
 import { applyHeader, applyHeaders } from "./headers";
+import type { CompiledRateLimitPolicy, RateLimitDecision } from "../security/rate-limit";
+import { resolveClientIp } from "../security/client-ip";
 
 // Resolve `Bun.randomUUIDv7` once at module load. Bun has shipped it since
 // 1.1, so the cross-runtime fallback isn't worth the per-request lookup &
@@ -50,6 +52,12 @@ interface ElysiaAdapterOptions {
    * skip these headers.
    */
   securityHeaders?: Readonly<Record<string, string>>;
+  /**
+   * Compiled global rate-limit policy, produced by `compileRateLimitPolicy()`.
+   * When present, evaluated in the fused `onRequest` hook after the drain
+   * check. When absent, zero hooks and zero per-request cost.
+   */
+  rateLimit?: CompiledRateLimitPolicy;
 }
 
 interface CompiledCorsOptions {
@@ -99,6 +107,13 @@ interface TechneRequestStore {
   traceId: string | undefined;
   /** W3C traceparent parent-id / span-id (16 hex chars) (L12). */
   spanId: string | undefined;
+  /**
+   * Rate-limit decision from the global limiter's `onRequest` check.
+   * Stashed here so `onAfterHandle` can inject `RateLimit-Remaining` without
+   * a second store lookup. `undefined` when no limiter is configured, the
+   * route is excluded, or no key was resolvable.
+   */
+  rateLimitDecision: RateLimitDecision | undefined;
 }
 
 // Hoisted to module scope so the validation error path doesn't allocate a
@@ -141,6 +156,8 @@ export class ElysiaAdapter {
    * for it. See {@link computeNeedsRequestId}.
    */
   private readonly needsRequestId: boolean;
+  /** One-time "no IP resolvable" warning when using `app.handle()` without sockets. */
+  private warnedNoIp = false;
 
   constructor(private options?: ElysiaAdapterOptions) {
     this.container = options?.container || globalContainer;
@@ -205,6 +222,22 @@ export class ElysiaAdapter {
     return true;
   }
 
+  /**
+   * Adds the given paths to the global rate limiter's exclusion list.
+   * Called at route-registration time by `RoutesResolver` when it discovers
+   * routes decorated with `@RateLimit(false)`. No-op when no rate limiter is
+   * configured (zero-cost contract).
+   */
+  public addRateLimitExemptions(paths: string[]): void {
+    const policy = this.options?.rateLimit;
+    if (!policy || paths.length === 0) return;
+    for (const p of paths) {
+      if (!policy.exclude.includes(p)) {
+        policy.exclude.push(p);
+      }
+    }
+  }
+
   private createApp() {
     const app = new Elysia();
     this.corsHooksInstalled = false;
@@ -232,18 +265,20 @@ export class ElysiaAdapter {
     const loggingEnabled = this.loggerEnabled;
     const exhaustive = this.options?.validation?.exhaustive === true;
     const securityHeaders = this.options?.securityHeaders;
+    const rateLimitPolicy = this.options?.rateLimit;
     // `setupInflightTracking` historically registered an `onRequest` even
     // when `!trackInflight` purely to short-circuit drains during graceful
     // shutdown. The drain check is independent of counting, so it stays on
     // unconditionally.
     const onRequestActive = true;
-    const onAfterHandleActive = trackInflight || needsRequestId || securityHeaders !== undefined;
+    const onAfterHandleActive =
+      trackInflight || needsRequestId || securityHeaders !== undefined || rateLimitPolicy !== undefined;
     const onErrorActive = true; // validation error mapping is always-on
 
-    const needsStore = trackInflight || needsRequestId;
+    const needsStore = trackInflight || needsRequestId || rateLimitPolicy !== undefined;
 
     if (onRequestActive) {
-      app.onRequest((ctx: any) => {
+      app.onRequest(async (ctx: any) => {
         if (this.isDraining) {
           return new Response(null, {
             status: 503,
@@ -274,6 +309,7 @@ export class ElysiaAdapter {
             inflightCounted: false,
             traceId,
             spanId,
+            rateLimitDecision: undefined,
           };
           ctx.store = store;
 
@@ -331,6 +367,12 @@ export class ElysiaAdapter {
               store.startUs = Bun.nanoseconds();
             }
           }
+
+          // --- GLOBAL RATE LIMIT ---
+          if (rateLimitPolicy) {
+            const rateLimitResult = await this.applyRateLimit(ctx, store, rateLimitPolicy);
+            if (rateLimitResult !== undefined) return rateLimitResult;
+          }
         }
       });
     }
@@ -341,6 +383,17 @@ export class ElysiaAdapter {
         // so the request-id echo below can keep mutating in place.
         if (securityHeaders) {
           applyHeaders(ctx.set, securityHeaders);
+        }
+
+        // Inject RateLimit-* success headers when the limiter is active.
+        if (rateLimitPolicy && rateLimitPolicy.headers) {
+          const store = ctx.store as TechneRequestStore | undefined;
+          const decision = store?.rateLimitDecision;
+          if (decision) {
+            applyHeader(ctx.set, "ratelimit-limit", String(decision.limit));
+            applyHeader(ctx.set, "ratelimit-remaining", String(decision.remaining));
+            applyHeader(ctx.set, "ratelimit-reset", String(Math.ceil(decision.resetMs / 1000)));
+          }
         }
 
         if (trackInflight) {
@@ -475,6 +528,74 @@ export class ElysiaAdapter {
     if (typeof requestId !== "string" || requestId.length === 0) return;
     if (!ctx.set) return;
     applyHeader(ctx.set, "x-request-id", requestId);
+  }
+
+  /**
+   * Applies the global rate limit for a single request. Returns a 429
+   * `Response` when the limit is exceeded, or `undefined` when the request
+   * is allowed (or excluded / no-IP). Stashes the `RateLimitDecision` on
+   * `ctx.store.rateLimitDecision` so `onAfterHandle` can inject headers
+   * without a second store lookup.
+   */
+  private async applyRateLimit(
+    ctx: any,
+    store: TechneRequestStore,
+    policy: CompiledRateLimitPolicy,
+  ): Promise<Response | undefined> {
+    // Check path exclusions.
+    const path = this.getRequestPath(ctx.request.url);
+    for (const prefix of policy.exclude) {
+      if (path.startsWith(prefix)) return undefined;
+    }
+
+    // Resolve key.
+    let key = policy.keyExtractor(ctx);
+    if (key === undefined) {
+      key = resolveClientIp(ctx, policy.trustProxy);
+    }
+    if (key === undefined) {
+      // No IP resolvable (app.handle path without socket): fail-open.
+      if (!this.warnedNoIp) {
+        this.warnedNoIp = true;
+        this.logger.warn(
+          "Rate limiter could not resolve a client IP — request allowed (fail-open). " +
+            "This typically happens when using app.handle() directly. Pass trustProxy or " +
+            "a custom keyExtractor to silence this warning.",
+          "RateLimit",
+        );
+      }
+      return undefined;
+    }
+
+    const decision = await policy.store.consume(key, policy);
+
+    if (!decision.allowed) {
+      const retryAfter = Math.max(0, Math.ceil((decision.resetMs - Date.now()) / 1000));
+      const headers: Record<string, string> = {
+        "content-type": "application/problem+json",
+        "retry-after": String(retryAfter),
+      };
+      if (policy.headers) {
+        headers["ratelimit-limit"] = String(decision.limit);
+        headers["ratelimit-remaining"] = "0";
+        headers["ratelimit-reset"] = String(Math.ceil(decision.resetMs / 1000));
+      }
+      return new Response(
+        JSON.stringify({
+          type: "https://techne.dev/errors/too-many-requests",
+          title: "Too Many Requests",
+          status: 429,
+          detail: "Rate limit exceeded.",
+        }),
+        { status: 429, headers },
+      );
+    }
+
+    // Allowed: stash decision for success-path header injection.
+    if (policy.headers) {
+      store.rateLimitDecision = decision;
+    }
+    return undefined;
   }
 
   private setupCors(app: Elysia) {

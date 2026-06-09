@@ -23,10 +23,21 @@ export class RoutesResolver {
     this.executionContext.resetRoutes();
 
     const discoveredRoutes = this.precompiledRoutes ?? this.explorer.explore();
+    const exemptPaths: string[] = [];
+
     for (const route of discoveredRoutes) {
       for (const expandedRoute of this.expandRoute(route, options)) {
+        // Collect @RateLimit(false) exempt paths before creating the compiled route
+        // so the adapter's onRequest exclusion list is populated at boot time.
+        if (expandedRoute.rateLimitMeta === false) {
+          exemptPaths.push(expandedRoute.fullPath);
+        }
         routes.push(this.executionContext.create(expandedRoute, container));
       }
+    }
+
+    if (exemptPaths.length > 0) {
+      adapter.addRateLimitExemptions(exemptPaths);
     }
 
     adapter.registerRoutes(routes);
