@@ -10,7 +10,12 @@ import {
 } from "../../common/constants";
 import type { ParamMetadata } from "../../decorators/params.decorator";
 import type { RouteMetadata } from "../../decorators/routes.decorator";
-import { getOrCreateDtoSchema } from "../../schema/dto";
+import {
+  getOrCreateDtoSchema,
+  buildHeaderSchemaFromClass,
+  getOrCreateLenientDtoSchema,
+  isDtoStripUnknown,
+} from "../../schema/dto";
 import { Logger } from "../../services/logger.service";
 import {
   type ControllerDescriptor,
@@ -199,26 +204,60 @@ export class RouterExplorer {
           `${route.handlerName} declares both @Body(Dto) and a route body schema; using the route schema.`,
         );
       }
-      return route.schema;
+      // Still resolve headers even when an explicit body schema was provided.
+      return this.resolveHeaderSchema(route.schema, paramsMetadata);
     }
+
+    let schema = route.schema;
 
     for (const param of paramsMetadata) {
       if (param.type === "body" && param.dtoClass) {
-        const dtoSchema = getOrCreateDtoSchema(param.dtoClass);
-        if (dtoSchema) {
-          return { ...route.schema, body: dtoSchema };
+        const dtoClass = param.dtoClass;
+        // Use the lenient schema when strip-unknown is enabled for this DTO so
+        // Elysia won't reject extra properties (stripping happens in beforeHandle).
+        const bodySchema = isDtoStripUnknown(dtoClass)
+          ? (getOrCreateLenientDtoSchema(dtoClass) ?? getOrCreateDtoSchema(dtoClass))
+          : getOrCreateDtoSchema(dtoClass);
+        if (bodySchema) {
+          schema = { ...schema, body: bodySchema };
+          break;
         }
       }
 
       if (param.type === "body" && param.metatype) {
-        const dtoSchema = getOrCreateDtoSchema(param.metatype);
-        if (dtoSchema) {
-          return { ...route.schema, body: dtoSchema };
+        const metatype = param.metatype;
+        const bodySchema = isDtoStripUnknown(metatype)
+          ? (getOrCreateLenientDtoSchema(metatype) ?? getOrCreateDtoSchema(metatype))
+          : getOrCreateDtoSchema(metatype);
+        if (bodySchema) {
+          schema = { ...schema, body: bodySchema };
+          break;
         }
       }
     }
 
-    return route.schema;
+    return this.resolveHeaderSchema(schema, paramsMetadata);
+  }
+
+  /**
+   * Finds a `@Headers(DtoClass)` param and injects the header schema (with
+   * `additionalProperties: true` and lowercased keys) into the route schema.
+   */
+  private resolveHeaderSchema(
+    schema: RouteMetadata["schema"],
+    paramsMetadata: ParamMetadata[],
+  ): RouteMetadata["schema"] {
+    // Explicit headers schema on the route decorator takes priority.
+    if (schema?.headers) return schema;
+
+    for (const param of paramsMetadata) {
+      if (param.type === "headers" && param.headerDtoClass) {
+        const headerSchema = buildHeaderSchemaFromClass(param.headerDtoClass);
+        return { ...schema, headers: headerSchema };
+      }
+    }
+
+    return schema;
   }
 
   private normalizePath(prefix: string, path: string): string {

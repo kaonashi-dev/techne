@@ -11,18 +11,48 @@ export type CustomParamFactory<TData = any, TOutput = any> = (
   ctx: ResponseHookContext,
 ) => TOutput;
 
+/** Options for `@UploadedFile` upload validation. */
+export interface UploadedFileOptions {
+  /**
+   * Maximum allowed file size in bytes. Requests with a larger file are
+   * rejected with HTTP 422.
+   */
+  maxSize?: number;
+  /**
+   * Allowed MIME types. Supports exact strings (`"image/png"`) and wildcard
+   * sub-type notation (`"image/*"`). Requests with a non-matching content type
+   * are rejected with HTTP 422.
+   *
+   * **Note:** the MIME type is client-declared (`file.type`) and is NOT
+   * verified against the file's magic bytes.
+   */
+  mimeTypes?: string[];
+  /**
+   * When `true` (default), the upload is required — a missing file yields HTTP
+   * 422. Set to `false` to make the upload optional.
+   */
+  required?: boolean;
+}
+
 export interface ParamMetadata {
   index: number;
   type: ParamType;
   name?: string;
   /** DTO class passed to `@Body(MyDto)` — used to auto-inject the TypeBox schema. */
   dtoClass?: Function;
+  /**
+   * DTO class passed to `@Headers(DtoClass)` — used to auto-inject the header
+   * TypeBox schema (additionalProperties: true, lowercased keys).
+   */
+  headerDtoClass?: Function;
   /** Reflected parameter type for `@Body() dto: CreateDto`. */
   metatype?: Function;
   /** Factory for params created with `createParamDecorator`. */
   factory?: CustomParamFactory;
   /** Static data passed to the factory as its first argument. */
   data?: unknown;
+  /** Validation options for `@UploadedFile`. */
+  fileOptions?: UploadedFileOptions;
 }
 
 function getParameterMetatype(
@@ -96,8 +126,63 @@ export function Body(nameOrDto?: string | Function): ParameterDecorator {
 
 export const Param = createBuiltinParamDecorator("param");
 export const Query = createBuiltinParamDecorator("query");
-export const Headers = createBuiltinParamDecorator("headers");
-export const UploadedFile = createBuiltinParamDecorator("file");
+
+/**
+ * Binds request headers (or a single header value) to a handler parameter.
+ *
+ * Overloads:
+ * - `@Headers()`           — whole `ctx.headers` object
+ * - `@Headers('x-api-key')` — single header value
+ * - `@Headers(AuthHeaders)` — whole headers object + auto-injects the DTO's
+ *                             TypeBox schema (additionalProperties: true,
+ *                             lowercased keys) into Elysia's header validation
+ */
+export function Headers(nameOrDto?: string | Function): ParameterDecorator {
+  return (target: object, propertyKey: string | symbol | undefined, parameterIndex: number) => {
+    if (!propertyKey) return;
+    const key = global.String(propertyKey);
+    const metatype = getParameterMetatype(target, key, parameterIndex);
+
+    if (typeof nameOrDto === "function") {
+      // Called as @Headers(DtoClass)
+      _addParam(target, key, parameterIndex, {
+        type: "headers",
+        headerDtoClass: nameOrDto,
+        metatype,
+      });
+    } else {
+      // Called as @Headers() or @Headers('header-name')
+      _addParam(target, key, parameterIndex, { type: "headers", name: nameOrDto, metatype });
+    }
+  };
+}
+
+/**
+ * Binds an uploaded file from the multipart body to a handler parameter.
+ *
+ * Overloads:
+ * - `@UploadedFile()`              — first file in the body
+ * - `@UploadedFile("avatar")`      — named field
+ * - `@UploadedFile("avatar", opts)` — named field + validation constraints
+ *
+ * Validation constraints (all optional):
+ * - `maxSize`: maximum file size in bytes
+ * - `mimeTypes`: exact MIME types or `"type/*"` wildcards
+ * - `required`: defaults to `true`; set `false` to make the file optional
+ */
+export function UploadedFile(name?: string, options?: UploadedFileOptions): ParameterDecorator {
+  return (target: object, propertyKey: string | symbol | undefined, parameterIndex: number) => {
+    if (!propertyKey) return;
+    const key = global.String(propertyKey);
+    const metatype = getParameterMetatype(target, key, parameterIndex);
+    _addParam(target, key, parameterIndex, {
+      type: "file",
+      name,
+      metatype,
+      fileOptions: options,
+    });
+  };
+}
 
 /**
  * Techne custom parameter decorator helper. Given a factory that reads from

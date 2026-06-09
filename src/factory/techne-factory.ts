@@ -1,7 +1,12 @@
 import { APP_FILTER, APP_GUARD } from "../common/constants";
 import { resolveTechneMode, type TechneMode } from "../common/mode";
 import { TechneApplicationContext } from "../core/application-context";
-import type { CorsOptions, GlobalPrefixOptions, VersioningOptions } from "../core/http-options";
+import type {
+  CorsOptions,
+  GlobalPrefixOptions,
+  TechneValidationOptions,
+  VersioningOptions,
+} from "../core/http-options";
 import { Scanner } from "../core/scanner";
 import { Container, getClassScope, getProviderScope, isCustomProvider } from "../core/container";
 import { Scope } from "../core/scope";
@@ -151,18 +156,6 @@ export interface TechneApplicationOptions {
    * clients need all errors at once).
    */
   validation?: TechneValidationOptions;
-}
-
-export interface TechneValidationOptions {
-  /**
-   * When `true`, the validation error response includes every error reported
-   * by the schema. When omitted/`false` (default), only the first error is
-   * returned.
-   *
-   * The wire shape (`errors: [...]`) is unchanged — the default response just
-   * carries a single-element array instead of the full set.
-   */
-  exhaustive?: boolean;
 }
 
 export interface AppBootstrapConfig extends TechneApplicationOptions {
