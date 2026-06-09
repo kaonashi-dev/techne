@@ -38,8 +38,22 @@ const dtoRegistry = new Map<Function, TSchema>();
 const dtoValidatorRegistry = new Map<Function, TypeCheck<TSchema>>();
 const dtoOptionsRegistry = new WeakMap<Function, DtoOptions>();
 
+/**
+ * Registry for header-safe DTO schemas (additionalProperties: true, lowercased keys).
+ * Separate from dtoRegistry so the strict body validator is never mutated.
+ */
+const headerSchemaRegistry = new Map<Function, TSchema>();
+
+/**
+ * Registry for lenient DTO schemas (additionalProperties removed/true) used by
+ * the strip-unknown feature. The strict body schema is never mutated.
+ */
+const lenientSchemaRegistry = new Map<Function, TSchema>();
+
 export interface DtoOptions {
   allowAdditional?: boolean;
+  /** When true, unknown top-level properties are stripped instead of rejected. */
+  stripUnknown?: boolean;
 }
 
 interface DtoMetaCacheEntry {
@@ -110,6 +124,100 @@ export function getOrCreateDtoSchema(target: Function): TSchema | undefined {
   const schema = buildSchemaFromClass(target as ClassConstructor);
   dtoRegistry.set(target, schema);
   return schema;
+}
+
+/**
+ * Builds a header-safe TypeBox schema from a DTO class.
+ *
+ * Differences from the body schema:
+ * - `additionalProperties` is forced to `true` — HTTP headers always carry
+ *   standard fields like `host`, `accept`, `user-agent`, etc. that are not
+ *   part of the DTO, so rejecting unknown properties would break every request.
+ * - All property keys are lowercased because Elysia (and the HTTP/1.1 spec)
+ *   normalises header names to lowercase before placing them on `ctx.headers`.
+ *
+ * The result is cached in a separate registry so the strict body validator
+ * is never mutated.
+ */
+export function buildHeaderSchemaFromClass(target: Function): TSchema {
+  const cached = headerSchemaRegistry.get(target);
+  if (cached) return cached;
+
+  const strict = getOrCreateDtoSchema(target);
+  if (!strict) {
+    // DTO has no validation metadata — return an open object so all headers pass.
+    const open = Type.Object({}, { additionalProperties: true });
+    headerSchemaRegistry.set(target, open);
+    return open;
+  }
+
+  // Clone the properties object, lowercasing all keys.
+  const properties = (strict as any).properties as Record<string, TSchema> | undefined;
+  const lowercasedProps: Record<string, TSchema> = {};
+  if (properties) {
+    for (const [key, schema] of Object.entries(properties)) {
+      lowercasedProps[key.toLowerCase()] = schema;
+    }
+  }
+
+  // Force additionalProperties: true — never use Type.Never() here.
+  const headerSchema = Type.Object(lowercasedProps, { additionalProperties: true });
+  headerSchemaRegistry.set(target, headerSchema);
+  return headerSchema;
+}
+
+/**
+ * Returns a lenient TypeBox schema derived from the DTO class with
+ * `additionalProperties: true` (open object). Used by the strip-unknown
+ * feature: Elysia validates the known properties but does not reject requests
+ * that carry extra fields. The actual stripping happens in a per-route
+ * `beforeHandle` step (see `router-execution-context.ts`).
+ *
+ * The schema is rebuilt from the class metadata using `Type.Object` with the
+ * same property sub-schemas as the strict schema, but with
+ * `additionalProperties: true`. This avoids mutating or symbol-stripping the
+ * cached strict schema.
+ *
+ * **Note:** strip-unknown is top-level properties only in v1.
+ *
+ * The result is cached in a separate registry so the strict body validator is
+ * never mutated.
+ */
+export function getOrCreateLenientDtoSchema(target: Function): TSchema | undefined {
+  const cached = lenientSchemaRegistry.get(target);
+  if (cached) return cached;
+
+  const strict = getOrCreateDtoSchema(target);
+  if (!strict) return undefined;
+
+  // Extract the property sub-schemas from the strict TypeBox Object schema.
+  // TypeBox stores them under the plain `properties` key.
+  const properties = (strict as any).properties as Record<string, TSchema> | undefined;
+
+  // Rebuild via Type.Object so the result is a proper TypeBox schema with the
+  // [Kind] symbol and all TypeBox identity markers intact.
+  const lenient = Type.Object(properties ?? {}, { additionalProperties: true });
+
+  // Carry over the `required` array from the strict schema so required
+  // properties are still validated.
+  const required = (strict as any).required as string[] | undefined;
+  if (required && required.length > 0) {
+    (lenient as any).required = required;
+  }
+
+  lenientSchemaRegistry.set(target, lenient);
+  return lenient;
+}
+
+/**
+ * Returns true when unknown-property stripping is enabled for the DTO class.
+ *
+ * Resolution: an explicit per-DTO `@Dto({ stripUnknown })` value wins in both
+ * directions; otherwise the `globalDefault` (the factory-level
+ * `validation.stripUnknown` flag) applies.
+ */
+export function isDtoStripUnknown(target: Function, globalDefault = false): boolean {
+  return dtoOptionsRegistry.get(target)?.stripUnknown ?? globalDefault;
 }
 
 function getOrCreateDtoValidator(target: Function): TypeCheck<TSchema> | undefined {

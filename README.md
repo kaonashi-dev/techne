@@ -293,6 +293,57 @@ class UsersController {
 
 Decorator-style DTO metadata is also available through exports such as `Dto`, `IsString`, `IsNumber`, `IsInteger`, `IsBoolean`, and `IsEnum`. DTO schemas are passed to Elysia directly, so request validation is a single native Elysia pass. DTOs reject unknown properties by default; use `@Dto({ allowAdditional: true })` to opt out.
 
+### Header validation
+
+`@Headers(DtoClass)` binds the whole headers object and auto-injects a
+header-safe schema into Elysia's native validation. Property names must be
+lowercase header names (quote them); unknown headers are always tolerated —
+real requests carry `host`, `accept`, and friends:
+
+```ts
+@Dto()
+class AuthHeaders {
+  @IsString() @MinLength(10) "x-api-key"!: string;
+  @IsOptional() @IsString() "x-tenant-id"?: string;
+}
+
+@Get("/secure")
+secure(@Headers(AuthHeaders) headers: AuthHeaders) {}
+// Missing/invalid headers → 422 problem+json, same contract as body validation.
+```
+
+### Stripping unknown properties
+
+Instead of rejecting unknown body properties with a 422, they can be silently
+removed before the handler runs (top-level properties only in v1):
+
+```ts
+// Per DTO:
+@Dto({ stripUnknown: true })
+class CreateUserDto { @IsString() name!: string }
+
+// Globally (per-DTO `stripUnknown: false` keeps individual DTOs strict):
+TechneFactory.create({ validation: { stripUnknown: true } });
+```
+
+### Upload validation
+
+`@UploadedFile` accepts constraints; violations return 422 problem+json with
+the standard `errors` array. The MIME type is client-declared (`file.type`) —
+magic-byte sniffing is not performed:
+
+```ts
+@Post("/avatar")
+upload(
+  @UploadedFile("avatar", {
+    maxSize: 5 * 1024 * 1024,            // bytes
+    mimeTypes: ["image/png", "image/*"], // exact or type/* wildcards
+    required: true,                      // default
+  })
+  file: File,
+) {}
+```
+
 ## Configuration
 
 The preferred entry point is `defineConfig`, which validates env values against

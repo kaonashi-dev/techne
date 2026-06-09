@@ -17,6 +17,18 @@ export class RoutesResolver {
     this.explorer = new RouterExplorer(scanner);
   }
 
+  /**
+   * Applies the factory-level `validation.stripUnknown` default to both
+   * schema resolution (explorer) and the strip `beforeHandle` compilation
+   * (execution context). Must run before `resolve()` — schemas and hooks
+   * are built during route registration. Per-DTO `@Dto({ stripUnknown })`
+   * values override this default in both directions.
+   */
+  public setStripUnknownDefault(value: boolean): void {
+    this.explorer.setStripUnknownDefault(value);
+    this.executionContext.setStripUnknownDefault(value);
+  }
+
   public resolve(adapter: ElysiaAdapter, options: RouteRegistrationOptions = {}) {
     const container = this.scanner.getContainer();
     const routes = [];
