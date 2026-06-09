@@ -14,13 +14,32 @@ import {
   type DispatchableConstructor,
   type Dispatchable,
 } from "./dispatchable";
-import { JobReleasedError } from "./errors";
+import type { QueueDef } from "./define-queue";
+import { JobReleasedError, QueuePayloadValidationError } from "./errors";
 import type { Job } from "./job";
 import { registerSyncHandler } from "./pending-dispatch";
 import { Queue } from "./queue";
 import { getMqToken } from "./tokens";
 import type { JobMiddleware, MqProcessorMetadata, ProcessMetadata, QueueDriver } from "./types";
 import { Worker } from "./worker";
+
+/**
+ * Validate a job payload against the queue's compiled schema (if any).
+ * Throws `QueuePayloadValidationError` on failure; no-op when validation is
+ * not configured for this job.
+ */
+function validateConsumePayload(queueDef: QueueDef, job: Job): void {
+  const mode = queueDef.validateMode;
+  if (mode !== "consume" && mode !== "both") return;
+  const validator = queueDef.compiledValidators?.get(job.name);
+  if (!validator) return;
+  if (validator.Check(job.data)) return;
+  const errors = [...validator.Errors(job.data)].map((e) => ({
+    path: e.path,
+    message: e.message,
+  }));
+  throw new QueuePayloadValidationError(job.name, queueDef.name, errors);
+}
 
 /**
  * Compose a left-to-right middleware stack around `handler`. The first
@@ -75,9 +94,12 @@ export class MqRegistry {
       }
       processorFailureJobsByQueue.set(processor.queueName, coveredJobs);
 
+      const processorQueueDef = processor.queueDef;
       const worker = new Worker(
         queue,
         async (job) => {
+          // Consume-time validation (if configured on the QueueDef).
+          if (processorQueueDef) validateConsumePayload(processorQueueDef, job);
           const handlerName =
             this.findHandler(processMetadata, job.name) ??
             this.findHandler(processMetadata) ??
@@ -170,7 +192,8 @@ export class MqRegistry {
       }
 
       const queue = this.container.get<Queue>(getMqToken(queueName));
-      const workerOptions = dispatchables[0]?.queue.workerOptions ?? {};
+      const dispatchableQueueDef = dispatchables[0]?.queue;
+      const workerOptions = dispatchableQueueDef?.workerOptions ?? {};
       const worker = new Worker(
         queue,
         async (job) => {
@@ -180,6 +203,8 @@ export class MqRegistry {
               `No Dispatchable registered for job '${job.name}' on queue '${queueName}'`,
             );
           }
+          // Consume-time validation (if configured on the QueueDef).
+          if (dispatchableQueueDef) validateConsumePayload(dispatchableQueueDef, job);
           // Release the unique lock immediately if this is a @UniqueUntilProcessing job.
           if (job.opts.lockUntilProcessing && job.opts.lockKey) {
             await this.releaseLock(job.opts.lockKey);

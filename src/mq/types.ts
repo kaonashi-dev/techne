@@ -188,6 +188,8 @@ export interface WorkerOptions extends QueueOptions {
 export interface MqProcessorMetadata {
   queueName: string;
   options: WorkerOptions;
+  /** The originating `QueueDef`, when `@Processor` was called with a def. Present for consume-time validation. */
+  queueDef?: import("./define-queue").QueueDef;
 }
 
 export type ProcessMetadata = Record<string, string | undefined>;
