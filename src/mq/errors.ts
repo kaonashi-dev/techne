@@ -21,3 +21,26 @@ export class JobReleasedError extends Error {
     this.name = "JobReleasedError";
   }
 }
+
+/**
+ * Thrown when a queue job payload fails schema validation.
+ *
+ * At dispatch-time (`validate: "dispatch"` or `"both"`), this is thrown
+ * synchronously before the job is enqueued.
+ *
+ * At consume-time (`validate: "consume"` or `"both"`), this is thrown
+ * inside the worker handler, which flows into the existing `@OnFailure` /
+ * `Dispatchable.failed()` lifecycle.
+ */
+export class QueuePayloadValidationError extends Error {
+  constructor(
+    public readonly jobName: string,
+    public readonly queueName: string,
+    public readonly errors: Array<{ path: string; message: string }>,
+  ) {
+    super(
+      `Queue payload validation failed for ${queueName}/${jobName}: ${errors.map((e) => e.message).join(", ")}`,
+    );
+    this.name = "QueuePayloadValidationError";
+  }
+}
