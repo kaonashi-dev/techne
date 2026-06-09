@@ -2,7 +2,9 @@ import { APP_FILTER, APP_GUARD } from "../common/constants";
 import { resolveTechneMode, type TechneMode } from "../common/mode";
 import { TechneApplicationContext } from "../core/application-context";
 import type {
+  CookieOptions,
   CorsOptions,
+  FactoryCsrfOptions,
   GlobalPrefixOptions,
   TechneServerOptions,
   TechneValidationOptions,
@@ -10,6 +12,8 @@ import type {
 } from "../core/http-options";
 import { compileSecurityHeaders, type SecurityHeadersOptions } from "../security/security-headers";
 import { compileRateLimitPolicy, type RateLimitOptions } from "../security/rate-limit";
+import { csrfProtection } from "../security/csrf";
+import { CSRF_EXEMPT_METADATA } from "../decorators/csrf-exempt.decorator";
 import { Scanner } from "../core/scanner";
 import { Container, getClassScope, getProviderScope, isCustomProvider } from "../core/container";
 import { Scope } from "../core/scope";
@@ -173,6 +177,18 @@ export interface TechneApplicationOptions {
    */
   server?: TechneServerOptions;
   /**
+   * Cookie signing configuration. When set, the `secrets` and `sign` arrays
+   * are passed to the Elysia constructor so Elysia's built-in cookie jar
+   * handles HMAC signing/verification transparently.
+   */
+  cookies?: CookieOptions;
+  /**
+   * CSRF double-submit cookie protection. When set, a `beforeHandle` middleware
+   * is compiled once at boot and injected globally. Omit or leave `undefined`
+   * to disable with zero per-request cost.
+   */
+  csrf?: FactoryCsrfOptions;
+  /**
    * Global HTTP rate limiter using a continuous-refill token bucket.
    * When absent, no rate-limiting hooks are registered (zero-cost contract).
    */
@@ -256,6 +272,7 @@ export class TechneFactory {
         ? compileSecurityHeaders(effectiveOptions.securityHeaders)
         : undefined,
       rateLimit: compiledRateLimit,
+      cookies: effectiveOptions?.cookies,
     });
     const precompiledRoutes = config
       ? undefined
@@ -322,6 +339,13 @@ export class TechneFactory {
     }
     if (globalFilters.length > 0) {
       routesResolver.executionContext.setGlobalFilters(globalFilters as any);
+    }
+
+    if (effectiveOptions?.csrf) {
+      const csrfMiddleware = csrfProtection(effectiveOptions.csrf);
+      routesResolver.executionContext.setGlobalMiddlewares([
+        { fn: csrfMiddleware, exemptMetaKey: CSRF_EXEMPT_METADATA },
+      ]);
     }
 
     if (effectiveOptions?.cors) {

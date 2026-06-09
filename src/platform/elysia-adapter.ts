@@ -2,7 +2,7 @@ import { Elysia } from "elysia";
 import { Logger, requestContext, type RequestContext } from "../services/logger.service";
 import { Container, globalContainer } from "../core/container";
 import type { CompiledRouteDefinition } from "../core/router/router-execution-context";
-import type { CorsOptions } from "../core/http-options";
+import type { CookieOptions, CorsOptions } from "../core/http-options";
 import { applyHeader, applyHeaders } from "./headers";
 import type { CompiledRateLimitPolicy, RateLimitDecision } from "../security/rate-limit";
 import { resolveClientIp } from "../security/client-ip";
@@ -60,6 +60,12 @@ interface ElysiaAdapterOptions {
    * check. When absent, zero hooks and zero per-request cost.
    */
   rateLimit?: CompiledRateLimitPolicy;
+  /**
+   * Cookie signing configuration forwarded to the Elysia constructor.
+   * Elysia's built-in cookie jar signs/verifies cookies whose names appear
+   * in `sign` using HMAC-SHA256 with the provided `secrets`.
+   */
+  cookies?: CookieOptions;
 }
 
 interface CompiledCorsOptions {
@@ -259,7 +265,15 @@ export class ElysiaAdapter {
   }
 
   private createApp() {
-    const app = new Elysia();
+    const cookieConfig = this.options?.cookies;
+    const elysiaInit: Record<string, unknown> = {};
+    if (cookieConfig?.secrets || cookieConfig?.sign) {
+      elysiaInit.cookie = {
+        ...(cookieConfig.secrets !== undefined ? { secrets: cookieConfig.secrets } : {}),
+        ...(cookieConfig.sign !== undefined ? { sign: cookieConfig.sign } : {}),
+      };
+    }
+    const app = Object.keys(elysiaInit).length > 0 ? new Elysia(elysiaInit as any) : new Elysia();
     this.corsHooksInstalled = false;
     this.installFusedHooks(app);
     this.setupCors(app);
