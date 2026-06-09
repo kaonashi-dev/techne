@@ -49,6 +49,16 @@ export function __setIsProduction(value: boolean): void {
 }
 
 /**
+ * Read accessor for the cached production flag. Security helpers (CSRF
+ * defaults, `setCookie`) use this instead of re-reading `NODE_ENV` so the
+ * whole framework shares one production signal — including the
+ * `__setIsProduction` test override.
+ */
+export function isProductionEnv(): boolean {
+  return IS_PRODUCTION;
+}
+
+/**
  * B6: per-(status, slug) cache of RFC 7807 problem templates and headers.
  *
  * The base problem object only depends on `(status, title, type)`, all of

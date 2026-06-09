@@ -545,6 +545,49 @@ login() {}
 @Get("/status")
 status() {}
 ```
+### Cookies
+
+The `cookies` option forwards signing configuration to Elysia's built-in
+reactive cookie jar; the framework adds a `@Cookie` param decorator and a
+secure-defaults write helper:
+
+```ts
+TechneFactory.create({
+  cookies: { secrets: process.env.COOKIE_SECRET, sign: ["session"] },
+});
+
+@Get("/me")
+profile(@Cookie("session") session: string | undefined) {}
+
+import { setCookie } from "@kaonashi-dev/techne/security";
+// Defaults: httpOnly, SameSite=Lax, Secure in production, Path=/
+setCookie(ctx.cookie, "session", token, { maxAge: 86_400 });
+```
+
+### CSRF protection (double-submit cookie)
+
+Opt-in via the `csrf` factory option — one middleware compiles at boot and
+runs after guards on every route (so 401s take precedence over CSRF 403s).
+Safe methods mint a JS-readable token cookie (`__Host-csrf` in production,
+`csrf` in dev); unsafe methods must echo it in the `x-csrf-token` header,
+compared timing-safely. Mismatches return 403 problem+json.
+
+```ts
+TechneFactory.create({
+  csrf: {
+    exclude: ["/webhooks"],   // signature-authenticated endpoints
+    // cookieName, headerName, methods, cookie attributes are configurable
+  },
+});
+
+@CsrfExempt()                  // method or controller level
+@Post("/webhooks/stripe")
+handleWebhook(@Body() payload: unknown) {}
+```
+
+CSRF only protects cookie-authenticated browser clients — pure Bearer-token
+APIs should exempt routes (or skip the option). When serving cross-origin
+browsers, pair it with `cors: { credentials: true }`.
 
 ## Logging
 

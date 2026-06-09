@@ -71,3 +71,36 @@ export interface RouteRegistrationOptions {
   };
   versioning?: VersioningOptions;
 }
+
+/**
+ * Cookie signing configuration passed to the Elysia constructor.
+ * Elysia's built-in cookie jar handles signing for cookies listed in `sign`.
+ */
+export interface CookieOptions {
+  /** One or more secrets used to sign cookies (rotated: first is active). */
+  secrets?: string | string[];
+  /** Names of cookies that should be automatically signed/verified. */
+  sign?: string[];
+}
+
+/**
+ * CSRF double-submit protection configuration.
+ * Set to `false` (or omit) to disable completely — zero per-request cost.
+ */
+export interface FactoryCsrfOptions {
+  /** Cookie name for the CSRF token. Defaults to `__Host-csrf` (prod) or `csrf`. */
+  cookieName?: string;
+  /** Request header carrying the submitted token. Default: `"x-csrf-token"` */
+  headerName?: string;
+  /** HTTP methods that require a valid CSRF token. Default: POST, PUT, PATCH, DELETE. */
+  methods?: string[];
+  /** Path prefixes exempt from CSRF checking (e.g. webhook endpoints). */
+  exclude?: string[];
+  /** Override attributes for the CSRF cookie. */
+  cookie?: {
+    httpOnly?: boolean;
+    sameSite?: string;
+    secure?: boolean;
+    path?: string;
+  };
+}
