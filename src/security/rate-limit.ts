@@ -7,10 +7,7 @@ import type { TrustProxyOptions } from "./client-ip";
  * store instance can serve multiple limiters with different windows / limits.
  */
 export interface RateLimitStore {
-  consume(
-    key: string,
-    policy: RateLimitPolicy,
-  ): RateLimitDecision | Promise<RateLimitDecision>;
+  consume(key: string, policy: RateLimitPolicy): RateLimitDecision | Promise<RateLimitDecision>;
 }
 
 /** The computed outcome of a single `consume` call. */
@@ -98,9 +95,11 @@ const LRU_CAP = 10_000;
 /**
  * In-process token bucket store with continuous refill.
  *
- * On each `consume`, elapsed time is used to compute a fractional refill:
- * `tokens += (elapsed / windowMs) * burst`, capped at `burst`. If the bucket
- * has at least 1 token the request is allowed and the token is deducted.
+ * Standard token-bucket semantics: the capacity is `burst` (how far a client
+ * can spike), and tokens refill at the sustained rate of `limit` per
+ * `windowMs` — `tokens += (elapsed / windowMs) * limit`, capped at `burst`.
+ * If the bucket has at least 1 token the request is allowed and the token is
+ * deducted.
  *
  * LRU eviction (Map-insertion-order trick) caps memory at 10k keys.
  */
@@ -127,10 +126,12 @@ export class InMemoryTokenBucketStore implements RateLimitStore {
       this.buckets.delete(key);
       this.buckets.set(key, state);
 
-      // Continuous refill: add tokens proportional to elapsed time.
+      // Continuous refill at the sustained rate: `limit` tokens per window.
+      // (`burst` is only the cap — refilling at `burst` per window would let
+      // clients sustain `burst` req/window, making `limit` meaningless.)
       const elapsed = now - state.lastRefillMs;
       if (elapsed > 0) {
-        const refill = (elapsed / windowMs) * burst;
+        const refill = (elapsed / windowMs) * limit;
         state.tokens = Math.min(burst, state.tokens + refill);
         state.lastRefillMs = now;
       }
@@ -143,9 +144,10 @@ export class InMemoryTokenBucketStore implements RateLimitStore {
 
     const remaining = Math.max(0, Math.floor(state.tokens));
     // `resetMs` is when the bucket would refill enough for the next request.
-    // For a denied request, that's when 1 token accrues.
+    // For a denied request, that's when 1 token accrues at the limit/window
+    // refill rate.
     const tokensNeeded = allowed ? 0 : 1 - state.tokens;
-    const msToNextToken = (tokensNeeded / burst) * windowMs;
+    const msToNextToken = (tokensNeeded / limit) * windowMs;
     const resetMs = now + Math.ceil(msToNextToken);
 
     return { allowed, remaining, resetMs, limit };

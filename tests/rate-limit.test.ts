@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { TechneFactory } from "../src/factory/techne-factory";
 import { Controller } from "../src/decorators/controller.decorator";
 import { Get } from "../src/decorators/routes.decorator";
@@ -33,6 +33,17 @@ class ExemptController {
   @Get("/")
   publicEndpoint() {
     return { public: true };
+  }
+}
+
+@Controller("loose")
+class LooseOverrideController {
+  // Looser than the tight global limit used in its test — must NOT be capped
+  // by the global limiter (decorated routes are exempt from it).
+  @RateLimit({ limit: 5, windowMs: 60_000 })
+  @Get("/")
+  looseEndpoint() {
+    return { ok: true };
   }
 }
 
@@ -109,6 +120,32 @@ describe("InMemoryTokenBucketStore", () => {
     expect(allowed).toBe(10);
   });
 
+  test("burst > limit: sustained refill rate is `limit` per window, not `burst`", () => {
+    const store = new InMemoryTokenBucketStore();
+    const policy = { limit: 5, windowMs: 1_000, burst: 10 };
+
+    // Drain the full burst capacity.
+    for (let i = 0; i < 10; i++) {
+      store.consume("sustained-key", policy);
+    }
+    expect((store.consume("sustained-key", policy) as any).allowed).toBe(false);
+
+    // One full window later only `limit` (5) tokens have accrued — not `burst`.
+    const realNow = Date.now;
+    const future = realNow() + 1_000;
+    const spy = spyOn(Date, "now").mockReturnValue(future);
+    try {
+      let allowed = 0;
+      for (let i = 0; i < 10; i++) {
+        const d = store.consume("sustained-key", policy) as any;
+        if (d.allowed) allowed++;
+      }
+      expect(allowed).toBe(5);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   test("resetMs is a future epoch ms value", () => {
     const store = new InMemoryTokenBucketStore();
     const policy = { limit: 1, windowMs: 60_000, burst: 1 };
@@ -178,11 +215,14 @@ describe("global rate limiter — integration", () => {
     });
     await app.handle(new Request("http://localhost/items")); // consume token
     const blocked = await app.handle(new Request("http://localhost/items"));
-    const body = await blocked.json() as any;
-    expect(body.type).toBe("https://techne.dev/errors/too-many-requests");
+    const body = (await blocked.json()) as any;
+    expect(body.type).toBe(
+      "https://github.com/kaonashi-dev/techne/blob/main/docs/errors/too-many-requests.md",
+    );
     expect(body.title).toBe("Too Many Requests");
     expect(body.status).toBe(429);
     expect(typeof body.detail).toBe("string");
+    expect(typeof body.requestId).toBe("string");
   });
 
   test("429 has retry-after header", async () => {
@@ -360,6 +400,48 @@ describe("@RateLimit decorator", () => {
     expect(blocked.status).toBe(429);
   });
 
+  test("looser @RateLimit override is not capped by a tighter global limit", async () => {
+    const app = await TechneFactory.create({
+      controllers: [LooseOverrideController],
+      logger: false,
+      rateLimit: {
+        limit: 1,
+        windowMs: 60_000,
+        keyExtractor: () => "loose-test",
+      },
+    });
+
+    // Per-route limit is 5; the global limit of 1 must not apply here.
+    for (let i = 0; i < 5; i++) {
+      const res = await app.handle(new Request("http://localhost/loose"));
+      expect(res.status).toBe(200);
+    }
+    const blocked = await app.handle(new Request("http://localhost/loose"));
+    expect(blocked.status).toBe(429);
+  });
+
+  test("per-route 429 body is the canonical RFC 7807 problem document", async () => {
+    const app = await TechneFactory.create({
+      controllers: [OverrideController],
+      logger: false,
+    });
+
+    for (let i = 0; i < 3; i++) {
+      await app.handle(new Request("http://localhost/override"));
+    }
+    const blocked = await app.handle(new Request("http://localhost/override"));
+    expect(blocked.status).toBe(429);
+    expect(blocked.headers.get("content-type")).toContain("application/problem+json");
+    expect(blocked.headers.get("retry-after")).not.toBeNull();
+    expect(blocked.headers.get("ratelimit-remaining")).toBe("0");
+    const body = (await blocked.json()) as any;
+    expect(body.type).toBe(
+      "https://github.com/kaonashi-dev/techne/blob/main/docs/errors/too-many-requests.md",
+    );
+    expect(body.title).toBe("Too Many Requests");
+    expect(typeof body.requestId).toBe("string");
+  });
+
   test("@RateLimit(false) exempts a route from the global limiter", async () => {
     const store = new InMemoryTokenBucketStore();
     // Global limit of 1 — but the exempt route should still work
@@ -385,7 +467,6 @@ describe("@RateLimit decorator", () => {
   });
 
   test("@RateLimit(false) route returns 200 even when global limit is exhausted", async () => {
-    const store = new InMemoryTokenBucketStore();
     const app = await TechneFactory.create({
       controllers: [ExemptController],
       logger: false,
