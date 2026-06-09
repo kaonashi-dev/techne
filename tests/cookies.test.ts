@@ -1,9 +1,10 @@
-import { describe, expect, test, afterEach, beforeEach } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { TechneFactory } from "../src/factory/techne-factory";
 import { Controller } from "../src/decorators/controller.decorator";
 import { Get } from "../src/decorators/routes.decorator";
 import { setCookie } from "../src/security/cookies";
 import { Cookie } from "../src/decorators/cookie.decorator";
+import { __setIsProduction } from "../src/core/router/router-response-controller";
 
 // ---------------------------------------------------------------------------
 // setCookie helper unit tests
@@ -31,9 +32,11 @@ describe("setCookie() defaults", () => {
     expect(opts.secure).toBe(false);
   });
 
-  test("secure=true in production NODE_ENV", () => {
-    const prev = process.env.NODE_ENV;
-    process.env.NODE_ENV = "production";
+  test("secure=true in production", () => {
+    // setCookie reads the framework-wide cached production flag; flip it via
+    // __setIsProduction rather than mutating NODE_ENV at runtime.
+    const prevProduction = (Bun.env.NODE_ENV ?? "") === "production";
+    __setIsProduction(true);
     try {
       const jar: Record<string, any> = {};
       jar["tok"] = {
@@ -44,7 +47,7 @@ describe("setCookie() defaults", () => {
       setCookie(jar, "tok", "xyz");
       expect((jar["tok"] as any)._opts.secure).toBe(true);
     } finally {
-      process.env.NODE_ENV = prev;
+      __setIsProduction(prevProduction);
     }
   });
 
