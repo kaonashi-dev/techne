@@ -383,6 +383,75 @@ provider graphs without HTTP. Request-scoped providers share a stable context
 across guards and handlers within the same request through `ContextIdFactory`
 from `@kaonashi-dev/techne/core`.
 
+## Security
+
+### Security response headers
+
+`securityHeaders: true` stamps a helmet-style preset on every response —
+including error responses — with zero per-request cost beyond a single header
+merge (the option set is compiled to a frozen record at boot):
+
+```ts
+const app = await TechneFactory.create({
+  controllers: [UsersController],
+  securityHeaders: true,
+});
+// X-Content-Type-Options: nosniff          X-Frame-Options: SAMEORIGIN
+// Strict-Transport-Security: max-age=15552000; includeSubDomains
+// Referrer-Policy: no-referrer             X-Permitted-Cross-Domain-Policies: none
+// Cross-Origin-Opener-Policy: same-origin  Cross-Origin-Resource-Policy: same-origin
+```
+
+Pass an object to tune or disable individual headers. `Content-Security-Policy`
+is opt-in (a string or a directive map), and `custom` merges arbitrary headers
+last:
+
+```ts
+securityHeaders: {
+  frameOptions: "DENY",
+  hsts: { maxAge: 31536000, preload: true },   // or `hsts: false`
+  contentSecurityPolicy: { "default-src": "'none'" },
+  custom: { "x-powered-by": "techne" },
+},
+```
+
+HSTS is always emitted when enabled — browsers ignore it over plain HTTP, so
+local development is unaffected. Raw `Response` short-circuits (CORS preflight
+204, draining 503) bypass the response hooks and intentionally skip these
+headers.
+
+### Native server limits
+
+The `server` option forwards limits to `Bun.serve` when `listen()` binds a
+real socket, so they are enforced by the runtime before any framework code
+runs:
+
+```ts
+server: {
+  maxRequestBodySize: 1_048_576, // bytes; oversized requests → native 413 (plain text)
+  idleTimeout: 30,               // seconds; socket-level idle timeout (0–255)
+},
+```
+
+`idleTimeout` is not a total request deadline — a handler that computes
+indefinitely is not interrupted. Neither limit applies to `app.handle()`
+calls (tests, embedded use), which bypass `Bun.serve` entirely.
+
+### Client IP resolution
+
+`resolveClientIp` from `@kaonashi-dev/techne/security` returns the socket peer
+address by default and only consults `X-Forwarded-For` / `X-Real-IP` when a
+trusted proxy is explicitly declared (rightmost-hops semantics):
+
+```ts
+import { resolveClientIp } from "@kaonashi-dev/techne/security";
+
+resolveClientIp(ctx);                              // socket address
+resolveClientIp(ctx, true);                        // rightmost X-Forwarded-For entry
+resolveClientIp(ctx, { hops: 2 });                 // 2 trusted proxies
+resolveClientIp(ctx, { header: "x-real-ip" });     // alternate header
+```
+
 ## Logging
 
 Techne ships with a lightweight structured `Logger` exported from
@@ -848,6 +917,7 @@ import { HealthCheckService } from "@kaonashi-dev/techne/health";
 import { BufferSink, NullSink, Test } from "@kaonashi-dev/techne/testing";
 import { CommandBus } from "@kaonashi-dev/techne/cqrs";
 import { mq, Queue } from "@kaonashi-dev/techne/mq";
+import { compileSecurityHeaders, resolveClientIp } from "@kaonashi-dev/techne/security";
 ```
 
 ## Scripts

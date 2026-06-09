@@ -1,7 +1,13 @@
 import { APP_FILTER, APP_GUARD } from "../common/constants";
 import { resolveTechneMode, type TechneMode } from "../common/mode";
 import { TechneApplicationContext } from "../core/application-context";
-import type { CorsOptions, GlobalPrefixOptions, VersioningOptions } from "../core/http-options";
+import type {
+  CorsOptions,
+  GlobalPrefixOptions,
+  TechneServerOptions,
+  VersioningOptions,
+} from "../core/http-options";
+import { compileSecurityHeaders, type SecurityHeadersOptions } from "../security/security-headers";
 import { Scanner } from "../core/scanner";
 import { Container, getClassScope, getProviderScope, isCustomProvider } from "../core/container";
 import { Scope } from "../core/scope";
@@ -151,6 +157,19 @@ export interface TechneApplicationOptions {
    * clients need all errors at once).
    */
   validation?: TechneValidationOptions;
+  /**
+   * Helmet-style security response headers. `true` enables the full preset
+   * (nosniff, X-Frame-Options, HSTS, Referrer-Policy, COOP/CORP, …); an
+   * options object tunes or disables individual headers. Compiled once at
+   * boot and stamped on every response, including error responses. Omitted
+   * or `false`: no headers, no hooks, no per-request cost.
+   */
+  securityHeaders?: boolean | SecurityHeadersOptions;
+  /**
+   * Native server limits (`maxRequestBodySize`, `idleTimeout`), forwarded to
+   * `Bun.serve` when `listen()` binds a real socket.
+   */
+  server?: TechneServerOptions;
 }
 
 export interface TechneValidationOptions {
@@ -235,6 +254,9 @@ export class TechneFactory {
       // request logging is off.
       hasProblemFilter: true,
       requestId: (effectiveOptions as { requestId?: boolean })?.requestId,
+      securityHeaders: effectiveOptions?.securityHeaders
+        ? compileSecurityHeaders(effectiveOptions.securityHeaders)
+        : undefined,
     });
     const precompiledRoutes = config
       ? undefined
@@ -254,6 +276,7 @@ export class TechneFactory {
         shutdown: effectiveOptions?.shutdown,
         health: effectiveOptions?.health,
         mode,
+        server: effectiveOptions?.server,
         userOptions: (effectiveOptions ?? {}) as Record<string, unknown>,
       },
     );
