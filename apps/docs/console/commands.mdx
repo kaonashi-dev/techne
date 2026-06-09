@@ -58,10 +58,10 @@ clarity.
 
 Two parameter decorators map argv onto your handler parameters:
 
-| Decorator             | Source                       | Default required? |
-| --------------------- | ---------------------------- | ----------------- |
-| `@Argument("name")`   | Positional, in declared order | **Yes**          |
-| `@Option("name")`     | A `--name` flag               | No                |
+| Decorator           | Source                        | Default required? |
+| ------------------- | ----------------------------- | ----------------- |
+| `@Argument("name")` | Positional, in declared order | **Yes**           |
+| `@Option("name")`   | A `--name` flag               | No                |
 
 ```ts
 @ConsoleCommand("users:export")
@@ -181,11 +181,11 @@ Inject it and use the semantic helpers instead of `console.log`:
 
 ```ts
 this.console.write("no newline");
-this.console.writeln("a line");        // alias: line()
-this.console.info("informational");    // cyan
-this.console.success("done");          // green ✓
-this.console.warning("heads up");      // yellow ⚠
-this.console.error("it broke");        // red ✗ (stderr)
+this.console.writeln("a line"); // alias: line()
+this.console.info("informational"); // cyan
+this.console.success("done"); // green ✓
+this.console.warning("heads up"); // yellow ⚠
+this.console.error("it broke"); // red ✗ (stderr)
 ```
 
 ## Middleware

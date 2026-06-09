@@ -135,12 +135,7 @@ describe("@UploadedFile validation options", () => {
     });
 
     const res = await app.handle(
-      makeUploadRequest(
-        "http://localhost/upload-mime-err",
-        "test.pdf",
-        "data",
-        "application/pdf",
-      ),
+      makeUploadRequest("http://localhost/upload-mime-err", "test.pdf", "data", "application/pdf"),
     );
     expect(res.status).toBe(422);
     const body = await res.json();
@@ -189,12 +184,7 @@ describe("@UploadedFile validation options", () => {
     });
 
     const res = await app.handle(
-      makeUploadRequest(
-        "http://localhost/upload-wild-err",
-        "doc.pdf",
-        "data",
-        "application/pdf",
-      ),
+      makeUploadRequest("http://localhost/upload-wild-err", "doc.pdf", "data", "application/pdf"),
     );
     expect(res.status).toBe(422);
     const body = await res.json();
@@ -274,12 +264,7 @@ describe("@UploadedFile validation options", () => {
 
     // 5-byte file with wrong MIME — size is checked first
     const res = await app.handle(
-      makeUploadRequest(
-        "http://localhost/upload-combo",
-        "doc.pdf",
-        "hello",
-        "application/pdf",
-      ),
+      makeUploadRequest("http://localhost/upload-combo", "doc.pdf", "hello", "application/pdf"),
     );
     expect(res.status).toBe(422);
     const body = await res.json();
