@@ -90,7 +90,7 @@ describe("@UploadedFile validation options", () => {
     expect(res.status).toBe(422);
     const body = await res.json();
     expect(body.errors).toBeDefined();
-    expect(body.errors[0].field).toBe("avatar");
+    expect(body.errors[0].path).toBe("/avatar");
     expect(body.errors[0].message).toMatch(/exceeds maximum size/i);
   });
 
@@ -144,7 +144,7 @@ describe("@UploadedFile validation options", () => {
     );
     expect(res.status).toBe(422);
     const body = await res.json();
-    expect(body.errors[0].field).toBe("avatar");
+    expect(body.errors[0].path).toBe("/avatar");
     expect(body.errors[0].message).toMatch(/not allowed/i);
   });
 
@@ -198,7 +198,7 @@ describe("@UploadedFile validation options", () => {
     );
     expect(res.status).toBe(422);
     const body = await res.json();
-    expect(body.errors[0].field).toBe("avatar");
+    expect(body.errors[0].path).toBe("/avatar");
   });
 
   test("required: true (default), no file → 422", async () => {
@@ -225,7 +225,7 @@ describe("@UploadedFile validation options", () => {
     );
     expect(res.status).toBe(422);
     const body = await res.json();
-    expect(body.errors[0].field).toBe("avatar");
+    expect(body.errors[0].path).toBe("/avatar");
     expect(body.errors[0].message).toMatch(/required/i);
   });
 
@@ -261,7 +261,7 @@ describe("@UploadedFile validation options", () => {
       @Post("/")
       upload(
         @UploadedFile("avatar", { maxSize: 2, mimeTypes: ["image/png"] })
-        file: Blob,
+        _file: Blob,
       ) {
         return { ok: true };
       }

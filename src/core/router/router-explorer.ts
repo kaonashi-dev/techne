@@ -66,9 +66,19 @@ function readLegacyHandler(routeHandler: Function): HandlerDescriptor {
 
 export class RouterExplorer {
   private readonly discoveredRoutesCache = new WeakMap<any, DiscoveredRouteDefinition[]>();
+  /**
+   * Factory-level `validation.stripUnknown` default. Must be set before
+   * `explore()` runs — schemas are resolved (and cached per controller)
+   * during exploration.
+   */
+  private stripUnknownDefault = false;
   private readonly logger = new Logger("RouterExplorer");
 
   constructor(private readonly scanner: Scanner) {}
+
+  public setStripUnknownDefault(value: boolean): void {
+    this.stripUnknownDefault = value;
+  }
 
   public explore(): DiscoveredRouteDefinition[] {
     const routes: DiscoveredRouteDefinition[] = [];
@@ -215,7 +225,7 @@ export class RouterExplorer {
         const dtoClass = param.dtoClass;
         // Use the lenient schema when strip-unknown is enabled for this DTO so
         // Elysia won't reject extra properties (stripping happens in beforeHandle).
-        const bodySchema = isDtoStripUnknown(dtoClass)
+        const bodySchema = isDtoStripUnknown(dtoClass, this.stripUnknownDefault)
           ? (getOrCreateLenientDtoSchema(dtoClass) ?? getOrCreateDtoSchema(dtoClass))
           : getOrCreateDtoSchema(dtoClass);
         if (bodySchema) {
@@ -226,7 +236,7 @@ export class RouterExplorer {
 
       if (param.type === "body" && param.metatype) {
         const metatype = param.metatype;
-        const bodySchema = isDtoStripUnknown(metatype)
+        const bodySchema = isDtoStripUnknown(metatype, this.stripUnknownDefault)
           ? (getOrCreateLenientDtoSchema(metatype) ?? getOrCreateDtoSchema(metatype))
           : getOrCreateDtoSchema(metatype);
         if (bodySchema) {

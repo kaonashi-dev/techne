@@ -161,7 +161,9 @@ function createExtractor(
         if (file == null) {
           if (required) {
             throw new HttpException(
-              { errors: [{ field: fieldName, message: `File "${fieldName}" is required` }] },
+              // `path` matches the TypeBox ValidationError shape used by the
+              // DTO 422 contract (`/property` JSON-pointer style).
+              { errors: [{ path: `/${fieldName}`, message: `File "${fieldName}" is required` }] },
               422,
             );
           }
@@ -179,7 +181,7 @@ function createExtractor(
             {
               errors: [
                 {
-                  field: fieldName,
+                  path: `/${fieldName}`,
                   message: `File exceeds maximum size of ${mb}MB`,
                 },
               ],
@@ -203,7 +205,7 @@ function createExtractor(
               {
                 errors: [
                   {
-                    field: fieldName,
+                    path: `/${fieldName}`,
                     message: `File type "${fileMime}" is not allowed. Allowed: ${fileOptions.mimeTypes.join(", ")}`,
                   },
                 ],
@@ -395,11 +397,18 @@ export class RouterExecutionContext {
   private globalGuardsVersion = 0;
   private routesRegistered = false;
   private validateResponses = false;
+  /** Factory-level `validation.stripUnknown` default (per-DTO options win). */
+  private stripUnknownDefault = false;
 
   constructor(private readonly responseController: RouterResponseController) {}
 
   public setValidateResponses(value: boolean): void {
     this.validateResponses = value;
+  }
+
+  /** Must be called before routes are registered — hooks compile at `create()`. */
+  public setStripUnknownDefault(value: boolean): void {
+    this.stripUnknownDefault = value;
   }
 
   public setGlobalFilters(filters: ExceptionFilter[]) {
@@ -996,24 +1005,19 @@ export class RouterExecutionContext {
    *
    * **Note:** v1 strip-unknown is top-level properties only.
    */
-  private buildStripUnknownHook(
-    paramsMetadata: ParamMetadata[],
-  ): ((ctx: any) => void) | undefined {
+  private buildStripUnknownHook(paramsMetadata: ParamMetadata[]): ((ctx: any) => void) | undefined {
     for (const param of paramsMetadata) {
       if (param.type !== "body") continue;
       const dtoClass = param.dtoClass ?? param.metatype;
       if (!dtoClass) continue;
-      if (!isDtoStripUnknown(dtoClass)) continue;
+      if (!isDtoStripUnknown(dtoClass, this.stripUnknownDefault)) continue;
 
       // Capture the DTO class at route-compile time so the hook is a pure
       // function of the captured class — no per-request lookups needed.
       const capturedClass = dtoClass;
       return (ctx: any) => {
         if (ctx.body && typeof ctx.body === "object" && !Array.isArray(ctx.body)) {
-          ctx.body = stripUnknownProperties(
-            ctx.body as Record<string, unknown>,
-            capturedClass,
-          );
+          ctx.body = stripUnknownProperties(ctx.body as Record<string, unknown>, capturedClass);
         }
       };
     }

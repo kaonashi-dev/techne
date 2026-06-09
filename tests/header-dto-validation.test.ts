@@ -86,7 +86,7 @@ describe("@Headers(DtoClass) — header DTO validation", () => {
     @Controller("hdr-extra")
     class HdrExtraController {
       @Get("/")
-      handle(@Headers(AuthHeaders) h: AuthHeaders) {
+      handle(@Headers(AuthHeaders) _h: AuthHeaders) {
         return { ok: true };
       }
     }

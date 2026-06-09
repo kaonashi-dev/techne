@@ -33,8 +33,9 @@ export interface TechneValidationOptions {
    * body instead of rejected. Applies globally to all routes whose body DTO
    * uses a DTO class (whether via `@Body(Dto)` or typed `@Body()`).
    *
-   * Per-DTO override: `@Dto({ stripUnknown: true })` enables strip-unknown for
-   * that DTO regardless of the global flag.
+   * An explicit per-DTO `@Dto({ stripUnknown })` value overrides this flag in
+   * both directions: `true` enables stripping without the global flag, and
+   * `false` keeps a DTO strict even when the global flag is on.
    *
    * **Note:** v1 strip-unknown is top-level properties only.
    */

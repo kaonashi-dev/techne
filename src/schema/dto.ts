@@ -210,11 +210,14 @@ export function getOrCreateLenientDtoSchema(target: Function): TSchema | undefin
 }
 
 /**
- * Returns true if the DTO class (or its options) was decorated with
- * `@Dto({ stripUnknown: true })`.
+ * Returns true when unknown-property stripping is enabled for the DTO class.
+ *
+ * Resolution: an explicit per-DTO `@Dto({ stripUnknown })` value wins in both
+ * directions; otherwise the `globalDefault` (the factory-level
+ * `validation.stripUnknown` flag) applies.
  */
-export function isDtoStripUnknown(target: Function): boolean {
-  return dtoOptionsRegistry.get(target)?.stripUnknown === true;
+export function isDtoStripUnknown(target: Function, globalDefault = false): boolean {
+  return dtoOptionsRegistry.get(target)?.stripUnknown ?? globalDefault;
 }
 
 function getOrCreateDtoValidator(target: Function): TypeCheck<TSchema> | undefined {

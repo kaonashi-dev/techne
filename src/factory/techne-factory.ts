@@ -236,6 +236,11 @@ export class TechneFactory {
     routesResolver.executionContext.setValidateResponses(
       effectiveOptions?.validateResponses === true,
     );
+    if (effectiveOptions?.validation?.stripUnknown === true) {
+      // Must precede route registration: schemas resolve to their lenient
+      // variant and strip hooks compile during `initializeRoutes`.
+      routesResolver.setStripUnknownDefault(true);
+    }
     const app = new TechneApplication(
       adapter,
       scanner,

@@ -133,3 +133,100 @@ describe("strip-unknown via @Dto({ stripUnknown: true })", () => {
     expect(res.status).toBe(422);
   });
 });
+
+describe("global validation.stripUnknown flag", () => {
+  @Dto()
+  class GlobalPlainDto {
+    @IsString()
+    name!: string;
+  }
+
+  @Dto({ stripUnknown: false })
+  class OptOutDto {
+    @IsString()
+    name!: string;
+  }
+
+  test("global flag strips unknown properties for plain @Dto() classes", async () => {
+    @Controller("global-strip")
+    class GlobalStripController {
+      @Post("/")
+      create(@Body(GlobalPlainDto) body: GlobalPlainDto) {
+        return body;
+      }
+    }
+
+    const app = await TechneFactory.create({
+      controllers: [GlobalStripController],
+      logger: false,
+      validation: { stripUnknown: true },
+    });
+
+    const res = await app.handle(
+      new Request("http://localhost/global-strip", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Alice", extra: true }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.name).toBe("Alice");
+    expect(body.extra).toBeUndefined();
+  });
+
+  test("@Dto({ stripUnknown: false }) overrides the global flag (stays strict)", async () => {
+    @Controller("global-strip-optout")
+    class GlobalStripOptOutController {
+      @Post("/")
+      create(@Body(OptOutDto) body: OptOutDto) {
+        return body;
+      }
+    }
+
+    const app = await TechneFactory.create({
+      controllers: [GlobalStripOptOutController],
+      logger: false,
+      validation: { stripUnknown: true },
+    });
+
+    const res = await app.handle(
+      new Request("http://localhost/global-strip-optout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Alice", extra: true }),
+      }),
+    );
+    expect(res.status).toBe(422);
+  });
+
+  test("without the global flag, plain @Dto() classes stay strict", async () => {
+    @Dto()
+    class StillStrictDto {
+      @IsString()
+      name!: string;
+    }
+
+    @Controller("global-strip-off")
+    class GlobalStripOffController {
+      @Post("/")
+      create(@Body(StillStrictDto) body: StillStrictDto) {
+        return body;
+      }
+    }
+
+    const app = await TechneFactory.create({
+      controllers: [GlobalStripOffController],
+      logger: false,
+    });
+
+    const res = await app.handle(
+      new Request("http://localhost/global-strip-off", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Alice", extra: true }),
+      }),
+    );
+    expect(res.status).toBe(422);
+  });
+});
