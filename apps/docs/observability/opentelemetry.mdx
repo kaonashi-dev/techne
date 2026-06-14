@@ -1,0 +1,157 @@
+---
+title: "OpenTelemetry"
+description: "Opt-in distributed tracing and metrics via the telemetry() plugin, exported over OTLP."
+---
+
+The `telemetry()` plugin adds OpenTelemetry tracing and metrics. It is built on
+the OpenTelemetry SDK directly (not `@elysiajs/opentelemetry`) so spans reuse the
+same W3C trace context Techne already parses for logs — your logs and traces
+share one correlation id — and the framework's fused request hooks stay on the
+fast path.
+
+It is fully opt-in: when telemetry isn't enabled, the plugin registers nothing,
+imports no OpenTelemetry code, and adds zero request-path or cold-start overhead.
+
+## Install
+
+The `@opentelemetry/*` packages are optional peer dependencies — install them
+only when you enable telemetry:
+
+```bash
+bun add @opentelemetry/api \
+  @opentelemetry/sdk-trace-node \
+  @opentelemetry/sdk-trace-base \
+  @opentelemetry/resources \
+  @opentelemetry/semantic-conventions \
+  @opentelemetry/exporter-trace-otlp-http \
+  @opentelemetry/sdk-metrics \
+  @opentelemetry/exporter-metrics-otlp-http
+```
+
+The last two are only needed when metrics are enabled (the default).
+
+## Enable
+
+Register the plugin and point it at an OTLP/HTTP collector:
+
+```ts
+// techne.config.ts
+import { defineTechneConfig } from "@kaonashi-dev/techne/core";
+import { telemetry } from "@kaonashi-dev/techne/telemetry";
+import { AppFeature } from "./src/app.module";
+
+export default defineTechneConfig({
+  features: [AppFeature],
+  plugins: [
+    telemetry({
+      serviceName: "orders-api",
+      exporter: { url: "http://localhost:4318/v1/traces" },
+    }),
+  ],
+});
+```
+
+Telemetry turns on automatically when an exporter endpoint is configured (via
+the `exporter` option or `OTEL_EXPORTER_OTLP_ENDPOINT`), or when you pass
+`enabled: true`. Set `enabled: false` or `OTEL_SDK_DISABLED=true` to force it
+off.
+
+## What gets traced
+
+Each request produces one `SERVER` span:
+
+- **Name** — the matched route template, e.g. `GET /users/:id` (low cardinality).
+- **Parent** — linked to the inbound W3C `traceparent` header when present, so
+  spans stitch into a distributed trace.
+- **Attributes** — `http.request.method`, `http.route`, `url.path`,
+  `url.scheme`, `server.address`, `user_agent.original`, and
+  `http.response.status_code`.
+- **Errors** — thrown exceptions are recorded as span events with the message
+  and stack; 5xx responses set the span status to `ERROR`.
+
+The emitted span's id is written back into the logger's request context, so
+every log line for the request carries the same `traceId`/`spanId` the backend
+shows. See [Instrumenting your code](/observability/instrumenting-code) for
+adding your own child spans.
+
+## Metrics
+
+When `metrics` is enabled (the default), a meter exports three instruments over
+OTLP:
+
+| Instrument | Type | Description |
+| --- | --- | --- |
+| `http.server.request.duration` | histogram (s) | Inbound request latency |
+| `http.server.request.count` | counter | Inbound request count |
+| `http.server.active_requests` | gauge | In-flight requests |
+
+Each is tagged with `http.request.method`, `http.route`, and
+`http.response.status_code`. The active-requests gauge observes the framework's
+existing inflight counter — no extra bookkeeping per request.
+
+Set `metrics: false` to ship traces only.
+
+## Configuration
+
+```ts
+telemetry({
+  enabled: true,                       // default: on when an endpoint is set
+  serviceName: "orders-api",           // default: OTEL_SERVICE_NAME or "techne-service"
+  serviceVersion: "1.4.0",
+  resourceAttributes: { "deployment.environment": "prod" },
+  exporter: {
+    url: "http://collector:4318/v1/traces",
+    metricsUrl: "http://collector:4318/v1/metrics",
+    headers: { "x-api-key": process.env.OTLP_KEY! },
+  },
+  sampler: { ratio: 0.1 },             // or { kind: "always_on" | "always_off" | "parent_based" }
+  instrumentRequests: true,            // default: create the per-request span
+  metrics: true,                       // default: export the HTTP metrics
+  metricExportIntervalMillis: 10_000,
+});
+```
+
+Explicit options always win over environment variables.
+
+### Environment variables
+
+Standard `OTEL_*` variables are honored, so the same config works in
+containerized environments without code changes:
+
+- `OTEL_SDK_DISABLED` — `true` forces telemetry off.
+- `OTEL_SERVICE_NAME`, `OTEL_SERVICE_VERSION`.
+- `OTEL_EXPORTER_OTLP_ENDPOINT` — base endpoint for traces and metrics.
+- `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`, `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT`.
+- `OTEL_EXPORTER_OTLP_HEADERS` — `key1=value1,key2=value2` (merged under
+  `exporter.headers`).
+- `OTEL_TRACES_SAMPLER`, `OTEL_TRACES_SAMPLER_ARG`.
+
+## Exporters
+
+The default exporter is generic OTLP/HTTP, which works with any OpenTelemetry
+Collector, Jaeger, Grafana Tempo, Honeycomb, Axiom, and other vendors. Point
+`exporter.url` at the collector and pass any auth via `exporter.headers`:
+
+```ts
+telemetry({
+  serviceName: "orders-api",
+  exporter: {
+    url: "https://api.honeycomb.io/v1/traces",
+    headers: { "x-honeycomb-team": process.env.HONEYCOMB_KEY! },
+  },
+});
+```
+
+## Lifecycle
+
+The SDK starts in the plugin's `onReady` (after bootstrap, before traffic) and
+is flushed and shut down gracefully during `app.close()`, alongside the
+[graceful shutdown](/health/graceful-shutdown) drain — so in-flight spans aren't
+dropped on exit.
+
+<Note>
+  Prefer the native plugin above. If you specifically want the
+  `@elysiajs/opentelemetry` package instead, you can still register it as an
+  [Elysia plugin](/plugins/using-elysia-plugins) — but it sets up a separate
+  trace context, so its span ids won't match the ones in Techne's logs.
+</Note>

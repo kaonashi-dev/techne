@@ -10,6 +10,14 @@ in the repo root. Notable highlights below.
 
 ### Added
 
+- **OpenTelemetry** observability via the `telemetry()` plugin under
+  `@kaonashi-dev/techne/telemetry`: per-request tracing with W3C `traceparent`
+  parent linkage and log↔span correlation, default HTTP metrics
+  (`http.server.request.duration`/`.count`/`.active_requests`), OTLP/HTTP
+  export, an injectable `Tracer` (`@InjectTracer()`), and `record()` /
+  `getCurrentSpan()` / `setAttributes()` helpers. Opt-in with zero overhead when
+  off; `@opentelemetry/*` are optional peer dependencies. See
+  [OpenTelemetry](/observability/opentelemetry).
 - **Console Commands** subsystem under `@kaonashi-dev/techne/console`:
   `@ConsoleCommand`, `@Argument`, `@Option`, the `Console` output service,
   `TechneFactory.createConsoleApplication()`, the `commands` config field, and

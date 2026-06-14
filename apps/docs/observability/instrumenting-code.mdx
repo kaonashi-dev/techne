@@ -1,0 +1,96 @@
+---
+title: "Instrumenting your code"
+description: "Add custom spans with record(), inject the Tracer, and correlate logs with traces."
+---
+
+Once [OpenTelemetry](/observability/opentelemetry) is enabled, you can add your
+own spans inside controllers and services. The per-request server span is active
+for the whole request, so custom spans nest under it automatically.
+
+## record()
+
+`record(name, fn)` runs `fn` inside a new active child span, auto-ends it, and
+records any thrown exception. It returns whatever `fn` returns (sync or async):
+
+```ts
+import { Injectable } from "@kaonashi-dev/techne/common";
+import { record } from "@kaonashi-dev/techne/telemetry";
+
+@Injectable()
+export class OrdersService {
+  async place(id: string) {
+    const order = await record("orders.load", () => this.repo.find(id));
+    await record("orders.charge", () => this.payments.charge(order), {
+      "order.id": id,
+    });
+    return order;
+  }
+}
+```
+
+The third argument sets attributes on the span. When telemetry is disabled,
+`record()` simply calls `fn` with no span and no overhead, so instrumented code
+runs unchanged in either mode.
+
+## getCurrentSpan() / setAttributes()
+
+To annotate the active span (the request span, or a `record()` child) without
+creating a new one:
+
+```ts
+import { getCurrentSpan, setAttributes } from "@kaonashi-dev/techne/telemetry";
+
+setAttributes({ "tenant.id": tenantId });
+getCurrentSpan()?.addEvent("cache.miss");
+```
+
+Both no-op when there is no active span.
+
+## Injecting the Tracer
+
+For full control, inject the OpenTelemetry `Tracer` with `@InjectTracer()` and
+use the standard API:
+
+```ts
+import { Injectable } from "@kaonashi-dev/techne/common";
+import { InjectTracer } from "@kaonashi-dev/techne/telemetry";
+import type { Tracer } from "@opentelemetry/api";
+
+@Injectable()
+export class ReportService {
+  constructor(@InjectTracer() private readonly tracer: Tracer) {}
+
+  build() {
+    const span = this.tracer.startSpan("report.build");
+    try {
+      // ...
+    } finally {
+      span.end();
+    }
+  }
+}
+```
+
+The injected tracer is a proxy that forwards to the real tracer once telemetry
+starts, so it is safe to inject into singletons constructed at boot.
+
+## Log ↔ trace correlation
+
+Techne writes the emitted server span's `traceId` and `spanId` into the logger's
+request context. In JSON mode every log line for a request carries the same ids
+the tracing backend shows, so you can jump from a log to its trace:
+
+```json
+{ "level": "log", "msg": "charged order", "traceId": "0af765...", "spanId": "b7ad6b..." }
+```
+
+No setup is needed — it works automatically whenever the request logger is on.
+
+## Tokens
+
+The plugin provides these DI tokens from `@kaonashi-dev/techne/telemetry`:
+
+- `TRACER` — the active `Tracer` (use `@InjectTracer()` as shorthand).
+- `TRACER_PROVIDER` — the `TracerProvider`.
+- `METER` — the `Meter` (when metrics are enabled).
+- `TELEMETRY_OPTIONS` — the resolved configuration.

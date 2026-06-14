@@ -89,6 +89,13 @@
             ]
           },
           {
+            "group": "Observability",
+            "pages": [
+              "observability/opentelemetry",
+              "observability/instrumenting-code"
+            ]
+          },
+          {
             "group": "Testing",
             "pages": [
               "testing/overview"
