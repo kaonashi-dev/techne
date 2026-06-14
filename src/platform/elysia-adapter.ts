@@ -137,7 +137,7 @@ const PROBLEM_JSON_HEADERS: Record<string, string> = {
  * Format: `version-traceId-parentId-flags` where version="00",
  * traceId=32 hex chars, parentId=16 hex chars.
  */
-function parseTraceparent(header: string | null): { traceId?: string; spanId?: string } {
+export function parseTraceparent(header: string | null): { traceId?: string; spanId?: string } {
   if (!header) return {};
   const parts = header.split("-");
   if (parts.length !== 4 || parts[0] !== "00") return {};

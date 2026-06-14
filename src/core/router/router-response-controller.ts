@@ -59,6 +59,23 @@ export function isProductionEnv(): boolean {
 }
 
 /**
+ * Optional observer invoked once per mapped exception, BEFORE the problem
+ * document is built. The telemetry plugin registers one to record the thrown
+ * error on the active OpenTelemetry span — handler exceptions are caught by the
+ * route wrapper and turned into responses here, so they never reach Elysia's
+ * `onError`, making `mapException` the single choke point. Core stays unaware of
+ * OTel; the observer is a plain callback and failures inside it never affect
+ * error mapping.
+ */
+type MappedExceptionObserver = (error: unknown, context: unknown) => void;
+let mappedExceptionObserver: MappedExceptionObserver | undefined;
+
+/** Register (or clear, with `undefined`) the mapped-exception observer. */
+export function setMappedExceptionObserver(observer: MappedExceptionObserver | undefined): void {
+  mappedExceptionObserver = observer;
+}
+
+/**
  * B6: per-(status, slug) cache of RFC 7807 problem templates and headers.
  *
  * The base problem object only depends on `(status, title, type)`, all of
@@ -129,6 +146,13 @@ function getProblemTemplate(
  */
 export class RouterResponseController {
   public mapException(context: any, error: unknown): ProblemDocument {
+    if (mappedExceptionObserver) {
+      try {
+        mappedExceptionObserver(error, context);
+      } catch {
+        // Never let an observer (e.g. telemetry) break error mapping.
+      }
+    }
     const isProduction = IS_PRODUCTION;
     const instance = this.getInstance(context);
     const requestId = this.getRequestId(context);

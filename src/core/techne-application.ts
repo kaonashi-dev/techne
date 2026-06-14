@@ -274,6 +274,15 @@ export class TechneApplication {
     return this.adapter.getInstance();
   }
 
+  /**
+   * Current count of in-flight HTTP requests, delegated to the HTTP adapter.
+   * Surfaced so the telemetry plugin's `http.server.active_requests` gauge can
+   * observe live concurrency without duplicating the adapter's counter.
+   */
+  getInflightCount(): number {
+    return this.adapter.getInflightCount();
+  }
+
   getContainer(): Container {
     return this.container;
   }
