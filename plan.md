@@ -1,189 +1,347 @@
-# Security Hardening Roadmap — HTTP, Middleware, Validation
+# Techne HTTP Client — Laravel-style `fetch` wrapper (`@kaonashi-dev/techne/http`)
 
-> Status: **COMPLETE** — all 5 phases merged to `main` (2026-06-09).
-> P1 #58, P2 #61, P3 #59, P4 #60, P5 #62, each with post-review fix commits.
-> Integrated suite: 702 tests green; lint/typecheck clean.
+**Status: PLANNED.** New first-class module that gives the framework an expressive, fluent
+outgoing HTTP client modeled on [Laravel's HTTP Client](https://laravel.com/docs/13.x/http-client),
+built as a thin wrapper over the native `fetch`. Full Laravel parity (requests, fluent
+configuration, response inspection, error handling, retries/timeouts, concurrency,
+preconfigured clients/macros, middleware, and a testing/fake layer).
+
+> This plan **replaces** the prior (completed) Security Hardening Roadmap, which remains in git
+> history (`ac3d8d3 docs: mark security roadmap complete in plan.md`).
+
+---
 
 ## Context
 
-The framework already has strong security foundations: automatic TypeBox validation for body/query/params with strict `additionalProperties: Never`, RFC 7807 problem+json errors that suppress internals in production, timing-safe JWT verification (HS256), guards, and CORS. But it lacks the standard production protections entirely: **no security headers, no HTTP rate limiting, no body-size limits or timeouts, no header validation, no upload validation, no cookie/CSRF support, and no runtime validation of queue payloads or console args**.
+Techne already ships `src/contract` — a **typed RPC client** (`createClient<RouteMap>()`) for
+calling *known* routes of a Techne app by path key. It is great for app-to-app typed calls but is
+deliberately narrow: you must model every route in a `RouteMap`, and it throws on any non-2xx.
 
-This roadmap closes those gaps in **5 PRs**. All four scope areas confirmed: core HTTP hardening, validation deepening, CSRF + cookies, internal input surfaces.
+What's missing is a **general-purpose outgoing HTTP client** for arbitrary third-party URLs
+(GitHub, Stripe, internal microservices, webhooks) with an ergonomic, chainable DX. Today a
+developer drops down to raw `fetch` and re-writes header/query/body/error plumbing every time.
 
-**Conventions for every phase** (verified against the code):
+The goal: a `Http` facade you **import and use directly, like a service of the app** —
+`Http.withToken(t).acceptJson().get(url)` — plus `createHttpClient(options)` for reusable,
+preconfigured clients. It must reuse the proven helpers already living in `src/contract/client.ts`
+(query-string building, header merging, RFC 7807 parsing) and follow every existing module
+convention so it feels native to the framework.
 
-- Options via `TechneFactory.create({...})` following the `CorsOptions` idiom (`src/core/http-options.ts`, `src/factory/techne-factory.ts`); features compiled into fused hooks / route `beforeHandle` at boot — zero per-request cost when disabled (the codebase is performance-obsessed).
-- New `src/security/` module with a `"./security"` subpath export in `package.json` (mirrors `./jwt`, `./mq`).
-- **Critical constraint (verified):** the fused `onError` only maps `code === "VALIDATION"` (`src/platform/elysia-adapter.ts:405`). Thrown exceptions in `beforeHandle` middleware do NOT get RFC 7807 treatment. Middleware rejections must use the versioning-middleware idiom (`src/core/router/routes-resolver.ts:82-98`): `ctx.set.status = N; return body` — returning `RouterResponseController.mapException(ctx, exception)` for canonical problem+json.
-- Descriptive PR titles/branch names (no plan codes). Run `bun install --frozen-lockfile` if tests fail with "Cannot find package 'elysia'".
+### Goals
+- One-import ergonomic usage: `import { Http } from "@kaonashi-dev/techne/http"`.
+- Reusable preconfigured clients via `createHttpClient({ baseUrl, headers, token, ... })`.
+- Faithful Laravel surface: same method names and semantics wherever they map cleanly to `fetch`.
+- **Does NOT throw on 4xx/5xx by default** (Laravel semantics); explicit `throw()` opt-in.
+- First-class testability (`Http.fake()`, `assertSent`, `preventStrayRequests`).
+
+### Non-goals / explicit omissions (with rationale)
+- `withDigestAuth` — digest challenge/response isn't expressible over `fetch`; **omitted** (Basic + Bearer supported).
+- Guzzle-specific `withOptions` keys (e.g. `debug`, `allow_redirects` proxy opts) — replaced by passing a raw `RequestInit` through `withOptions()`.
+- Batch `defer()` (Laravel runs deferred batches after the HTTP response is flushed) — that's a server-request-lifecycle feature with no analogue in a standalone client; `batch()` is provided **without** `defer()`.
+- URI-template `withUrlParameters` — supported as a **minimal** `{var}` / `{+var}` expander only (not the full RFC 6570 operator set).
 
 ---
 
-## Phase 1 — Security headers + native body limit/timeout + client-IP foundation
+## Conventions (mirroring the existing codebase)
 
-**Files:** create `src/security/security-headers.ts`, `src/security/client-ip.ts`, `src/security/index.ts`, `src/platform/headers.ts` (shared `applyHeader`/`applyHeaders` merge helpers); modify `src/core/http-options.ts`, `src/factory/techne-factory.ts`, `src/platform/elysia-adapter.ts`, `src/core/techne-application.ts:204`, `package.json`, `README.md`. Tests: `tests/security-headers.test.ts`, `tests/server-options.test.ts`.
+- **Module location:** all code in `src/http/`, kebab-case filenames, `PascalCase` classes, `UPPER_SNAKE_CASE` tokens — matches `src/jwt`, `src/security`, `src/contract`.
+- **Public surface:** a barrel `src/http/index.ts` + a `"./http"` subpath in `package.json` `exports`, mirroring the existing `"./contract"` entry exactly.
+- **Errors:** the client throws its **own** `RequestException` / `ConnectionException` (these are *outgoing-call* failures and are unrelated to the server-side `HttpException`/RFC 7807 `mapException` path). When the remote returns RFC 7807, we parse it into `RequestException.problem` using the same shape as `ProblemDocument`.
+- **Reuse, don't reinvent:** copy the four tiny *pure* helpers from `src/contract/client.ts` into `src/http/internal.ts` (they are currently private to that file) and **import the `ProblemDocument` type from `../contract/types`** (already public) so the wire shape stays identical. The contract module is left untouched to avoid regression risk; a future cleanup can hoist these into a shared util.
+- **Tests:** `tests/http-*.test.ts`, run with `bun test`. Reuse the `makeFetch()` injected-`fetch` mock pattern from `tests/contract-client.test.ts` for engine tests; use the new `Http.fake()` for the testing-layer tests.
+- **Units (Laravel parity, documented inline):** `timeout(seconds)` / `connectTimeout(seconds)` are in **seconds**; `retry(times, sleepMs)` sleep is in **milliseconds**.
 
-**API:**
+---
 
-```ts
-TechneFactory.create({
-  securityHeaders: true | SecurityHeadersOptions,  // preset: nosniff, X-Frame-Options SAMEORIGIN,
-                                                   // HSTS 180d+subdomains, Referrer-Policy no-referrer,
-                                                   // COOP/CORP same-origin; CSP opt-in; `custom` escape hatch
-  server: { maxRequestBodySize?: number; idleTimeout?: number },  // → Bun.serve natively
-});
-resolveClientIp(ctx, trustProxy?: boolean | { header?, hops? })   // src/security/client-ip.ts
+## Architecture
+
+```
+src/http/
+├── index.ts            # barrel: Http, createHttpClient, classes, types, testing utils
+├── factory.ts          # `Http` (Proxy facade) + createHttpClient() + global config + macros
+├── pending-request.ts  # PendingRequest — fluent builder + send() engine (retry/timeout)
+├── http-response.ts    # HttpResponse — buffered, sync inspectors + throw helpers
+├── exceptions.ts       # RequestException, ConnectionException
+├── pool.ts             # pool() + batch() concurrency
+├── fake.ts             # fake/response/sequence + assertions + preventStrayRequests
+├── internal.ts         # reused pure helpers (query/headers/baseUrl/problem)
+└── types.ts            # HttpClientOptions, RetryConfig, BodyFormat, RecordedRequest, etc.
 ```
 
-**Design:**
-
-- Compile headers once at boot to a frozen record (the `compileCorsOptions` pattern, `elysia-adapter.ts:585-637`); apply in **both** fused `onAfterHandle` AND `onError` — error responses bypass `onAfterHandle` and need the headers most.
-- Extract the duplicated 3-branch `set.headers` merge (currently in `echoRequestId`, `echoInboundRequestId`, CORS hook, and the 422 mapping) into shared `applyHeader`/`applyHeaders` helpers — P2/P4 reuse them. `applyHeaders` copies on the null branch so shared boot-compiled records are never mutated in place.
-- Body limit/timeout: change `techne-application.ts:204` to object-form `listen({ port, ...serverOptions }, callback)` — Elysia forwards `Partial<Serve>` to `Bun.serve`. Prefer native enforcement (pre-parse 413, socket-level timeout) over reimplementation.
-- `resolveClientIp`: default `ctx.server?.requestIP()`; consult `X-Forwarded-For` only when `trustProxy` explicitly enabled (rightmost-hops semantics). There is no trusted-proxy handling today — default off.
-
-**Tests:** headers on 200/404/422/thrown-error responses; preset vs overrides vs per-header `false`; no headers when option absent (zero-cost contract); client-IP unit tests (XFF ignored without trustProxy); real-socket 413 test (`app.handle()` bypasses Bun.serve — must `listen` on ephemeral port).
-
-**Risks:** HSTS over local HTTP (emit always — browsers ignore HSTS on plain HTTP; document). `idleTimeout` ≠ total handler deadline — defer `@Timeout(ms)` decorator, document distinction. Raw `Response` short-circuits (CORS preflight 204, draining 503) bypass the hooks — security headers intentionally absent there; Bun's native 413 is plain-text, not problem+json.
+**Request flow (`PendingRequest.send`):**
+1. Resolve URL: join `baseUrl` + path, expand `{var}` url params, append merged query string (`buildQueryString`).
+2. Build headers: defaults → `accept`/content-type (from body format) → auth → per-call. (`mergeHeaders`)
+3. Build body by format: `json` → `JSON.stringify`; `form` → `URLSearchParams`; `multipart` → `FormData` (+ `attach`ments, let `fetch` set the boundary); `body` → raw with explicit content-type.
+4. Build a native `Request`; run **request middleware** (per-request + global).
+5. Wrap with timeout (`AbortSignal.timeout(seconds*1000)`, combined with any caller signal).
+6. **Resolve fetch implementation** in this order: active **fake** (if installed and not bypassed) → client/`withOptions` injected `fetch` → `globalThis.fetch`.
+7. Retry loop: on `ConnectionException` or a "retryable" response, sleep + retry up to `times`; record the request/response for the fake layer.
+8. Run **response middleware**, buffer the body once, return `HttpResponse`. (Throwing is opt-in via `HttpResponse.throw()` or `retry(..., throw: true)`.)
 
 ---
 
-## Phase 2 — HTTP rate limiting
+## Phase 1 — Core engine (`PendingRequest`, `HttpResponse`, exceptions)
 
-**Files:** create `src/security/rate-limit.ts`, `src/decorators/rate-limit.decorator.ts`, `tests/rate-limit.test.ts`; modify `src/core/http-options.ts`, `src/factory/techne-factory.ts`, `src/platform/elysia-adapter.ts`, `src/core/router/router-execution-context.ts` (`create()` ~362-441), `src/core/router/router-explorer.ts`, `docs/errors/too-many-requests.md`, `README.md`.
+**Files:** create `src/http/internal.ts`, `src/http/types.ts`, `src/http/exceptions.ts`,
+`src/http/http-response.ts`, `src/http/pending-request.ts`.
 
-**API:**
+**`internal.ts`** — copy verbatim from `src/contract/client.ts`: `buildQueryString`, `mergeHeaders`,
+`normalizeBaseUrl`, `parseProblem`, `isPlainObject`. `import type { ProblemDocument } from "../contract/types"`.
 
+**`exceptions.ts`:**
 ```ts
-TechneFactory.create({ rateLimit: { limit: 100, windowMs: 60_000, burst?, store?, keyExtractor?,
-                                    trustProxy?, headers? /* default true */, exclude? } });
-@RateLimit({ limit: 10, windowMs: 60_000 })  // method/controller override
-@RateLimit(false)                            // exempt from global limiter
-
-interface RateLimitStore { consume(key, policy): RateLimitDecision | Promise<RateLimitDecision> }
+export class RequestException extends Error {
+  readonly response: HttpResponse;
+  readonly status: number;
+  readonly problem?: ProblemDocument;          // parsed RFC 7807, when present
+  constructor(response: HttpResponse);          // message = problem?.title ?? `HTTP request returned status ${status}` (truncated to 120 chars)
+}
+export class ConnectionException extends Error {  // network failure / timeout / abort
+  readonly cause?: unknown;
+}
 ```
 
-**Design:**
+**`http-response.ts`** — wraps a native `Response` with its body **pre-buffered as text** (so
+inspectors are synchronous like Laravel):
+```ts
+class HttpResponse {
+  status(): number;  statusText(): string;
+  body(): string;  json<T = unknown>(key?: string): T;  object<T = unknown>(): T;
+  headers(): Headers;  header(name: string): string | null;
+  successful(): boolean; ok(): boolean; redirect(): boolean;
+  failed(): boolean; clientError(): boolean; serverError(): boolean;
+  created(): boolean; accepted(): boolean; noContent(): boolean;
+  unauthorized(): boolean; forbidden(): boolean; notFound(): boolean;
+  unprocessableEntity(): boolean; tooManyRequests(): boolean;     // + the rest of Laravel's helpers
+  throw(cb?: (res, e) => void): this;  throwIf(c): this;  throwUnless(c): this;
+  throwIfStatus(code): this;  throwUnlessStatus(code): this;
+  throwIfClientError(): this;  throwIfServerError(): this;
+  onError(cb: (res) => void): this;
+  toException(): RequestException | undefined;
+  readonly raw: Response;     // escape hatch to the native Response (already-consumed body)
+}
+```
+`json(key?)` supports an optional dot-path (`json("data.id")`) like Laravel's `$response->json('x.y')`.
 
-- **Global limiter** in fused `onRequest` (before routing/guards/body parsing); rejects with a direct `Response` (the draining-503 idiom, `elysia-adapter.ts:237-242`) carrying problem+json 429 + `Retry-After` + IETF `RateLimit-*` headers.
-- **Per-route** hook prepended in `RouterExecutionContext.create`: `beforeHandle = [rateLimitHook?, guardHook?, ...middlewares]` — limiter shields JWT verification cost. Rejection via `set.status` + `responseController.mapException(ctx, new TooManyRequestsException(...))` (do NOT throw — see critical constraint).
-- Default store: `InMemoryTokenBucketStore` — `Map<key, {tokens, lastRefillMs}>`, continuous refill, capacity `burst ?? limit`, LRU-capped at 10k entries (Map-reinsertion trick from the CORS dynamic-header cache). The MQ `RateLimited` middleware validates the token-bucket pattern but has MQ `release()` semantics — reuse the pattern, not the code. Pluggable `RateLimitStore` is the multi-instance/Redis extension point.
-- Key: `resolveClientIp` from P1. No resolvable IP (`app.handle()` path) → fail-open + one-time warning. Compile sync vs async hook variant at boot based on store.
+**`pending-request.ts`** — the fluent builder. Mutating fluent methods return `this` (Laravel
+semantics). Phase-1 subset of fluent methods:
+`baseUrl, withHeaders, withHeader, replaceHeaders, accept, acceptJson, contentType, withToken,
+withBasicAuth, asJson, asForm, asMultipart, attach, withBody, withQueryParameters,
+withUrlParameters, withOptions`. Terminal methods returning `Promise<HttpResponse>`:
+`get(url, query?), head(url), post(url, data?), put(url, data?), patch(url, data?),
+delete(url, data?), send(method, url, opts?)`. (Timeout/retry/middleware land in later phases but
+the `send()` skeleton is built here.)
 
-**Tests:** bucket math (refill/burst/exhaustion/key isolation); 429 problem+json body + headers; success-path `RateLimit-Remaining`; decorator override/exemption/controller inheritance; async store; XFF only with trustProxy; zero `beforeHandle` entries when disabled.
+**Design:** `withToken(t, type="Bearer")` → `Authorization: Bearer t`; `withBasicAuth` →
+`Authorization: Basic base64(user:pass)`. Default body format is `json`. `data` for `get` merges
+into the query string; `data` for body methods becomes the request body per format.
+
+**Tests** (`tests/http-client.test.ts`, `makeFetch` pattern): GET with array query expansion; POST
+JSON sets `content-type` + stringifies; `asForm` → urlencoded; `asMultipart`/`attach` → `FormData`;
+`withBody` raw + content-type; `withToken`/`withBasicAuth` set `Authorization`; `withHeaders` merge
+vs `replaceHeaders`; `baseUrl` join + `withUrlParameters` expansion; response inspectors
+(`status/ok/successful/failed/clientError/serverError/json/body/header`); **no throw on 4xx by
+default**; `throw()` raises `RequestException` carrying the response + parsed `problem`;
+`throwIf/throwUnless/throwIfStatus`.
+
+**Risks:** native `Response` body is one-shot — buffer text exactly once (after response middleware)
+and back `json()`/`body()` from it.
 
 ---
 
-## Phase 3 — Validation deepening: header DTOs, strip-unknown, upload validation
+## Phase 2 — Timeout & retries
 
-**Files:** modify `src/decorators/params.decorator.ts`, `src/decorators/routes.decorator.ts` (`RouteSchema.headers`), `src/core/router/router-explorer.ts` (`resolveSchema` ~189-222), `src/platform/elysia-adapter.ts:512-517` (add `elysiaOptions.headers` — verified absent today), `src/schema/dto.ts`, `src/core/router/router-execution-context.ts` (file extractor ~140-152), `src/factory/techne-factory.ts`, `README.md`. Create `tests/header-dto-validation.test.ts`, `tests/upload-validation.test.ts`.
+**File:** extend `pending-request.ts`; add `RetryConfig` to `types.ts`.
+
+**API:** `timeout(seconds)`, `connectTimeout(seconds)`,
+`retry(times, sleep?, when?, opts?)` where `sleep` is `number` (ms) | `number[]` |
+`(attempt, error) => number`, `when?: (error, request) => boolean`, and `opts?: { throw?: boolean }`
+(default `throw: true` → throws `RequestException` after exhausting retries; `throw: false` returns
+the last `HttpResponse`).
+
+**Design:** timeout via `AbortSignal.timeout(seconds*1000)` merged with a caller-supplied signal;
+an abort/network error becomes `ConnectionException`. The retry loop retries on `ConnectionException`
+and on responses where `when` (default: `failed()`) returns true. `when` also receives the request
+so a token can be refreshed mid-retry (Laravel's 401→refresh pattern). **Note:** `fetch` has no
+separate connect phase — `connectTimeout` is accepted for parity and folded into the overall
+deadline (documented).
+
+**Tests:** retries N times then succeeds; `when` predicate limits retries; `throw: false` returns
+last response; timeout rejects → `ConnectionException`; array-backoff sleeps per entry (assert via a
+fake clock / injected sleeper).
+
+**Risks:** keep real wall-clock sleeps out of tests — inject the sleeper (`opts.sleeper` internal seam).
+
+---
+
+## Phase 3 — `Http` facade, preconfigured clients & global config
+
+**File:** `src/http/factory.ts`.
+
+**`createHttpClient(options)`** returns a client object exposing the **same** fluent entrypoints +
+terminal methods, each seeding a fresh `PendingRequest` from the client's defaults:
+```ts
+interface HttpClientOptions {
+  baseUrl?: string;
+  headers?: HeadersInit;
+  token?: string;                 // bearer
+  basicAuth?: { username: string; password: string };
+  timeout?: number;               // seconds
+  retry?: RetryConfig;
+  fetch?: typeof globalThis.fetch; // injectable (tests / custom transport)
+}
+const github = createHttpClient({ baseUrl: "https://api.github.com", token: env.GH });
+const repos = await github.acceptJson().get("/user/repos");
+```
+This is the **"use it like a service"** path: define `src/services/github.client.ts`, export the
+instance, import it anywhere.
+
+**`Http` facade** = a default client (`createHttpClient({})`) wrapped in a **`Proxy`** so that
+registered **macros** resolve as methods (Laravel's `Http::github()`):
+```ts
+Http.macro("github", () => Http.withToken(env.GH).baseUrl("https://api.github.com"));
+const res = await Http.github().get("/user");
+```
+The `Proxy` `get` trap: known method → bound facade method; else registered macro → its factory;
+else `undefined`. The facade also hosts global config: `Http.globalOptions(RequestInit)`,
+`Http.globalRequestMiddleware(fn)`, `Http.globalResponseMiddleware(fn)`.
+
+**Tests:** `createHttpClient` bakes baseUrl/headers/token into every call; per-call overrides win;
+`Http.get(...)` shorthand works; `Http.macro` registration + invocation; `globalOptions` merged into
+requests.
+
+---
+
+## Phase 4 — Concurrency (`pool`, `batch`)
+
+**File:** `src/http/pool.ts`.
 
 **API:**
-
 ```ts
-@Dto() class AuthHeaders { @IsString() @MinLength(10) "x-api-key"!: string }  // lowercase quoted keys
-handler(@Headers(AuthHeaders) h: AuthHeaders) {}
-
-TechneFactory.create({ validation: { stripUnknown: true } });  // global; @Dto({ stripUnknown }) per-DTO override
-
-@UploadedFile("avatar", { maxSize: 5_242_880, mimeTypes: ["image/png", "image/*"], required: true })
+const responses = await Http.pool((p) => [ p.get(a), p.get(b), p.as("third").get(c) ], { concurrency: 5 });
+responses[0].ok(); responses["third"].ok();
 ```
+`pool(cb, opts?)` — `cb` receives a `Pool` whose `get/post/...` return **deferred** request
+descriptors (not yet executed); `as(name)` keys a result. Returns an array (with named keys mixed in)
+resolved with a concurrency limiter (default unbounded). `batch(cb)` layers
+`.before/.progress/.then/.catch/.finally/.concurrency(n)/.send()` over the same primitive
+(**no** `defer()` — see Non-goals).
 
-**Design:**
+**Design:** each `Pool` method captures a configured `PendingRequest` and returns
+`() => Promise<HttpResponse>`; a small async pool runner enforces `concurrency`.
 
-- **Header DTOs:** Elysia validates `headers` natively once the schema is injected; `ctx.headers` keys are lowercased so case-insensitivity is by construction. New `buildHeaderSchemaFromClass` in `dto.ts`: lowercases keys, **forces `additionalProperties: true`** (strict default would reject every request — headers always carry `host`, `accept`, …), cached in a separate `headerSchemaRegistry` so the strict body validator is untouched. Failures flow through the existing `code === "VALIDATION"` → 422 mapping for free.
-- **Strip-unknown:** inject a lenient schema clone (`additionalProperties: true`, second cache — never mutate the compiled strict validator); prepend a boot-compiled step running `stripUnknownProperties(ctx.body, dtoClass)` (`dto.ts:291-296`, already same-ref fast path) before arg binding, only on affected routes. Per-DTO overrides global; both absent → identical code path to today. v1 = top-level only (document).
-- **Uploads:** decorator options, not DTO. The `file` extractor is excluded from codegen fast path already, so wrapping it costs nothing for non-upload routes. Check `instanceof Blob`, `required`, `size`, MIME (exact + `type/*` wildcard); throw `UnprocessableEntityException` with DTO-style `errors` array — extractor throws DO route through `mapException`, unlike `beforeHandle`. `file.type` is client-declared; magic-byte sniffing out of scope (document).
-
-**Tests:** header DTO valid/422/extra-headers-tolerated/case-insensitive (`X-API-Key` sent); strip-unknown global+per-DTO both directions, strict 422 preserved when off; uploads oversize/wrong-MIME/wildcard/required-missing; options-less `@UploadedFile` unchanged (`tests/swagger-health-upload.test.ts` must pass); `tests/openapi-emitter.test.ts` unaffected.
+**Tests:** all requests dispatched concurrently; positional + named access; `concurrency` cap
+respected (assert max in-flight via instrumented fetch); `batch` lifecycle callbacks fire in order.
 
 ---
 
-## Phase 4 — Cookie helpers + CSRF (double-submit)
+## Phase 5 — Middleware
 
-**Files:** create `src/security/cookies.ts`, `src/security/csrf.ts`, `src/decorators/cookie.decorator.ts`, `src/decorators/csrf-exempt.decorator.ts`, `tests/cookies.test.ts`, `tests/csrf.test.ts`; modify `src/platform/elysia-adapter.ts` (Elysia ctor `cookie` config), `src/factory/techne-factory.ts`, `src/decorators/params.decorator.ts`, `src/core/router/router-execution-context.ts` (new `setGlobalMiddlewares()` sibling of `setGlobalGuards` ~348-352), `README.md`.
+**File:** extend `pending-request.ts` + `factory.ts`.
+
+**API:** `withRequestMiddleware((req: Request) => Request | Promise<Request>)`,
+`withResponseMiddleware((res: Response) => Response | Promise<Response>)`, plus global
+`Http.globalRequestMiddleware` / `Http.globalResponseMiddleware`. We operate on the native
+`Request`/`Response` (the natural analogue of Laravel's PSR-7 middleware).
+
+**Design:** global middleware runs first, then per-request, in registration order. Request
+middleware runs after the body/headers are assembled (step 4); response middleware runs before the
+body is buffered (step 8).
+
+**Tests:** request middleware injects an outgoing header (assert received); response middleware
+rewrites/inspects a header; global vs per-request ordering.
+
+---
+
+## Phase 6 — Testing layer (`fake`, assertions, stray-request guard)
+
+**File:** `src/http/fake.ts` (module-level mutable state on the facade).
 
 **API:**
-
 ```ts
-TechneFactory.create({
-  cookies: { secrets: env.COOKIE_SECRET, sign: ["session"] },           // → Elysia-native jar config
-  csrf: { cookieName?, headerName? /* x-csrf-token */, methods? /* POST/PUT/PATCH/DELETE */, exclude?, cookie? },
-});
-@Cookie("session") session: string | undefined     // param decorator
-setCookie(jar, "session", token)                   // defaults: httpOnly, sameSite=lax, secure in prod, path=/
-@CsrfExempt()                                      // method/controller, @Public() metadata pattern
-csrfProtection(opts)                               // importable for @Use() scoping
+Http.fake();                                   // every request → empty 200
+Http.fake({ "github.com/*": Http.response({ foo: "bar" }, 200),
+            "google.com/*": "Hello", "*": 200 });
+Http.fake((req) => Http.response("Hi", 200));  // closure
+Http.response(body?, status=200, headers?);    // string | object(JSON) | number(status)
+Http.sequence().push(body, status).pushStatus(404).whenEmpty(Http.response());
+Http.fakeSequence();                           // sequence applied to all URLs
+Http.preventStrayRequests();  Http.allowStrayRequests(["http://127.0.0.1:*"]);
+Http.assertSent((req) => boolean);  Http.assertNotSent(fn);
+Http.assertSentCount(n);  Http.assertNothingSent();
+Http.recorded((req, res) => boolean);          // → [request, response][]
 ```
 
-**Design:**
+**Design:** when a fake is installed, `send()` resolves the fetch impl to the fake matcher
+(URL-glob `*` wildcards), records `{ request, response }`, and returns the stub; unmatched +
+`preventStrayRequests` (and not in `allowStrayRequests`) → throw. Recorded requests are wrapped in a
+`RecordedRequest` exposing `url()`, `method()`, `hasHeader(name, value?)`, `header(name)`, `body()`,
+`data()`/`["key"]` for assertions. `Http.fake()` (or `Http.fakeReset()`) clears all state — call in
+`beforeEach`.
 
-- Lean on Elysia's built-in reactive cookie jar (signing via ctor config — zero cost when `undefined`); framework adds the decorator, secure-defaults `setCookie` helper, and docs. No custom parser.
-- CSRF as `beforeHandle` (needs cookie jar + per-route exemption metadata). Safe methods: mint 32 random hex bytes into cookie if absent (NOT HttpOnly — double-submit requires JS-readable; document). Unsafe methods: `crypto.timingSafeEqual` compare of header vs cookie (the `JwtService` primitive); mismatch → `set.status` + `mapException(ctx, new ForbiddenException("CSRF token mismatch"))`.
-- Global wiring: `csrf` option compiles ONE middleware; `setGlobalMiddlewares` appends it for every route lacking `@CsrfExempt` (read via `Reflector.getAllAndOverride`, the `JwtAuthGuard` pattern). Cookie name `__Host-csrf` when secure, `csrf` over plain HTTP dev.
-- Document: pure-Bearer APIs should exempt (CSRF only matters for cookie-auth'd browser clients); pairing with CORS `credentials: true`.
-- **Verify early in PR:** Elysia 1.4.x cookie jar availability inside `beforeHandle`; fallback = parse `cookie` header directly in middleware.
-
-**Tests:** cookie read/signed roundtrip/`setCookie` defaults + `__Host-` constraints; CSRF GET-mints / POST-without-header 403 problem+json / match 200 / mismatch 403 / exemptions / exclude paths / length-mismatch doesn't throw.
+**Tests** (`tests/http-client-fake.test.ts`): empty-200 default; URL-map + wildcard fallback;
+closure responder; `sequence`/`whenEmpty`; `assertSent`/`assertNotSent`/`assertSentCount`/
+`assertNothingSent`; `recorded()` filter; `preventStrayRequests` throws on unmatched and
+`allowStrayRequests` lets a pattern through.
 
 ---
 
-## Phase 5 — Internal inputs: queue/MQ payload validation + console arg validation
+## Phase 7 — Packaging, docs & verification
 
-**Files:** modify `src/mq/define-queue.ts`, `src/mq/dispatcher.ts`, `src/mq/queue.ts`, `src/mq/registry.ts` (worker-handler wrap, two sites), `src/mq/errors.ts` (new `QueuePayloadValidationError`), `src/queue/define-queue.ts` + `src/queue/worker.ts` (legacy mirror, dispatch-time only), `src/console/types.ts`, `src/console/decorators/` (new `@Options(Dto)`), `src/console/argument-resolver.ts`, `README.md`. Create `tests/mq-payload-validation.test.ts`, `tests/console-options-validation.test.ts`.
+**Files:** `src/http/index.ts` (barrel), `package.json` (add export), `README.md` (usage snippet).
 
-**API:**
+**Barrel** exports `Http`, `createHttpClient`, `PendingRequest`, `HttpResponse`,
+`RequestException`, `ConnectionException`, all public types, and the testing helpers — with a header
+comment matching `src/contract/index.ts`.
 
-```ts
-defineQueue({ name: "tasks", jobs: { "initiate-task": {} as InitiateTask },
-              schemas: { "initiate-task": InitiateTaskDto } },   // @Dto class or raw TSchema
-            { validate: "dispatch" | "consume" | "both" });      // default: off
-
-@Command("deploy") run(@Options(DeployOptions) opts: DeployOptions) {}  // @IsString/@Min/etc on the class
+**`package.json` export** (insert after `"./contract"`, exact shape of existing entries):
+```json
+"./http": {
+  "bun": "./src/http/index.ts",
+  "import": "./src/http/index.ts",
+  "types": "./dist/types/http/index.d.ts"
+}
 ```
 
-**Design:**
-
-- Validators compile once in `finalizeQueueDef` (DTO → existing `getOrCreateDtoValidator`; raw schema → `TypeCompiler.Compile`). Per-queue boot-time boolean — queues without schemas pay nothing.
-- Dispatch failure throws synchronously at producer; consume failure throws `QueuePayloadValidationError` from worker wrapper → existing `@OnFailure`/`failed()` flow. Schemas describe the **wire shape** (post-JSON-roundtrip: Dates are strings — document). Enforce `schemas` keys ⊆ `jobs` keys with boot `TypeError`.
-- Console: `@Options(Dto)` collects parsed `--flags` into one bag, coerces via design types, validates via existing `firstValidationError`, surfaces as `ConsoleArgumentError` (existing type). Existing positional/option decorators untouched.
-
-**Tests:** valid/invalid dispatch with property-level errors; `validate: "consume"` enqueues bad payload but worker fails into `@OnFailure`; unset = back-compat passthrough; raw-TSchema; legacy queue path; console valid/invalid flags, coercion-before-validation, error format via `ConsoleTester`.
+**README:** short "HTTP Client" section with the `Http.withToken(...).get(...)` and
+`createHttpClient(...)` service-style examples.
 
 ---
 
-## Reused machinery (cross-phase)
+## Reused machinery
 
-| Existing utility | Where | Used by |
+| Utility | Source | Use in `src/http` |
 |---|---|---|
-| `RouterResponseController.mapException` | `src/core/router/router-response-controller.ts` | P2 429, P3 upload 422, P4 403 |
-| Compile-at-boot frozen records (`compileCorsOptions`) | `elysia-adapter.ts:585-637` | P1, P2 |
-| `set.status + return body` middleware idiom | `routes-resolver.ts:82-98` (verified) | P2, P4 |
-| `stripUnknownProperties` (same-ref fast path) | `src/schema/dto.ts:291-296` | P3 |
-| `timingSafeEqual` idiom | `src/jwt/jwt.service.ts` | P4 |
-| `@Public()` metadata + `Reflector.getAllAndOverride` | `src/jwt/jwt-auth.guard.ts:16-19` | P2 `@RateLimit`, P4 `@CsrfExempt` |
-| `TooManyRequestsException` + `docs/errors/too-many-requests.md` | `src/exceptions/http-errors.ts` | P2 |
-| `getOrCreateDtoSchema` / compiled validator registries | `src/schema/dto.ts` | P3, P5 |
-| CORS LRU Map-reinsertion cache idiom | `elysia-adapter.ts:564-581` | P2 store |
+| `buildQueryString` (array → repeated keys) | `src/contract/client.ts` | URL query assembly (copied into `internal.ts`) |
+| `mergeHeaders` | `src/contract/client.ts` | header precedence (defaults → per-call) |
+| `normalizeBaseUrl` | `src/contract/client.ts` | trim trailing slash on `baseUrl` |
+| `parseProblem` | `src/contract/client.ts` | parse RFC 7807 into `RequestException.problem` |
+| `ProblemDocument` type | `src/contract/types.ts` (imported) | shared wire shape — **not** re-declared |
+| `makeFetch()` mock pattern | `tests/contract-client.test.ts` | engine tests inject `fetch` |
+| `TechneFactory.create` + `app.handle` | `tests/*.test.ts` | optional round-trip smoke vs a local app |
 
-## Verification (every phase)
+---
 
-1. `bun install --frozen-lockfile` (guards against the known elysia-link breakage), then `bun test` — full suite must stay green (80+ files; watch `tests/error-contract.test.ts`, `tests/elysia-adapter.test.ts`, `tests/dto-validation.test.ts`, `tests/perf-fixes-regressions.test.ts`).
-2. New feature tests per phase as listed above; problem+json bodies asserted against the RFC 7807 contract.
-3. Zero-cost contract: assert no extra hooks/headers/`beforeHandle` entries when the feature's option is absent.
-4. P1 body-limit and any socket-level behavior need a real `listen` on an ephemeral port (`app.handle()` bypasses `Bun.serve`).
-5. Manual smoke per phase: boot the dev app, `curl -i` to inspect headers (P1), hammer an endpoint past the limit (P2), send oversized/malformed inputs (P3), exercise the CSRF cookie/header dance (P4), dispatch an invalid job + run a CLI command with bad flags (P5).
+## Verification
 
-Each phase ships as its own PR with a descriptive title/branch (no plan codes), README updates in the relevant section, and `docs/errors/` updates where status codes are involved.
+1. `bun install --frozen-lockfile` first (avoids the known `Cannot find package 'elysia'` link breakage).
+2. `bun test tests/http-client*.test.ts` — new suites green.
+3. `bun run test` — **full** suite stays green (no regressions in `contract`, since it is untouched).
+4. `bun run check` — `oxlint` + `oxfmt --check` clean.
+5. `bun run build` (`tsc -p tsconfig.build.json`) — confirms the `./http` subpath emits
+   `dist/types/http/index.d.ts` and the public types resolve.
+6. **Manual smoke** — a throwaway `bun run` script:
+   - offline: `Http.fake({ "*": Http.response({ ok: true }) }); Http.assertSentCount(...)`.
+   - online (optional): `await Http.acceptJson().get("https://httpbin.org/get")` → assert `res.ok()` and `res.json()`.
+
+---
 
 ## Progress
 
-- [x] Plan approved
-- [x] **Phase 1** — PR #58 security headers, native server limits, `resolveClientIp` — merged
-- [x] **Phase 2** — PR #61 HTTP rate limiting (`rateLimit` option + `@RateLimit`) — merged with review fixes
-- [x] **Phase 3** — PR #59 header DTOs, strip-unknown, upload validation — merged with review fixes
-- [x] **Phase 4** — PR #60 cookies + CSRF double-submit — merged with review fixes
-- [x] **Phase 5** — PR #62 queue payload + console `@Options` validation — merged with review fixes
-
-Combined `beforeHandle` order on `main`: per-route rate-limit → strip-unknown →
-guards → global middlewares (CSRF) → route middlewares.
+- [x] Phase 1 — Core engine (`PendingRequest`, `HttpResponse`, exceptions, `internal.ts`)
+- [x] Phase 2 — Timeout & retries
+- [x] Phase 3 — `Http` facade, `createHttpClient`, macros, global config
+- [x] Phase 4 — Concurrency (`pool`, `batch`)
+- [x] Phase 5 — Middleware (per-request + global)
+- [x] Phase 6 — Testing layer (`fake`, assertions, stray-request guard)
+- [x] Phase 7 — Packaging, docs, verification

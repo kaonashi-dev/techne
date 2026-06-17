@@ -72,6 +72,11 @@
       "import": "./src/contract/index.ts",
       "types": "./dist/types/contract/index.d.ts"
     },
+    "./http": {
+      "bun": "./src/http/index.ts",
+      "import": "./src/http/index.ts",
+      "types": "./dist/types/http/index.d.ts"
+    },
     "./console": {
       "bun": "./src/console/index.ts",
       "import": "./src/console/index.ts",
