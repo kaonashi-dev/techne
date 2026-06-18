@@ -1,0 +1,19 @@
+{
+  "name": "techne-demo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Reference application exercising every zero-infra Techne feature, plus an oha-based performance harness.",
+  "comments": [
+    "This demo lives inside the Techne repo and imports the framework from ../../src by relative path,",
+    "so every script runs from the repository root (cd ../..) where the framework and its dependencies resolve.",
+    "No separate `bun install` is required — the root install covers it."
+  ],
+  "scripts": {
+    "dev": "cd ../.. && bun --hot run apps/demo/src/main.ts",
+    "start": "cd ../.. && bun run apps/demo/src/main.ts",
+    "test": "cd ../.. && bun test apps/demo/tests/",
+    "perf": "cd ../.. && bun run apps/demo/perf/run-perf.ts",
+    "perf:compare": "cd ../.. && bun run apps/demo/perf/compare.ts"
+  }
+}
