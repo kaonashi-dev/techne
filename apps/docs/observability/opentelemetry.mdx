@@ -79,11 +79,11 @@ adding your own child spans.
 When `metrics` is enabled (the default), a meter exports three instruments over
 OTLP:
 
-| Instrument | Type | Description |
-| --- | --- | --- |
+| Instrument                     | Type          | Description             |
+| ------------------------------ | ------------- | ----------------------- |
 | `http.server.request.duration` | histogram (s) | Inbound request latency |
-| `http.server.request.count` | counter | Inbound request count |
-| `http.server.active_requests` | gauge | In-flight requests |
+| `http.server.request.count`    | counter       | Inbound request count   |
+| `http.server.active_requests`  | gauge         | In-flight requests      |
 
 Each is tagged with `http.request.method`, `http.route`, and
 `http.response.status_code`. The active-requests gauge observes the framework's
@@ -95,8 +95,8 @@ Set `metrics: false` to ship traces only.
 
 ```ts
 telemetry({
-  enabled: true,                       // default: on when an endpoint is set
-  serviceName: "orders-api",           // default: OTEL_SERVICE_NAME or "techne-service"
+  enabled: true, // default: on when an endpoint is set
+  serviceName: "orders-api", // default: OTEL_SERVICE_NAME or "techne-service"
   serviceVersion: "1.4.0",
   resourceAttributes: { "deployment.environment": "prod" },
   exporter: {
@@ -104,9 +104,9 @@ telemetry({
     metricsUrl: "http://collector:4318/v1/metrics",
     headers: { "x-api-key": process.env.OTLP_KEY! },
   },
-  sampler: { ratio: 0.1 },             // or { kind: "always_on" | "always_off" | "parent_based" }
-  instrumentRequests: true,            // default: create the per-request span
-  metrics: true,                       // default: export the HTTP metrics
+  sampler: { ratio: 0.1 }, // or { kind: "always_on" | "always_off" | "parent_based" }
+  instrumentRequests: true, // default: create the per-request span
+  metrics: true, // default: export the HTTP metrics
   metricExportIntervalMillis: 10_000,
 });
 ```
@@ -150,8 +150,7 @@ is flushed and shut down gracefully during `app.close()`, alongside the
 dropped on exit.
 
 <Note>
-  Prefer the native plugin above. If you specifically want the
-  `@elysiajs/opentelemetry` package instead, you can still register it as an
-  [Elysia plugin](/plugins/using-elysia-plugins) — but it sets up a separate
-  trace context, so its span ids won't match the ones in Techne's logs.
+  Prefer the native plugin above. If you specifically want the `@elysiajs/opentelemetry` package
+  instead, you can still register it as an [Elysia plugin](/plugins/using-elysia-plugins) — but it
+  sets up a separate trace context, so its span ids won't match the ones in Techne's logs.
 </Note>
