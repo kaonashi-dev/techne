@@ -1,0 +1,110 @@
+---
+title: "Migrating"
+description: "Upgrade recipes for the Techne rename and the move from interceptors/pipes to response hooks."
+---
+
+This page collects the breaking-change upgrade paths. For the full, dated list
+of changes see the [Changelog](/reference/changelog).
+
+<Note>
+  Techne is experimental and pre-1.0 — breaking changes can land between minor
+  versions. Pin a version and read the changelog before upgrading.
+</Note>
+
+## Upgrading to the project rename (0.4.0)
+
+Version 0.4.0 renamed the project to **Techne** (Greek _τέχνη_ — "applied
+craft"). The upgrade is mostly mechanical: package name, CLI bin, and a few
+externally visible identifiers changed.
+
+<Steps>
+  <Step title="Update the dependency">
+    ```bash
+    bun remove <old-package>
+    bun add @kaonashi-dev/techne
+    ```
+
+    Update imports to the `@kaonashi-dev/techne/*` subpaths — see the
+    [import map](/introduction#import-map).
+  </Step>
+  <Step title="Use the new CLI bin">
+    Invoke the CLI as `techne <command>` (or `bunx @kaonashi-dev/techne
+    <command>`). Update any scripts in `package.json` and CI.
+  </Step>
+  <Step title="Rename the config file">
+    Config discovery prefers `techne.config.{ts,js,mjs}`. Rename your config
+    file and wrap it in [`defineTechneConfig`](/configuration/techne-config).
+  </Step>
+  <Step title="Account for renamed identifiers">
+    A few externally visible values changed prefix:
+
+    | Surface              | New value                                             |
+    | -------------------- | ----------------------------------------------------- |
+    | Redis key prefix     | `techne:*`                                            |
+    | RFC 7807 `type` host | `github.com/kaonashi-dev/techne/.../docs/errors/<slug>.md` |
+    | OpenAPI marker       | `x-techne-unknown-kind`                               |
+
+    If you parse the problem `type` URL or match on Redis keys, update those
+    consumers.
+  </Step>
+</Steps>
+
+### Error response shape
+
+Error responses are now [RFC 7807](/errors/overview) problem documents served
+as `application/problem+json`, replacing the legacy
+`{ statusCode, message, error }` shape. Clients that read `message` or
+`statusCode` should read `detail`, `title`, and `status` instead.
+
+### Deprecated bootstrap calls
+
+Declare these in [`techne.config.ts`](/configuration/techne-config) rather than
+calling them on the app instance:
+
+- `app.setGlobalPrefix()`
+- `app.enableVersioning()`
+- `app.enableCors()`
+- `app.useGlobalGuards()`
+
+## Interceptors and pipes → response hooks
+
+The interceptor and pipe surface was removed in favor of the flat
+[response-hook](/http/response-hooks) lifecycle. The following exports from
+`@kaonashi-dev/techne/common` no longer exist:
+
+`UseInterceptors`, `FileInterceptor`, `UsePipes`, `TechneInterceptor`,
+`PipeTransform`, `APP_INTERCEPTOR`, and `APP_PIPE`. The CLI generators `g pipe`
+and `g interceptor` were removed as well.
+
+### Replacing a response interceptor
+
+Move output-shaping logic into a `ResponseHook` and attach it with
+`@OnResponse()`:
+
+```ts
+import { Controller, Get, OnResponse } from "@kaonashi-dev/techne/common";
+import type { ResponseHook } from "@kaonashi-dev/techne/common";
+
+const Envelope: ResponseHook = {
+  transform(result) {
+    return { data: result };
+  },
+};
+
+@Controller("reports")
+@OnResponse(Envelope)
+class ReportsController {
+  @Get("/")
+  list() {
+    return [];
+  }
+}
+```
+
+See [Response hooks](/http/response-hooks) for the full hook contract.
+
+### Replacing a validation pipe
+
+Input validation now lives in per-route TypeBox schemas instead of pipes.
+Declare `body`, `params`, and `query` schemas on the route and let the
+framework validate and coerce — see [Validation](/http/validation).
