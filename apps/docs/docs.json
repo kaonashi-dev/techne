@@ -48,7 +48,8 @@
               "http/validation",
               "http/response-hooks",
               "http/exceptions",
-              "http/cors"
+              "http/cors",
+              "http/client"
             ]
           },
           {
@@ -186,6 +187,7 @@
           {
             "group": "Reference",
             "pages": [
+              "reference/migrating",
               "reference/status-license"
             ]
           }

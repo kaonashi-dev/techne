@@ -1,18 +1,32 @@
 # Techne docs
 
-Mintlify site for [@kaonashi-dev/techne](https://github.com/kaonashi-dev/techne).
+[Mintlify](https://mintlify.com) site for
+[@kaonashi-dev/techne](https://github.com/kaonashi-dev/techne).
+
+## Local development
 
 ```bash
 bun install
-bunx mintlify dev
+bun run dev      # → http://localhost:3000
 ```
 
-The dev server boots on `http://localhost:3000`. Navigation, theme, and anchors
-live in [`mint.json`](./mint.json); add new pages by creating an MDX file under
-the matching topic folder and registering it there.
+`bun run dev` runs `mintlify dev`. The first run downloads the Mintlify CLI.
 
-To check for broken internal links:
+## Authoring
+
+- Pages are `.mdx` files grouped into topic folders (`http/`, `mq/`, `cli/`, …).
+- Navigation, theme, colors, logo, and anchors live in
+  [`docs.json`](./docs.json) — the single source of truth for site config.
+- To add a page: create the `.mdx` file under the matching folder and register
+  its path (without the extension) in the relevant `group` in `docs.json`.
+- Each page starts with a `title` / `description` frontmatter block and may use
+  [Mintlify components](https://mintlify.com/docs/components) such as `<Note>`,
+  `<Card>`, `<Steps>`, `<Tabs>`, and `<CodeGroup>`.
+
+## Checks
+
+Validate internal links before opening a PR:
 
 ```bash
-bunx mintlify broken-links
+bun run broken-links
 ```

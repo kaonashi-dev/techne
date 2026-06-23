@@ -1,0 +1,453 @@
+---
+title: "HTTP client"
+description: "A Laravel-style fluent HTTP client built on native fetch — auth, retries, timeouts, concurrency pools, and a first-class testing layer."
+---
+
+`@kaonashi-dev/techne/http` is an outgoing HTTP client for talking to other
+services. It wraps the native `fetch` with a fluent, chainable API, sensible
+defaults, automatic retries and timeouts, concurrent request pools, and a
+testing layer that records and fakes requests without touching the network.
+
+<Note>
+  This page covers **outgoing** requests (your app calling another API). For
+  handling **incoming** requests, see [Routing](/http/routing) and
+  [Validation](/http/validation).
+</Note>
+
+## Quick start
+
+The `Http` facade is the fastest way to fire a one-off request. Every chain
+starts from a fresh, isolated request, so there is no shared mutable state to
+reset between calls.
+
+```ts
+import { Http } from "@kaonashi-dev/techne/http";
+
+const res = await Http.acceptJson().get("https://api.example.com/users", {
+  page: 1,
+});
+
+const users = res.json<User[]>();
+```
+
+Terminal verbs (`get`, `post`, `put`, `patch`, `delete`, `head`, `send`) return
+a `Promise<HttpResponse>`. Fluent methods (`acceptJson`, `withToken`, `timeout`,
+…) return the request so they can be chained in any order before the verb.
+
+## Configured clients
+
+When you call the same API repeatedly, build a reusable client with
+`createHttpClient()`. Options are applied to every request the client makes.
+
+```ts
+import { createHttpClient } from "@kaonashi-dev/techne/http";
+
+const github = createHttpClient({
+  baseUrl: "https://api.github.com",
+  token: process.env.GITHUB_TOKEN,
+  headers: { "X-GitHub-Api-Version": "2022-11-28" },
+  timeout: 10,
+  retry: { times: 3, sleep: [200, 500, 1000] },
+});
+
+const repo = await github.acceptJson().get("/repos/kaonashi-dev/techne");
+```
+
+<ParamField path="baseUrl" type="string">
+  Prepended to relative paths. Absolute URLs (`http://`, `https://`) bypass it.
+  A trailing slash is trimmed.
+</ParamField>
+<ParamField path="headers" type="HeadersInit">
+  Default headers merged into every request.
+</ParamField>
+<ParamField path="token" type="string">
+  Sets `Authorization: Bearer <token>`.
+</ParamField>
+<ParamField path="basicAuth" type="{ username, password }">
+  Sets a `Basic` `Authorization` header.
+</ParamField>
+<ParamField path="timeout" type="number">
+  Total request timeout in **seconds**.
+</ParamField>
+<ParamField path="connectTimeout" type="number">
+  Connection timeout in **seconds** (used when `timeout` is unset).
+</ParamField>
+<ParamField path="retry" type="RetryConfig">
+  Default retry policy — see [Retries](#retries).
+</ParamField>
+<ParamField path="fetch" type="typeof fetch">
+  Custom `fetch` implementation (useful for adapters or instrumentation).
+</ParamField>
+
+A configured client exposes the same fluent surface as `Http`, so per-request
+overrides still chain on top of the defaults:
+
+```ts
+await github.withToken(otherUserToken).get("/user");
+```
+
+## Building requests
+
+### Headers and authentication
+
+```ts
+Http.withHeader("X-Trace", traceId) // set one header
+  .withHeaders({ Accept: "application/json", "X-App": "techne" }) // merge several
+  .accept("application/json") // shorthand for Accept
+  .acceptJson() // shorthand for Accept: application/json
+  .contentType("text/csv"); // set Content-Type
+
+Http.withToken(token); // Authorization: Bearer <token>
+Http.withToken(token, "Token"); // custom scheme → Authorization: Token <token>
+Http.withBasicAuth("user", "pass"); // Authorization: Basic ...
+```
+
+`replaceHeaders(init)` swaps the entire header set instead of merging.
+
+### Request bodies
+
+The body format decides how `post`/`put`/`patch`/`delete` payloads are
+serialized and which `Content-Type` is set automatically.
+
+<CodeGroup>
+```ts JSON (default)
+await Http.asJson().post("/users", { name: "Ada", role: "admin" });
+// Content-Type: application/json
+```
+
+```ts Form-encoded
+await Http.asForm().post("/login", { email, password });
+// Content-Type: application/x-www-form-urlencoded
+```
+
+```ts Multipart
+await Http.asMultipart()
+  .attach("avatar", fileBlob, "avatar.png")
+  .post("/profile", { name: "Ada" });
+// Content-Type: multipart/form-data (boundary added by the runtime)
+```
+
+```ts Raw
+await Http.withBody(JSON.stringify(payload), "application/json").post("/ingest");
+```
+</CodeGroup>
+
+### Query and URL parameters
+
+```ts
+// Query string — also accepts a second arg on .get()
+Http.withQueryParameters({ page: 1, tags: ["a", "b"] });
+await Http.get("/search", { q: "techne" }); // → /search?q=techne
+
+// URI templates — {var} is URL-encoded, {+var} is not
+await Http.withUrlParameters({ id: "42" }).get("/users/{id}"); // → /users/42
+```
+
+## Reading responses
+
+Terminal verbs resolve to an `HttpResponse`. It buffers the body once, so the
+status helpers and body accessors can be called freely.
+
+```ts
+const res = await Http.get("/users/1");
+
+res.status(); // 200
+res.ok(); // 2xx?
+res.json<User>(); // parsed JSON
+res.json<string>("name"); // dot-path access into the JSON body
+res.object<User>(); // parsed JSON (alias)
+res.body(); // raw text
+res.header("etag"); // single header
+res.headers(); // Headers object
+```
+
+<AccordionGroup>
+  <Accordion title="Status predicates">
+    `ok()` / `successful()` (2xx), `redirect()` (3xx), `clientError()` (4xx),
+    `serverError()` (5xx), and `failed()` (4xx **or** 5xx), plus named helpers
+    such as `created()`, `accepted()`, `noContent()`, `unauthorized()`,
+    `forbidden()`, `notFound()`, `conflict()`, `unprocessableEntity()`,
+    `tooManyRequests()`, and `internalServerError()`.
+  </Accordion>
+  <Accordion title="Throwing on errors">
+    By default a failed status does **not** throw — you inspect the response.
+    Opt into throwing a `RequestException` with:
+
+    ```ts
+    res.throw(); // throw if failed()
+    res.throwIf(res.status() === 418);
+    res.throwUnless(res.ok());
+    res.throwIfStatus(404);
+    res.throwUnlessStatus(200);
+    res.throwIfClientError();
+    res.throwIfServerError();
+    res.onError((r) => logger.warn(r.status())); // side effect, no throw
+    ```
+
+    Each `throw*` method returns the response when it does not throw, so it
+    chains: `const user = res.throw().json<User>();`
+  </Accordion>
+</AccordionGroup>
+
+### Error handling
+
+Two exception types are thrown by the client:
+
+| Exception             | When                                                          |
+| --------------------- | ------------------------------------------------------------- |
+| `RequestException`    | A 4xx/5xx response when you opt into throwing (`throw*`).     |
+| `ConnectionException` | The request never completed — DNS, network, or timeout.       |
+
+`RequestException` exposes `.response`, `.status`, and a parsed `.problem`
+([RFC 7807](/errors/overview)) when the body is `application/problem+json`:
+
+```ts
+import { RequestException, ConnectionException } from "@kaonashi-dev/techne/http";
+
+try {
+  await github.get("/repos/missing/repo").then((r) => r.throw());
+} catch (err) {
+  if (err instanceof RequestException) {
+    console.error(err.status, err.problem?.detail);
+  } else if (err instanceof ConnectionException) {
+    console.error("Network failure:", err.message);
+  }
+}
+```
+
+## Timeouts and retries
+
+### Timeouts
+
+```ts
+Http.timeout(5) // total budget: 5 seconds
+  .connectTimeout(2); // connection budget when timeout is unset
+```
+
+A timeout aborts the underlying `fetch` and surfaces as a
+`ConnectionException`. Any `signal` passed via `withOptions` is combined with
+the timeout signal, so either can cancel the request.
+
+### Retries
+
+`retry(times, sleep?, when?, { throw })` retries failed attempts. `times` is the
+number of **additional** attempts after the first.
+
+```ts
+// 3 retries, fixed 200ms backoff
+Http.retry(3, 200);
+
+// Per-attempt backoff schedule (ms)
+Http.retry(3, [200, 500, 1000]);
+
+// Computed backoff + custom retry condition
+Http.retry(3, (attempt) => attempt * 250, (error) => {
+  return error instanceof ConnectionException;
+});
+
+// Don't throw after exhausting retries — return the last response instead
+Http.retry(3, 200, undefined, { throw: false });
+```
+
+<Note>
+  Without a `when` predicate, network errors always retry and HTTP responses
+  retry when `failed()` is true. When retries are exhausted the client throws a
+  `RequestException` (or the last error) unless `throw: false` is set.
+</Note>
+
+## Concurrent requests
+
+Send many requests in parallel with a **pool**. `Http.pool()` resolves to an
+array of responses; name entries with `.as()` to also index them by key.
+
+```ts
+const responses = await Http.pool((pool) => {
+  pool.as("user").get("https://api.example.com/users/1");
+  pool.as("posts").get("https://api.example.com/users/1/posts");
+  pool.get("https://api.example.com/health");
+});
+
+responses.user.json<User>();
+responses.posts.json<Post[]>();
+responses[2].ok();
+```
+
+Limit in-flight requests with the `concurrency` option:
+
+```ts
+await Http.pool(
+  (pool) => urls.forEach((u) => pool.get(u)),
+  { concurrency: 5 },
+);
+```
+
+For lifecycle callbacks (progress reporting, aggregate error handling), use a
+**batch**:
+
+```ts
+await Http.batch((pool) => urls.forEach((u) => pool.get(u)))
+  .concurrency(10)
+  .before(() => console.log("starting"))
+  .progress((res, i) => console.log(`#${i} → ${res.status()}`))
+  .then((all) => console.log(`done: ${all.length}`))
+  .catch((err) => console.error(err))
+  .finally(() => console.log("settled"))
+  .send();
+```
+
+## Middleware and global defaults
+
+Inspect or rewrite the native `Request`/`Response` as it flows through the
+client. Middleware runs in registration order, global before per-request.
+
+```ts
+Http.withRequestMiddleware((req) => {
+  req.headers.set("X-Request-Id", crypto.randomUUID());
+  return req;
+}).withResponseMiddleware((res) => {
+  metrics.observe(res.status);
+  return res;
+});
+```
+
+Configure defaults that apply to **every** request from the `Http` facade:
+
+```ts
+Http.globalOptions({ headers: { "User-Agent": "techne/1.0" } });
+Http.globalRequestMiddleware((req) => req);
+Http.globalResponseMiddleware((res) => res);
+
+Http.resetGlobals(); // clear all global config (handy in test teardown)
+```
+
+You can also register reusable, named request builders with `Http.macro()`:
+
+```ts
+Http.macro("github", () =>
+  createHttpClient({ baseUrl: "https://api.github.com", token: env.GH }),
+);
+
+await Http.github().get("/user");
+```
+
+## Testing
+
+The client ships with a built-in fake layer, so tests never hit the network.
+Call `Http.fake()` to intercept every request, then assert what was sent. This
+mirrors the [testing utilities](/testing/overview) you use for the rest of the
+app.
+
+```ts
+import { afterEach, expect, test } from "bun:test";
+import { Http } from "@kaonashi-dev/techne/http";
+
+afterEach(() => Http.fakeReset());
+
+test("sends the expected request", async () => {
+  Http.fake({
+    "https://api.example.com/users": Http.response({ id: 1, name: "Ada" }, 201),
+    "https://api.example.com/*": Http.response("not found", 404),
+  });
+
+  const res = await Http.asJson().post("https://api.example.com/users", {
+    name: "Ada",
+  });
+
+  expect(res.status()).toBe(201);
+  expect(res.json<{ name: string }>("name")).toBe("Ada");
+
+  Http.assertSentCount(1);
+  Http.assertSent(
+    (req) => req.method() === "POST" && req.data().name === "Ada",
+  );
+});
+```
+
+<Tabs>
+  <Tab title="URL map">
+    Map URL glob patterns (`*` wildcard) to responses. Patterns are matched in
+    insertion order, so put a catch-all `*` last.
+
+    ```ts
+    Http.fake({
+      "https://api.example.com/users/*": Http.response({ ok: true }),
+      "*": 503, // bare status code
+    });
+    ```
+  </Tab>
+  <Tab title="Responder fn">
+    Inspect the request and decide the response dynamically.
+
+    ```ts
+    Http.fake((req) =>
+      req.url.endsWith("/me")
+        ? Http.response({ id: 1 })
+        : Http.response(null, 404),
+    );
+    ```
+  </Tab>
+  <Tab title="Sequence">
+    Return a different response on each call — ideal for testing retries.
+
+    ```ts
+    Http.fakeSequence().pushStatus(503).pushStatus(503).push({ ok: true });
+    ```
+  </Tab>
+</Tabs>
+
+### Building fake responses
+
+`Http.response(body?, status?, headers?)` builds a native `Response`:
+
+```ts
+Http.response({ id: 1 }); // 200, application/json
+Http.response("plain text"); // 200, text/plain
+Http.response(null, 204); // empty 204
+Http.response(503); // bare status code → 503
+```
+
+### Assertions
+
+```ts
+Http.assertSent((req) => req.url().includes("/users")); // at least one matched
+Http.assertNotSent((req) => req.method() === "DELETE"); // none matched
+Http.assertSentCount(2); // exactly N requests
+Http.assertNothingSent(); // zero requests
+
+const calls = Http.recorded(); // RecordedRequest[]
+calls[0].method(); // "POST"
+calls[0].header("authorization"); // header value or null
+calls[0].hasHeader("content-type", "application/json");
+calls[0].data(); // parsed JSON body
+calls[0].body(); // raw body text
+```
+
+### Catching stray requests
+
+By default, unmatched URLs in fake mode return an empty `200`. To turn an
+unmatched request into a hard failure — so a test can never silently hit the
+real network — use `preventStrayRequests()`:
+
+```ts
+Http.fake({ "https://api.example.com/*": Http.response({ ok: true }) });
+Http.preventStrayRequests();
+Http.allowStrayRequests(["https://cdn.example.com/*"]); // optional escape hatch
+```
+
+## API reference
+
+<CardGroup cols={2}>
+  <Card title="Http" icon="bolt">
+    Facade for one-off requests, global config, macros, and the testing layer.
+  </Card>
+  <Card title="createHttpClient(options)" icon="gear">
+    Build a reusable client with shared `baseUrl`, auth, timeouts, and retries.
+  </Card>
+  <Card title="HttpResponse" icon="reply">
+    Buffered response with status predicates, body accessors, and `throw*`
+    helpers.
+  </Card>
+  <Card title="RequestException / ConnectionException" icon="triangle-exclamation">
+    Thrown for failed responses (when opted in) and network failures.
+  </Card>
+</CardGroup>
