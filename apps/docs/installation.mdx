@@ -3,14 +3,47 @@ title: "Installation"
 description: "Install Techne with bun add and run the CLI without a global install."
 ---
 
+## Prerequisites
+
+Techne is Bun-native and uses Bun's standard library directly.
+
+<Note>
+  Install [Bun](https://bun.sh) **1.1 or newer**. Techne does not target Node.js
+  — the runtime APIs, bundler, and test runner all assume Bun.
+</Note>
+
+## Install
+
+<Steps>
+  <Step title="Add the package">
+    ```bash
+    bun add @kaonashi-dev/techne
+    ```
+  </Step>
+  <Step title="Verify the CLI">
+    Run the CLI with `bunx` — no global install required:
+
+    ```bash
+    bunx @kaonashi-dev/techne --help
+    ```
+  </Step>
+</Steps>
+
+## Scaffold a new project
+
+Prefer to start from a template? The CLI scaffolds a ready-to-run app:
+
 ```bash
-bun add @kaonashi-dev/techne
+bunx @kaonashi-dev/techne new my-app
+cd my-app
+bun install
+bunx @kaonashi-dev/techne dev
 ```
 
-To use the CLI without installing it globally:
+`new` and `create` are aliases. See [`techne new`](/cli/new) for the generated
+layout and [`techne dev`](/cli/dev) for the watch-mode dev server.
 
-```bash
-bunx @kaonashi-dev/techne --help
-```
+## Next steps
 
-Once installed, continue with the [Quickstart](/quickstart).
+Once installed, continue with the [Quickstart](/quickstart) to boot your first
+app, or browse the [Project structure](/project-structure) reference.

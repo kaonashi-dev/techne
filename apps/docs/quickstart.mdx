@@ -6,52 +6,76 @@ description: "Spin up a Techne app with a declarative techne.config.ts, a one-li
 The recommended setup is declarative: a `techne.config.ts` at the project root
 holds every framework option, and `main.ts` becomes a one-liner.
 
-```ts
-// techne.config.ts
-import { defineTechneConfig } from "@kaonashi-dev/techne/core";
-import { AppFeature } from "./src/app.module";
+<Steps>
+  <Step title="Declare a feature">
+    A feature groups controllers and providers into one composable unit.
 
-export default defineTechneConfig({
-  features: [AppFeature],
-  port: 3000,
-  cors: { origin: true },
-});
-```
+    ```ts
+    // src/app.module.ts
+    import { defineFeature } from "@kaonashi-dev/techne/core";
+    import { Controller, Get, Injectable } from "@kaonashi-dev/techne/common";
 
-```ts
-// src/main.ts
-import { bootstrap } from "@kaonashi-dev/techne/core";
+    @Injectable()
+    class AppService {
+      getHello() {
+        return { message: "Hello from Techne" };
+      }
+    }
 
-await bootstrap();
-```
+    @Controller("app")
+    class AppController {
+      constructor(private readonly appService: AppService) {}
 
-```ts
-// src/app.module.ts
-import { defineFeature } from "@kaonashi-dev/techne/core";
-import { Controller, Get, Injectable } from "@kaonashi-dev/techne/common";
+      @Get("/")
+      hello() {
+        return this.appService.getHello();
+      }
+    }
 
-@Injectable()
-class AppService {
-  getHello() {
-    return { message: "Hello from Techne" };
-  }
-}
+    export const AppFeature = defineFeature({
+      controllers: [AppController],
+      providers: [AppService],
+    });
+    ```
+  </Step>
+  <Step title="Configure the app">
+    `techne.config.ts` at the project root holds every framework option.
 
-@Controller("app")
-class AppController {
-  constructor(private readonly appService: AppService) {}
+    ```ts
+    // techne.config.ts
+    import { defineTechneConfig } from "@kaonashi-dev/techne/core";
+    import { AppFeature } from "./src/app.module";
 
-  @Get("/")
-  hello() {
-    return this.appService.getHello();
-  }
-}
+    export default defineTechneConfig({
+      features: [AppFeature],
+      port: 3000,
+      cors: { origin: true },
+    });
+    ```
+  </Step>
+  <Step title="Boot the server">
+    `main.ts` becomes a one-liner.
 
-export const AppFeature = defineFeature({
-  controllers: [AppController],
-  providers: [AppService],
-});
-```
+    ```ts
+    // src/main.ts
+    import { bootstrap } from "@kaonashi-dev/techne/core";
+
+    await bootstrap();
+    ```
+
+    ```bash
+    bun run src/main.ts
+    ```
+  </Step>
+  <Step title="Test it">
+    The controller prefix (`app`) composes with the route (`/`):
+
+    ```bash
+    curl http://localhost:3000/app
+    # → {"message":"Hello from Techne"}
+    ```
+  </Step>
+</Steps>
 
 `bootstrap()` reads `techne.config.ts` from `process.cwd()`, calls
 `TechneFactory.create()`, and starts listening. Port resolution is
