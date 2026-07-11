@@ -3,7 +3,7 @@ import { resolveTelemetryOptions, type TelemetryOptions } from "./options";
 import { installRequestSpanHooks } from "./request-span";
 import { startTelemetry } from "./sdk";
 import { ProxyTracer } from "./proxy-tracer";
-import { METER, TELEMETRY_OPTIONS, TRACER, TRACER_PROVIDER } from "./tokens";
+import { METER, METER_PROVIDER, TELEMETRY_OPTIONS, TRACER, TRACER_PROVIDER } from "./tokens";
 import type { RuntimeHolder } from "./types";
 
 /**
@@ -29,17 +29,25 @@ export function telemetry(options: TelemetryOptions = {}) {
       const proxyTracer = new ProxyTracer();
       ctx.provide(TELEMETRY_OPTIONS, resolved);
       ctx.provide(TRACER, proxyTracer);
+      ctx.app.addRequestHandleBoundary((next) => {
+        const runtime = holder.runtime;
+        return runtime ? runtime.api.context.with(runtime.api.ROOT_CONTEXT, next) : next();
+      });
 
-      if (resolved.instrumentRequests) {
-        installRequestSpanHooks(ctx.http(), holder);
+      if (resolved.instrumentRequests || resolved.metrics) {
+        installRequestSpanHooks(ctx.http(), holder, {
+          traces: resolved.instrumentRequests,
+          metrics: resolved.metrics,
+        });
       }
 
       ctx.onReady(async () => {
-        const runtime = await startTelemetry(resolved, () => ctx.app.getInflightCount());
+        const runtime = await startTelemetry(resolved);
         holder.runtime = runtime;
         proxyTracer.setDelegate(runtime.tracer);
         ctx.provide(TRACER_PROVIDER, runtime.provider);
         if (runtime.meter) ctx.provide(METER, runtime.meter);
+        if (runtime.meterProvider) ctx.provide(METER_PROVIDER, runtime.meterProvider);
         ctx.logger.log(
           `OpenTelemetry started — service="${resolved.serviceName}" ` +
             `(${resolved.metrics ? "traces+metrics" : "traces"})`,

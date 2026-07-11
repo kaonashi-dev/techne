@@ -45,7 +45,10 @@ export default defineTechneConfig({
   plugins: [
     telemetry({
       serviceName: "orders-api",
-      exporter: { url: "http://localhost:4318/v1/traces" },
+      exporter: {
+        url: "http://localhost:4318/v1/traces",
+        metricsUrl: "http://localhost:4318/v1/metrics",
+      },
     }),
   ],
 });
@@ -83,13 +86,15 @@ OTLP:
 | ------------------------------ | ------------- | ----------------------- |
 | `http.server.request.duration` | histogram (s) | Inbound request latency |
 | `http.server.request.count`    | counter       | Inbound request count   |
-| `http.server.active_requests`  | gauge         | In-flight requests      |
+| `http.server.active_requests`  | UpDownCounter | In-flight requests      |
 
-Each is tagged with `http.request.method`, `http.route`, and
-`http.response.status_code`. The active-requests gauge observes the framework's
-existing inflight counter — no extra bookkeeping per request.
+Completed-request metrics include `http.request.method`, `url.scheme`,
+`http.route` (when matched), and `http.response.status_code`. The active-request
+counter uses the attributes available while the request is running:
+`http.request.method`, `url.scheme`, and optional server address/port.
 
-Set `metrics: false` to ship traces only.
+Set `metrics: false` to ship traces only. Metrics remain active when
+`instrumentRequests: false`, allowing HTTP metrics without server spans.
 
 ## Configuration
 
@@ -126,6 +131,10 @@ containerized environments without code changes:
   `exporter.headers`).
 - `OTEL_TRACES_SAMPLER`, `OTEL_TRACES_SAMPLER_ARG`.
 
+For OTLP/HTTP, the generic `OTEL_EXPORTER_OTLP_ENDPOINT` is treated as a base:
+Techne appends `/v1/traces` and `/v1/metrics`. Signal-specific endpoint variables
+and the programmatic `exporter` URLs are used exactly as supplied.
+
 ## Exporters
 
 The default exporter is generic OTLP/HTTP, which works with any OpenTelemetry
@@ -148,6 +157,11 @@ The SDK starts in the plugin's `onReady` (after bootstrap, before traffic) and
 is flushed and shut down gracefully during `app.close()`, alongside the
 [graceful shutdown](/health/graceful-shutdown) drain — so in-flight spans aren't
 dropped on exit.
+
+OpenTelemetry's API uses process-global providers. Techne therefore allows one
+active `telemetry()` plugin per process and fails fast if a second application
+tries to start another SDK. A new application can start telemetry after the
+first one has closed.
 
 <Note>
   Prefer the native plugin above. If you specifically want the `@elysiajs/opentelemetry` package

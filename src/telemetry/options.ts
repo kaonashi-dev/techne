@@ -59,13 +59,19 @@ export interface ResolvedTelemetryOptions {
   serviceVersion?: string;
   resourceAttributes: Record<string, string | number | boolean>;
   exporter: { url?: string; metricsUrl?: string; headers?: Record<string, string> };
-  sampler?: TelemetrySamplerOptions;
+  sampler?: ResolvedTelemetrySamplerOptions;
   instrumentRequests: boolean;
   metrics: boolean;
   metricExportIntervalMillis: number;
   spanExporter?: unknown;
   metricExporter?: unknown;
 }
+
+export type ResolvedTelemetrySamplerOptions =
+  | { kind: "always_on" }
+  | { kind: "always_off" }
+  | { kind: "trace_id_ratio"; ratio: number }
+  | { kind: "parent_based"; root: "always_on" | "always_off" | { ratio: number } };
 
 function env(name: string): string | undefined {
   const value = typeof Bun !== "undefined" ? Bun.env?.[name] : process.env[name];
@@ -87,25 +93,61 @@ function parseOtlpHeaders(raw: string | undefined): Record<string, string> {
 }
 
 /** Map `OTEL_TRACES_SAMPLER`/`OTEL_TRACES_SAMPLER_ARG` to our sampler shape. */
-function resolveEnvSampler(): TelemetrySamplerOptions | undefined {
-  const kind = env("OTEL_TRACES_SAMPLER");
+function resolveEnvSampler(): ResolvedTelemetrySamplerOptions | undefined {
+  const kind = env("OTEL_TRACES_SAMPLER")?.toLowerCase();
   const arg = env("OTEL_TRACES_SAMPLER_ARG");
   if (!kind) return undefined;
   switch (kind) {
     case "always_on":
+      return { kind: "always_on" };
     case "parentbased_always_on":
-      return { kind: "parent_based" };
+      return { kind: "parent_based", root: "always_on" };
     case "always_off":
-    case "parentbased_always_off":
       return { kind: "always_off" };
-    case "traceidratio":
+    case "parentbased_always_off":
+      return { kind: "parent_based", root: "always_off" };
+    case "traceidratio": {
+      return { kind: "trace_id_ratio", ratio: parseRatioOrDefault(arg) };
+    }
     case "parentbased_traceidratio": {
-      const ratio = arg !== undefined ? Number(arg) : NaN;
-      return Number.isFinite(ratio) ? { ratio } : { kind: "parent_based" };
+      return { kind: "parent_based", root: { ratio: parseRatioOrDefault(arg) } };
     }
     default:
       return undefined;
   }
+}
+
+function parseRatioOrDefault(raw: string | undefined): number {
+  if (raw === undefined) return 1;
+  const ratio = Number(raw);
+  return Number.isFinite(ratio) && ratio >= 0 && ratio <= 1 ? ratio : 1;
+}
+
+function resolveUserSampler(
+  sampler: TelemetrySamplerOptions | undefined,
+): ResolvedTelemetrySamplerOptions | undefined {
+  if (!sampler) return undefined;
+  if (sampler.ratio !== undefined) {
+    if (!Number.isFinite(sampler.ratio) || sampler.ratio < 0 || sampler.ratio > 1) {
+      throw new RangeError("Telemetry sampler ratio must be a finite number in [0,1].");
+    }
+    return { kind: "parent_based", root: { ratio: sampler.ratio } };
+  }
+  switch (sampler.kind) {
+    case "always_on":
+      return { kind: "always_on" };
+    case "always_off":
+      return { kind: "always_off" };
+    case "parent_based":
+      return { kind: "parent_based", root: "always_on" };
+    default:
+      return undefined;
+  }
+}
+
+function appendSignalPath(base: string | undefined, path: string): string | undefined {
+  if (!base) return undefined;
+  return `${base.endsWith("/") ? base : `${base}/`}${path}`;
 }
 
 /**
@@ -116,12 +158,14 @@ export function resolveTelemetryOptions(
   options: TelemetryOptions,
 ): ResolvedTelemetryOptions | null {
   if (options.enabled === false) return null;
-  if (env("OTEL_SDK_DISABLED") === "true") return null;
+  if (env("OTEL_SDK_DISABLED")?.toLowerCase() === "true") return null;
+
+  const genericEndpoint = env("OTEL_EXPORTER_OTLP_ENDPOINT");
 
   const tracesEndpoint =
     options.exporter?.url ??
     env("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT") ??
-    env("OTEL_EXPORTER_OTLP_ENDPOINT");
+    appendSignalPath(genericEndpoint, "v1/traces");
   const hasTestExporter = options.spanExporter !== undefined;
   const enabled = options.enabled === true || tracesEndpoint !== undefined || hasTestExporter;
   if (!enabled) return null;
@@ -129,7 +173,7 @@ export function resolveTelemetryOptions(
   const metricsEndpoint =
     options.exporter?.metricsUrl ??
     env("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT") ??
-    env("OTEL_EXPORTER_OTLP_ENDPOINT");
+    appendSignalPath(genericEndpoint, "v1/metrics");
 
   return {
     serviceName: options.serviceName ?? env("OTEL_SERVICE_NAME") ?? "techne-service",
@@ -143,7 +187,7 @@ export function resolveTelemetryOptions(
         ...options.exporter?.headers,
       },
     },
-    sampler: options.sampler ?? resolveEnvSampler(),
+    sampler: resolveUserSampler(options.sampler) ?? resolveEnvSampler(),
     instrumentRequests: options.instrumentRequests !== false,
     metrics: options.metrics !== false,
     metricExportIntervalMillis: options.metricExportIntervalMillis ?? 10_000,

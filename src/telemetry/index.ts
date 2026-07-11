@@ -12,4 +12,5 @@ export type {
   TelemetryExporterOptions,
   TelemetrySamplerOptions,
   ResolvedTelemetryOptions,
+  ResolvedTelemetrySamplerOptions,
 } from "./options";

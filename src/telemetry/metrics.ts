@@ -10,20 +10,23 @@ const ATTR_STATUS = "http.response.status_code";
 export interface MetricsHandle {
   meter: Meter;
   meterProvider: MeterProvider;
-  record: (durationSec: number, attributes: Record<string, string | number>) => void;
+  start: (attributes: Record<string, string | number>) => void;
+  record: (
+    durationSec: number,
+    attributes: Record<string, string | number>,
+    activeAttributes: Record<string, string | number>,
+  ) => void;
   shutdown: () => Promise<void>;
 }
 
 /**
- * Build a `MeterProvider` with the default HTTP instruments. All data comes
- * from what the framework already tracks — no second timer, and the
- * active-requests gauge observes the adapter's existing inflight counter via
- * `getInflight`.
+ * Build a `MeterProvider` with the default HTTP instruments. Request hooks
+ * increment/decrement the active-request UpDownCounter with the required
+ * method and scheme attributes, while reusing the request span timer.
  */
 export async function buildMetrics(
   resolved: ResolvedTelemetryOptions,
   resource: Resource,
-  getInflight: () => number,
 ): Promise<MetricsHandle> {
   const sdkMetrics = await import("@opentelemetry/sdk-metrics");
 
@@ -50,23 +53,30 @@ export async function buildMetrics(
   const duration = meter.createHistogram("http.server.request.duration", {
     description: "Duration of inbound HTTP server requests",
     unit: "s",
+    advice: {
+      explicitBucketBoundaries: [
+        0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10,
+      ],
+    },
   });
   const count = meter.createCounter("http.server.request.count", {
     description: "Count of inbound HTTP server requests",
   });
-  const activeRequests = meter.createObservableGauge("http.server.active_requests", {
+  const activeRequests = meter.createUpDownCounter("http.server.active_requests", {
     description: "Number of in-flight HTTP server requests",
-  });
-  activeRequests.addCallback((result) => {
-    result.observe(getInflight());
+    unit: "{request}",
   });
 
   return {
     meter,
     meterProvider,
-    record: (durationSec, attributes) => {
+    start: (attributes) => {
+      activeRequests.add(1, attributes);
+    },
+    record: (durationSec, attributes, activeAttributes) => {
       duration.record(durationSec, attributes);
       count.add(1, attributes);
+      activeRequests.add(-1, activeAttributes);
     },
     shutdown: async () => {
       try {
