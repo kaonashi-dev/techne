@@ -1,4 +1,4 @@
-import type { Context, Meter, Tracer } from "@opentelemetry/api";
+import type { Context, Meter, MeterProvider, Tracer } from "@opentelemetry/api";
 
 /** The dynamically-imported `@opentelemetry/api` namespace. */
 export type OtelApi = typeof import("@opentelemetry/api");
@@ -13,9 +13,15 @@ export interface TelemetryRuntime {
   api: OtelApi;
   tracer: Tracer;
   meter?: Meter;
+  meterProvider?: MeterProvider;
   /** Our ALS-backed context manager, used to make the server span active. */
   contextManager: { enterWith(context: Context): void };
-  /** Records the default HTTP metrics. Absent when `metrics` is disabled. */
+  /**
+   * Increments the active-request metric and returns the balancing decrement.
+   * Absent when `metrics` is disabled.
+   */
+  startMetrics?: (attributes: Record<string, string | number>) => () => void;
+  /** Records the completed-request duration and count metrics. */
   recordMetrics?: (durationSec: number, attributes: Record<string, string | number>) => void;
   /** Flush + shut down all providers and reset global OTel registrations. */
   shutdown: () => Promise<void>;

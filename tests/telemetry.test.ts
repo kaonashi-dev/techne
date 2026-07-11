@@ -8,8 +8,9 @@ import { Get, Post } from "../src/decorators/routes.decorator";
 import { Body } from "../src/decorators/params.decorator";
 import { Dto, IsString } from "../src/schema";
 import { HttpException } from "../src/exceptions";
-import { record, telemetry } from "../src/telemetry";
-import { BufferSink, Logger } from "../src/services/logger.service";
+import { getCurrentSpan, METER_PROVIDER, record, telemetry } from "../src/telemetry";
+import { resolveTelemetryOptions } from "../src/telemetry/options";
+import { BufferSink, Logger, requestContext } from "../src/services/logger.service";
 
 const TRACE_ID = "0af7651916cd43dd8448eb211c80319c";
 const PARENT_SPAN_ID = "b7ad6b7169203331";
@@ -82,7 +83,7 @@ async function boot(opts: Record<string, unknown> = {}, loggerEnabled = false) {
 }
 
 describe("telemetry plugin — tracing", () => {
-  test("creates a SERVER span with HTTP attributes and OK status on success", async () => {
+  test("creates a SERVER span with HTTP attributes and UNSET status on success", async () => {
     const { app, exporter } = await boot();
     try {
       const res = await app.handle(new Request("http://localhost/users/42"));
@@ -97,7 +98,7 @@ describe("telemetry plugin — tracing", () => {
       expect(span.attributes["http.route"]).toBe("/users/:id");
       expect(span.attributes["url.path"]).toBe("/users/42");
       expect(span.attributes["http.response.status_code"]).toBe(200);
-      expect(span.status.code).toBe(SpanStatusCode.OK);
+      expect(span.status.code).toBe(SpanStatusCode.UNSET);
     } finally {
       await app.close();
     }
@@ -117,6 +118,83 @@ describe("telemetry plugin — tracing", () => {
     }
   });
 
+  test("preserves inbound W3C tracestate", async () => {
+    const { app, exporter } = await boot();
+    try {
+      await app.handle(
+        new Request("http://localhost/users/7", {
+          headers: { traceparent: TRACEPARENT, tracestate: "vendor=value" },
+        }),
+      );
+      expect(exporter.getFinishedSpans()[0]?.parentSpanContext?.traceState?.get("vendor")).toBe(
+        "value",
+      );
+    } finally {
+      await app.close();
+    }
+  });
+
+  test("honors an unsampled inbound W3C parent", async () => {
+    const { app, exporter } = await boot();
+    try {
+      await app.handle(
+        new Request("http://localhost/users/7", {
+          headers: { traceparent: `00-${TRACE_ID}-${PARENT_SPAN_ID}-00` },
+        }),
+      );
+      expect(exporter.getFinishedSpans()).toHaveLength(0);
+    } finally {
+      await app.close();
+    }
+  });
+
+  test("does not leak the ended server span into caller work", async () => {
+    const { app } = await boot();
+    try {
+      await app.handle(new Request("http://localhost/users/7"));
+      expect(getCurrentSpan()).toBeUndefined();
+      expect(requestContext.getStore()).toBeUndefined();
+    } finally {
+      await app.close();
+    }
+  });
+
+  test("resolves an Elysia status keyword to its numeric code", async () => {
+    const exporter = new InMemorySpanExporter();
+    const app = await TechneFactory.create({
+      controllers: [UsersController],
+      logger: false,
+      plugins: [telemetry({ enabled: true, metrics: false, spanExporter: exporter })],
+    });
+    // A raw Elysia route can set `set.status` to a keyword the framework's
+    // router never produces.
+    (app.getHttpAdapter() as any).get("/keyword-status", ({ set }: any) => {
+      set.status = "Created";
+      return { ok: true };
+    });
+    await app.listen(0);
+    try {
+      const res = await app.handle(new Request("http://localhost/keyword-status"));
+      expect(res.status).toBe(201);
+      const span = exporter.getFinishedSpans()[0]!;
+      expect(span.attributes["http.response.status_code"]).toBe(201);
+    } finally {
+      await app.close();
+    }
+  });
+
+  test("separates server.address and server.port", async () => {
+    const { app, exporter } = await boot();
+    try {
+      await app.handle(new Request("http://localhost:8080/users/7"));
+      const span = exporter.getFinishedSpans()[0]!;
+      expect(span.attributes["server.address"]).toBe("localhost");
+      expect(span.attributes["server.port"]).toBe(8080);
+    } finally {
+      await app.close();
+    }
+  });
+
   test("records the exception and ERROR status on a thrown error", async () => {
     const { app, exporter } = await boot();
     try {
@@ -126,6 +204,7 @@ describe("telemetry plugin — tracing", () => {
       const span = exporter.getFinishedSpans()[0]!;
       expect(span.status.code).toBe(SpanStatusCode.ERROR);
       expect(span.attributes["http.response.status_code"]).toBe(500);
+      expect(span.attributes["error.type"]).toBe("500");
       const exception = span.events.find((e) => e.name === "exception");
       expect(exception).toBeDefined();
       expect(exception?.attributes?.["exception.message"]).toBe("kaboom");
@@ -153,6 +232,8 @@ describe("telemetry plugin — tracing", () => {
       expect(res.status).toBe(404);
       const spans = exporter.getFinishedSpans();
       expect(spans.length).toBe(1);
+      expect(spans[0]!.name).toBe("GET");
+      expect(spans[0]!.status.code).toBe(SpanStatusCode.UNSET);
       expect(spans[0]!.attributes["http.response.status_code"]).toBe(404);
     } finally {
       await app.close();
@@ -170,6 +251,7 @@ describe("telemetry plugin — tracing", () => {
         }),
       );
       expect(res.status).toBe(422);
+      expect(getCurrentSpan()).toBeUndefined();
       await flushMacrotask();
       const spans = exporter.getFinishedSpans();
       expect(spans.length).toBe(1);
@@ -240,6 +322,7 @@ describe("telemetry plugin — metrics", () => {
       ],
     });
     await app.listen(0);
+    expect(app.get(METER_PROVIDER)).toBeDefined();
     await app.handle(new Request("http://localhost/users/1"));
     // close() force-flushes the meter provider into the in-memory exporter.
     await app.close();
@@ -252,6 +335,150 @@ describe("telemetry plugin — metrics", () => {
     expect(names).toContain("http.server.request.duration");
     expect(names).toContain("http.server.request.count");
     expect(names).toContain("http.server.active_requests");
+
+    const durationMetric = metricExporter
+      .getMetrics()
+      .flatMap((rm) => rm.scopeMetrics)
+      .flatMap((sm) => sm.metrics)
+      .find((metric) => metric.descriptor.name === "http.server.request.duration");
+    expect((durationMetric?.dataPoints[0]?.attributes as any)?.["url.scheme"]).toBe("http");
+    const activeMetric = metricExporter
+      .getMetrics()
+      .flatMap((rm) => rm.scopeMetrics)
+      .flatMap((sm) => sm.metrics)
+      .find((metric) => metric.descriptor.name === "http.server.active_requests");
+    expect(activeMetric?.descriptor.unit).toBe("{request}");
+    expect((activeMetric?.dataPoints[0]?.attributes as any)?.["http.request.method"]).toBe("GET");
+    expect((activeMetric?.dataPoints[0]?.attributes as any)?.["url.scheme"]).toBe("http");
+    // The increment and decrement must cancel exactly once the request is done.
+    expect(activeMetric?.dataPoints[0]?.value).toBe(0);
+  });
+
+  test("records HTTP metrics when request spans are disabled", async () => {
+    const metricExporter = new InMemoryMetricExporter(AggregationTemporality.CUMULATIVE);
+    const exporter = new InMemorySpanExporter();
+    const app = await TechneFactory.create({
+      controllers: [UsersController],
+      logger: false,
+      plugins: [
+        telemetry({
+          enabled: true,
+          instrumentRequests: false,
+          metrics: true,
+          spanExporter: exporter,
+          metricExporter,
+        }),
+      ],
+    });
+    await app.listen(0);
+    await app.handle(new Request("http://localhost/users/1"));
+    await app.close();
+
+    expect(exporter.getFinishedSpans()).toHaveLength(0);
+    const names = metricExporter
+      .getMetrics()
+      .flatMap((rm) => rm.scopeMetrics)
+      .flatMap((sm) => sm.metrics)
+      .map((metric) => metric.descriptor.name);
+    expect(names).toContain("http.server.request.duration");
+    expect(names).toContain("http.server.active_requests");
+  });
+});
+
+describe("telemetry plugin — process ownership", () => {
+  test("rejects a second active SDK instead of cross-wiring applications", async () => {
+    const first = await boot();
+    const secondExporter = new InMemorySpanExporter();
+    const second = await TechneFactory.create({
+      controllers: [UsersController],
+      logger: false,
+      plugins: [telemetry({ enabled: true, metrics: false, spanExporter: secondExporter })],
+    });
+    try {
+      await expect(second.listen(0)).rejects.toThrow("already active");
+    } finally {
+      await second.close();
+      await first.app.close();
+    }
+  });
+});
+
+describe("telemetry options", () => {
+  test("derives per-signal paths from OTEL_EXPORTER_OTLP_ENDPOINT", () => {
+    const previous = Bun.env.OTEL_EXPORTER_OTLP_ENDPOINT;
+    const previousTraces = Bun.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT;
+    const previousMetrics = Bun.env.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT;
+    try {
+      Bun.env.OTEL_EXPORTER_OTLP_ENDPOINT = "http://collector:4318/base";
+      delete Bun.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT;
+      delete Bun.env.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT;
+      const resolved = resolveTelemetryOptions({});
+      expect(resolved?.exporter.url).toBe("http://collector:4318/base/v1/traces");
+      expect(resolved?.exporter.metricsUrl).toBe("http://collector:4318/base/v1/metrics");
+    } finally {
+      restoreEnv("OTEL_EXPORTER_OTLP_ENDPOINT", previous);
+      restoreEnv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", previousTraces);
+      restoreEnv("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", previousMetrics);
+    }
+  });
+
+  test("preserves the standard sampler variants", () => {
+    const previousKind = Bun.env.OTEL_TRACES_SAMPLER;
+    const previousArg = Bun.env.OTEL_TRACES_SAMPLER_ARG;
+    const previousEndpoint = Bun.env.OTEL_EXPORTER_OTLP_ENDPOINT;
+    try {
+      Bun.env.OTEL_EXPORTER_OTLP_ENDPOINT = "http://collector:4318";
+      Bun.env.OTEL_TRACES_SAMPLER = "traceidratio";
+      Bun.env.OTEL_TRACES_SAMPLER_ARG = "0.25";
+      expect(resolveTelemetryOptions({})?.sampler).toEqual({
+        kind: "trace_id_ratio",
+        ratio: 0.25,
+      });
+
+      Bun.env.OTEL_TRACES_SAMPLER = "parentbased_always_off";
+      expect(resolveTelemetryOptions({})?.sampler).toEqual({
+        kind: "parent_based",
+        root: "always_off",
+      });
+    } finally {
+      restoreEnv("OTEL_TRACES_SAMPLER", previousKind);
+      restoreEnv("OTEL_TRACES_SAMPLER_ARG", previousArg);
+      restoreEnv("OTEL_EXPORTER_OTLP_ENDPOINT", previousEndpoint);
+    }
+  });
+
+  test("warns and falls back on invalid sampler env values", () => {
+    const warnings: string[] = [];
+    const previousKind = Bun.env.OTEL_TRACES_SAMPLER;
+    const previousArg = Bun.env.OTEL_TRACES_SAMPLER_ARG;
+    const previousEndpoint = Bun.env.OTEL_EXPORTER_OTLP_ENDPOINT;
+    try {
+      Bun.env.OTEL_EXPORTER_OTLP_ENDPOINT = "http://collector:4318";
+      Bun.env.OTEL_TRACES_SAMPLER = "traceidratio";
+      Bun.env.OTEL_TRACES_SAMPLER_ARG = "bogus";
+      expect(resolveTelemetryOptions({}, (m) => warnings.push(m))?.sampler).toEqual({
+        kind: "trace_id_ratio",
+        ratio: 1,
+      });
+
+      Bun.env.OTEL_TRACES_SAMPLER = "mystery";
+      expect(resolveTelemetryOptions({}, (m) => warnings.push(m))?.sampler).toBeUndefined();
+
+      expect(warnings).toEqual([
+        'Invalid OTEL_TRACES_SAMPLER_ARG "bogus" — using the default ratio 1.',
+        'Unknown OTEL_TRACES_SAMPLER "mystery" — using the SDK default sampler.',
+      ]);
+    } finally {
+      restoreEnv("OTEL_TRACES_SAMPLER", previousKind);
+      restoreEnv("OTEL_TRACES_SAMPLER_ARG", previousArg);
+      restoreEnv("OTEL_EXPORTER_OTLP_ENDPOINT", previousEndpoint);
+    }
+  });
+
+  test("rejects an invalid programmatic sampling ratio", () => {
+    expect(() => resolveTelemetryOptions({ enabled: true, sampler: { ratio: 2 } })).toThrow(
+      "in [0,1]",
+    );
   });
 });
 
@@ -278,3 +505,8 @@ describe("telemetry plugin — disabled", () => {
     }
   });
 });
+
+function restoreEnv(name: string, value: string | undefined): void {
+  if (value === undefined) delete Bun.env[name];
+  else Bun.env[name] = value;
+}
