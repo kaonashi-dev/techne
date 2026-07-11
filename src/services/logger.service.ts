@@ -56,7 +56,7 @@ export interface RequestContext {
 }
 
 /** ALS store for per-request context. Set by the HTTP adapter's onRequest hook. */
-export const requestContext = new AsyncLocalStorage<RequestContext>();
+export const requestContext = new AsyncLocalStorage<RequestContext | undefined>();
 
 // Cached at module load — avoids repeated property reads on every log line (L10).
 const PID = process.pid;

@@ -3,7 +3,7 @@ import type { Container, ResolutionContext } from "./container";
 import type { RouterExecutionContext } from "./router/router-execution-context";
 import type { CanActivate } from "../interfaces/can-activate.interface";
 import type { ExceptionFilter } from "../interfaces/exception-filter.interface";
-import { Logger } from "../services/logger.service";
+import { Logger, requestContext } from "../services/logger.service";
 import type { MqRegistry } from "../mq/registry";
 import type { TechneMode } from "../common/mode";
 import type {
@@ -106,6 +106,7 @@ export class TechneApplication {
   private readonly registered = new Map<string, RegisteredPlugin>();
   private readyHandlers: Array<() => void | Promise<void>> = [];
   private shutdownPluginHandlers: Array<() => void | Promise<void>> = [];
+  private requestHandleBoundaries: Array<(next: () => Promise<Response>) => Promise<Response>> = [];
   /**
    * Plugins whose `ready` phase is `"before-listen"`. Queued by the factory
    * during boot and flushed at the start of {@link listen} so they can init
@@ -267,7 +268,19 @@ export class TechneApplication {
   }
 
   handle(request: Request): Promise<Response> {
-    return this.adapter.getInstance().handle(request);
+    const parentContext = requestContext.getStore();
+    let next = () => this.adapter.getInstance().handle(request);
+    for (let i = this.requestHandleBoundaries.length - 1; i >= 0; i--) {
+      const boundary = this.requestHandleBoundaries[i]!;
+      const inner = next;
+      next = () => boundary(inner);
+    }
+    return requestContext.run(parentContext, next);
+  }
+
+  /** @internal — lets context-propagation plugins scope direct `app.handle()` calls. */
+  addRequestHandleBoundary(boundary: (next: () => Promise<Response>) => Promise<Response>): void {
+    this.requestHandleBoundaries.push(boundary);
   }
 
   getHttpAdapter() {
@@ -276,8 +289,7 @@ export class TechneApplication {
 
   /**
    * Current count of in-flight HTTP requests, delegated to the HTTP adapter.
-   * Surfaced so the telemetry plugin's `http.server.active_requests` gauge can
-   * observe live concurrency without duplicating the adapter's counter.
+   * Surfaced for health, shutdown, and custom observability integrations.
    */
   getInflightCount(): number {
     return this.adapter.getInflightCount();
