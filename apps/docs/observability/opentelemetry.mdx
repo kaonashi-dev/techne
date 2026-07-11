@@ -71,6 +71,9 @@ Each request produces one `SERVER` span:
   `http.response.status_code`.
 - **Errors** — thrown exceptions are recorded as span events with the message
   and stack; 5xx responses set the span status to `ERROR`.
+- **Duration** — the span ends when the response is mapped, after the handler
+  and error filters but before the bytes are transmitted, so it measures
+  processing time rather than client download time.
 
 The emitted span's id is written back into the logger's request context, so
 every log line for the request carries the same `traceId`/`spanId` the backend

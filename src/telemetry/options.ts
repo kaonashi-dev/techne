@@ -93,7 +93,7 @@ function parseOtlpHeaders(raw: string | undefined): Record<string, string> {
 }
 
 /** Map `OTEL_TRACES_SAMPLER`/`OTEL_TRACES_SAMPLER_ARG` to our sampler shape. */
-function resolveEnvSampler(): ResolvedTelemetrySamplerOptions | undefined {
+function resolveEnvSampler(warn: WarnFn): ResolvedTelemetrySamplerOptions | undefined {
   const kind = env("OTEL_TRACES_SAMPLER")?.toLowerCase();
   const arg = env("OTEL_TRACES_SAMPLER_ARG");
   if (!kind) return undefined;
@@ -107,24 +107,28 @@ function resolveEnvSampler(): ResolvedTelemetrySamplerOptions | undefined {
     case "parentbased_always_off":
       return { kind: "parent_based", root: "always_off" };
     case "traceidratio": {
-      return { kind: "trace_id_ratio", ratio: parseRatioOrDefault(arg) };
+      return { kind: "trace_id_ratio", ratio: parseRatioOrDefault(arg, warn) };
     }
     case "parentbased_traceidratio": {
-      return { kind: "parent_based", root: { ratio: parseRatioOrDefault(arg) } };
+      return { kind: "parent_based", root: { ratio: parseRatioOrDefault(arg, warn) } };
     }
     default:
+      warn(`Unknown OTEL_TRACES_SAMPLER "${kind}" — using the SDK default sampler.`);
       return undefined;
   }
 }
 
-function parseRatioOrDefault(raw: string | undefined): number {
+function parseRatioOrDefault(raw: string | undefined, warn: WarnFn): number {
   if (raw === undefined) return 1;
   const ratio = Number(raw);
-  return Number.isFinite(ratio) && ratio >= 0 && ratio <= 1 ? ratio : 1;
+  if (Number.isFinite(ratio) && ratio >= 0 && ratio <= 1) return ratio;
+  warn(`Invalid OTEL_TRACES_SAMPLER_ARG "${raw}" — using the default ratio 1.`);
+  return 1;
 }
 
 function resolveUserSampler(
   sampler: TelemetrySamplerOptions | undefined,
+  warn: WarnFn,
 ): ResolvedTelemetrySamplerOptions | undefined {
   if (!sampler) return undefined;
   if (sampler.ratio !== undefined) {
@@ -141,6 +145,9 @@ function resolveUserSampler(
     case "parent_based":
       return { kind: "parent_based", root: "always_on" };
     default:
+      if (sampler.kind !== undefined) {
+        warn(`Unknown telemetry sampler kind "${sampler.kind}" — using the SDK default sampler.`);
+      }
       return undefined;
   }
 }
@@ -150,12 +157,16 @@ function appendSignalPath(base: string | undefined, path: string): string | unde
   return `${base.endsWith("/") ? base : `${base}/`}${path}`;
 }
 
+type WarnFn = (message: string) => void;
+
 /**
  * Resolve user options + env into a concrete config, or `null` when telemetry
- * is disabled. Explicit options always win over env vars.
+ * is disabled. Explicit options always win over env vars. Invalid sampler
+ * values fall back to spec defaults and are reported through `warn`.
  */
 export function resolveTelemetryOptions(
   options: TelemetryOptions,
+  warn: WarnFn = () => {},
 ): ResolvedTelemetryOptions | null {
   if (options.enabled === false) return null;
   if (env("OTEL_SDK_DISABLED")?.toLowerCase() === "true") return null;
@@ -187,7 +198,7 @@ export function resolveTelemetryOptions(
         ...options.exporter?.headers,
       },
     },
-    sampler: resolveUserSampler(options.sampler) ?? resolveEnvSampler(),
+    sampler: resolveUserSampler(options.sampler, warn) ?? resolveEnvSampler(warn),
     instrumentRequests: options.instrumentRequests !== false,
     metrics: options.metrics !== false,
     metricExportIntervalMillis: options.metricExportIntervalMillis ?? 10_000,

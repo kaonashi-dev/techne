@@ -22,7 +22,7 @@ export function telemetry(options: TelemetryOptions = {}) {
   return definePlugin({
     name: "telemetry",
     setup(ctx) {
-      const resolved = resolveTelemetryOptions(options);
+      const resolved = resolveTelemetryOptions(options, (message) => ctx.logger.warn(message));
       if (!resolved) return;
 
       const holder: RuntimeHolder = {};

@@ -1,3 +1,4 @@
+import { StatusMap } from "elysia";
 import { requestContext } from "../services/logger.service";
 import type { RuntimeHolder, TelemetryRuntime } from "./types";
 
@@ -22,6 +23,7 @@ const OTEL_SPAN = Symbol("techne.otel.span");
 const OTEL_START = Symbol("techne.otel.start");
 const OTEL_ENDED = Symbol("techne.otel.ended");
 const OTEL_ACTIVE_METRIC_ATTRS = Symbol("techne.otel.active-metric-attrs");
+const OTEL_END_ACTIVE = Symbol("techne.otel.end-active");
 
 const headersGetter = {
   keys(carrier: Headers): string[] {
@@ -54,7 +56,7 @@ export function installRequestSpanHooks(
     if (url?.port) activeMetricAttributes[ATTR_SERVER_PORT] = Number(url.port);
     if (enabled.metrics && rt.startMetrics) {
       ctx[OTEL_ACTIVE_METRIC_ATTRS] = activeMetricAttributes;
-      rt.startMetrics(activeMetricAttributes);
+      ctx[OTEL_END_ACTIVE] = rt.startMetrics(activeMetricAttributes);
     }
 
     if (!enabled.traces) return undefined;
@@ -107,14 +109,21 @@ export function installRequestSpanHooks(
 }
 
 function finishRequest(rt: TelemetryRuntime | undefined, ctx: any): void {
-  if (!rt || ctx[OTEL_ENDED]) return;
+  if (ctx[OTEL_ENDED]) return;
   const span = ctx[OTEL_SPAN];
+  const endActiveRequest = ctx[OTEL_END_ACTIVE] as (() => void) | undefined;
   const activeMetricAttributes = ctx[OTEL_ACTIVE_METRIC_ATTRS] as
     | Record<string, string | number>
     | undefined;
-  if (!span && !activeMetricAttributes) return;
+  if (!span && !endActiveRequest) return;
 
   ctx[OTEL_ENDED] = true;
+  // Balance the counter even when the runtime is torn down mid-request — an
+  // unbalanced UpDownCounter drifts forever. Requests aborted before any
+  // terminal hook fires still leak; Elysia exposes no abort hook to catch them.
+  endActiveRequest?.();
+  if (!rt) return;
+
   const status = responseStatus(ctx);
   const route = typeof ctx.route === "string" && ctx.route ? ctx.route : undefined;
 
@@ -143,7 +152,7 @@ function finishRequest(rt: TelemetryRuntime | undefined, ctx: any): void {
       };
       if (route) attributes[ATTR_ROUTE] = route;
       if (status >= 500) attributes[ATTR_ERROR_TYPE] = String(status);
-      rt.recordMetrics(durationSec, attributes, activeMetricAttributes);
+      rt.recordMetrics(durationSec, attributes);
     }
   } finally {
     // `enterWith` is necessary to bridge Elysia's separate lifecycle callbacks,
@@ -175,7 +184,13 @@ function responseStatus(ctx: any): number {
     default:
       break;
   }
-  if (typeof ctx.set?.status === "number") return ctx.set.status;
+  const setStatus = ctx.set?.status;
+  if (typeof setStatus === "number") return setStatus;
+  // Elysia accepts status keywords (`set.status = "Created"`); resolve them
+  // the same way it does when building the final Response.
+  if (typeof setStatus === "string" && setStatus in StatusMap) {
+    return StatusMap[setStatus as keyof typeof StatusMap];
+  }
   if (ctx.response instanceof Response) return ctx.response.status;
   return err ? 500 : 200;
 }

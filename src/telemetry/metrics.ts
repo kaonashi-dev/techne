@@ -10,12 +10,9 @@ const ATTR_STATUS = "http.response.status_code";
 export interface MetricsHandle {
   meter: Meter;
   meterProvider: MeterProvider;
-  start: (attributes: Record<string, string | number>) => void;
-  record: (
-    durationSec: number,
-    attributes: Record<string, string | number>,
-    activeAttributes: Record<string, string | number>,
-  ) => void;
+  /** Increments the active-request counter; returns the balancing decrement. */
+  start: (attributes: Record<string, string | number>) => () => void;
+  record: (durationSec: number, attributes: Record<string, string | number>) => void;
   shutdown: () => Promise<void>;
 }
 
@@ -72,11 +69,11 @@ export async function buildMetrics(
     meterProvider,
     start: (attributes) => {
       activeRequests.add(1, attributes);
+      return () => activeRequests.add(-1, attributes);
     },
-    record: (durationSec, attributes, activeAttributes) => {
+    record: (durationSec, attributes) => {
       duration.record(durationSec, attributes);
       count.add(1, attributes);
-      activeRequests.add(-1, activeAttributes);
     },
     shutdown: async () => {
       try {

@@ -16,14 +16,13 @@ export interface TelemetryRuntime {
   meterProvider?: MeterProvider;
   /** Our ALS-backed context manager, used to make the server span active. */
   contextManager: { enterWith(context: Context): void };
-  /** Increments the active-request metric. Absent when `metrics` is disabled. */
-  startMetrics?: (attributes: Record<string, string | number>) => void;
-  /** Records completion metrics and decrements the active-request metric. */
-  recordMetrics?: (
-    durationSec: number,
-    attributes: Record<string, string | number>,
-    activeAttributes: Record<string, string | number>,
-  ) => void;
+  /**
+   * Increments the active-request metric and returns the balancing decrement.
+   * Absent when `metrics` is disabled.
+   */
+  startMetrics?: (attributes: Record<string, string | number>) => () => void;
+  /** Records the completed-request duration and count metrics. */
+  recordMetrics?: (durationSec: number, attributes: Record<string, string | number>) => void;
   /** Flush + shut down all providers and reset global OTel registrations. */
   shutdown: () => Promise<void>;
 }

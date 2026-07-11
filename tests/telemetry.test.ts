@@ -159,6 +159,30 @@ describe("telemetry plugin — tracing", () => {
     }
   });
 
+  test("resolves an Elysia status keyword to its numeric code", async () => {
+    const exporter = new InMemorySpanExporter();
+    const app = await TechneFactory.create({
+      controllers: [UsersController],
+      logger: false,
+      plugins: [telemetry({ enabled: true, metrics: false, spanExporter: exporter })],
+    });
+    // A raw Elysia route can set `set.status` to a keyword the framework's
+    // router never produces.
+    (app.getHttpAdapter() as any).get("/keyword-status", ({ set }: any) => {
+      set.status = "Created";
+      return { ok: true };
+    });
+    await app.listen(0);
+    try {
+      const res = await app.handle(new Request("http://localhost/keyword-status"));
+      expect(res.status).toBe(201);
+      const span = exporter.getFinishedSpans()[0]!;
+      expect(span.attributes["http.response.status_code"]).toBe(201);
+    } finally {
+      await app.close();
+    }
+  });
+
   test("separates server.address and server.port", async () => {
     const { app, exporter } = await boot();
     try {
@@ -326,6 +350,8 @@ describe("telemetry plugin — metrics", () => {
     expect(activeMetric?.descriptor.unit).toBe("{request}");
     expect((activeMetric?.dataPoints[0]?.attributes as any)?.["http.request.method"]).toBe("GET");
     expect((activeMetric?.dataPoints[0]?.attributes as any)?.["url.scheme"]).toBe("http");
+    // The increment and decrement must cancel exactly once the request is done.
+    expect(activeMetric?.dataPoints[0]?.value).toBe(0);
   });
 
   test("records HTTP metrics when request spans are disabled", async () => {
@@ -414,6 +440,34 @@ describe("telemetry options", () => {
         kind: "parent_based",
         root: "always_off",
       });
+    } finally {
+      restoreEnv("OTEL_TRACES_SAMPLER", previousKind);
+      restoreEnv("OTEL_TRACES_SAMPLER_ARG", previousArg);
+      restoreEnv("OTEL_EXPORTER_OTLP_ENDPOINT", previousEndpoint);
+    }
+  });
+
+  test("warns and falls back on invalid sampler env values", () => {
+    const warnings: string[] = [];
+    const previousKind = Bun.env.OTEL_TRACES_SAMPLER;
+    const previousArg = Bun.env.OTEL_TRACES_SAMPLER_ARG;
+    const previousEndpoint = Bun.env.OTEL_EXPORTER_OTLP_ENDPOINT;
+    try {
+      Bun.env.OTEL_EXPORTER_OTLP_ENDPOINT = "http://collector:4318";
+      Bun.env.OTEL_TRACES_SAMPLER = "traceidratio";
+      Bun.env.OTEL_TRACES_SAMPLER_ARG = "bogus";
+      expect(resolveTelemetryOptions({}, (m) => warnings.push(m))?.sampler).toEqual({
+        kind: "trace_id_ratio",
+        ratio: 1,
+      });
+
+      Bun.env.OTEL_TRACES_SAMPLER = "mystery";
+      expect(resolveTelemetryOptions({}, (m) => warnings.push(m))?.sampler).toBeUndefined();
+
+      expect(warnings).toEqual([
+        'Invalid OTEL_TRACES_SAMPLER_ARG "bogus" — using the default ratio 1.',
+        'Unknown OTEL_TRACES_SAMPLER "mystery" — using the SDK default sampler.',
+      ]);
     } finally {
       restoreEnv("OTEL_TRACES_SAMPLER", previousKind);
       restoreEnv("OTEL_TRACES_SAMPLER_ARG", previousArg);
