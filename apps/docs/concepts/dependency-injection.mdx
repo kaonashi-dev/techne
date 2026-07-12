@@ -36,8 +36,9 @@ A `providers: [...]` entry can be:
 
 Providers default to **singleton** scope. Mark a provider as request-scoped
 when it holds per-request state — Techne will resolve a fresh instance for
-each request, sharing it across guards and handlers in that request via
-`ContextIdFactory` from `@kaonashi-dev/techne/core`.
+each request, sharing it across guards and handlers in that request via a
+per-request context id (see `ModuleRef.createContextId()` from
+`@kaonashi-dev/techne/core`).
 
 ## ModuleRef
 
