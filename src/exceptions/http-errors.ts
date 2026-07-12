@@ -69,3 +69,17 @@ export class ServiceUnavailableException extends HttpException {
     if (options) this.error = "Service Unavailable";
   }
 }
+
+export class BadGatewayException extends HttpException {
+  constructor(message: string = "Bad Gateway", options?: HttpExceptionOptions) {
+    super(502, message, options ?? "Bad Gateway");
+    if (options) this.error = "Bad Gateway";
+  }
+}
+
+export class GatewayTimeoutException extends HttpException {
+  constructor(message: string = "Gateway Timeout", options?: HttpExceptionOptions) {
+    super(504, message, options ?? "Gateway Timeout");
+    if (options) this.error = "Gateway Timeout";
+  }
+}

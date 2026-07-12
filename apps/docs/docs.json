@@ -169,6 +169,7 @@
               "errors/forbidden",
               "errors/not-found",
               "errors/conflict",
+              "errors/gone",
               "errors/unprocessable-entity",
               "errors/too-many-requests",
               "errors/internal-server-error",

@@ -1,6 +1,6 @@
 ---
 title: "Application lifecycle"
-description: "onApplicationBootstrap, onModuleDestroy, TechneApplicationContext, and ContextIdFactory."
+description: "onApplicationBootstrap, onModuleDestroy, TechneApplicationContext, and request-scoped context ids."
 ---
 
 `TechneFactory.create()` registers the command, query, and event buses
@@ -27,7 +27,8 @@ and tests that need DI but not the request lifecycle.
 ## Request-scoped context
 
 Request-scoped providers share a stable context across guards and handlers
-within the same request through `ContextIdFactory` from
-`@kaonashi-dev/techne/core`. Use it when you need to correlate work done
-inside the request (logging, tracing, caching) with the originating
-request id.
+within the same request through a per-request context id created by the
+container. Create one manually with `ModuleRef.createContextId()` from
+`@kaonashi-dev/techne/core` when you need to correlate work done outside
+the request lifecycle (scripts, jobs, tests) with a single resolution
+context.
