@@ -305,6 +305,9 @@ comment matching `src/contract/index.ts`.
 
 **README:** short "HTTP Client" section with the `Http.withToken(...).get(...)` and
 `createHttpClient(...)` service-style examples.
+_Outcome: the feature was documented in the docs site instead
+(`apps/docs/http/client.mdx`); the root README links to it from its
+Documentation table._
 
 ---
 

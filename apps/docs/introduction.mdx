@@ -11,36 +11,33 @@ ergonomics. It is built for exploration, not production use, and breaking
 changes should be expected.
 
 <Note>
-  Techne is experimental software. Expect breaking changes between releases and
-  pin a version if you depend on it.
+  Techne is experimental software. Expect breaking changes between releases and pin a version if you
+  depend on it.
 </Note>
 
 ## Why Techne
 
 <CardGroup cols={2}>
   <Card title="Bun-native" icon="bolt">
-    Built for the Bun runtime and its standard library — fast cold starts and a
-    single toolchain for install, build, test, and run.
+    Built for the Bun runtime and its standard library — fast cold starts and a single toolchain for
+    install, build, test, and run.
   </Card>
   <Card title="Decorator-first" icon="at">
-    Controllers, providers, and routes declared with decorators and a flat,
-    composable feature config.
+    Controllers, providers, and routes declared with decorators and a flat, composable feature
+    config.
   </Card>
   <Card title="Dependency injection" icon="diagram-project">
-    A built-in container with singleton and request scopes, factory providers,
-    and `ModuleRef` for dynamic resolution.
+    A built-in container with singleton and request scopes, factory providers, and `ModuleRef` for
+    dynamic resolution.
   </Card>
   <Card title="Typed schemas" icon="shield-check">
-    TypeBox-powered request validation with RFC 7807 error responses out of the
-    box.
+    TypeBox-powered request validation with RFC 7807 error responses out of the box.
   </Card>
   <Card title="Batteries included" icon="layer-group">
-    CQRS, message queues, an HTTP client, OpenTelemetry, and testing utilities
-    ship in one package.
+    CQRS, message queues, an HTTP client, OpenTelemetry, and testing utilities ship in one package.
   </Card>
   <Card title="First-class CLI" icon="terminal">
-    Scaffold projects, generate code, run, build, and ship with the bundled
-    CLI.
+    Scaffold projects, generate code, run, build, and ship with the bundled CLI.
   </Card>
 </CardGroup>
 
@@ -64,13 +61,17 @@ Techne ships as a set of subpath imports. The recommended mental model is:
 | Configuration service and helpers                 | `@kaonashi-dev/techne/config`    |
 | JWT auth plugin and guard                         | `@kaonashi-dev/techne/jwt`       |
 | OpenAPI / Swagger document generation             | `@kaonashi-dev/techne/swagger`   |
-| Health checks and readiness                        | `@kaonashi-dev/techne/health`    |
+| Health checks and readiness                       | `@kaonashi-dev/techne/health`    |
 | Outgoing HTTP client                              | `@kaonashi-dev/techne/http`      |
 | OpenTelemetry tracing and metrics                 | `@kaonashi-dev/techne/telemetry` |
 | CQRS buses and event store                        | `@kaonashi-dev/techne/cqrs`      |
 | Queue and worker primitives                       | `@kaonashi-dev/techne/mq`        |
+| Prisma ORM integration                            | `@kaonashi-dev/techne/prisma`    |
+| Typed RPC contract client and codegen             | `@kaonashi-dev/techne/contract`  |
+| Security primitives (headers, CSRF, rate limit)   | `@kaonashi-dev/techne/security`  |
 | Console (CLI) command subsystem                   | `@kaonashi-dev/techne/console`   |
 | Testing utilities                                 | `@kaonashi-dev/techne/testing`   |
+| Legacy queue compatibility layer                  | `@kaonashi-dev/techne/queue`     |
 
 `@kaonashi-dev/techne` is a minimal bootstrap entrypoint. Use it only when you
 explicitly want the smallest possible surface.

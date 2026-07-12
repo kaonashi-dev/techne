@@ -4,13 +4,20 @@
 
 Techne is a personal project focused on a decorator-first developer experience, explicit application architecture, and Bun-native runtime ergonomics. It is built for exploration, not production use, and breaking changes should be expected.
 
+**Full documentation lives in the Mintlify site at [`apps/docs/`](./apps/docs/).** Run it locally with `cd apps/docs && bun run dev`, or browse the `.mdx` sources directly on GitHub. This README is intentionally a landing page — the docs site is the canonical reference.
+
 ## Why Techne
 
-- Bun-first runtime
+- Bun-first runtime with Elysia as the HTTP layer
 - Decorator-based controllers and providers with flat feature config
-- Built-in dependency injection
-- TypeBox-powered request schemas
-- CQRS, queues, and testing utilities in one package
+- Built-in dependency injection with request and transient scopes
+- TypeBox-powered request schemas and DTO validation
+- RFC 7807 problem documents for every HTTP error
+- Laravel-style outgoing HTTP client with test fakes
+- CQRS, message queues, console commands, and testing utilities in one package
+- Opt-in OpenTelemetry tracing and metrics
+- Optional Prisma integration and typed RPC contract clients
+- Security toolkit: headers, CSRF, rate limiting, signed cookies
 - CLI for scaffolding, code generation, and Bun builds
 
 ## Installation
@@ -25,12 +32,6 @@ To pin to a specific tag or commit:
 
 ```bash
 bun add "github:kaonashi-dev/techne#<tag-or-sha>"
-```
-
-After installation the CLI is available as:
-
-```bash
-bunx techne --help
 ```
 
 To scaffold a new project without a prior install:
@@ -101,1056 +102,91 @@ export const AppFeature = defineFeature({
 });
 ```
 
-`bootstrap()` reads `techne.config.ts` from `process.cwd()`, calls
-`TechneFactory.create()`, and starts listening. Port resolution is
-`options.port` → config `port` → `Bun.env.PORT` → `3000`. `host` defaults to
-`"0.0.0.0"`. The shorthand `techne()` returns the application without starting
-the server.
-
-### Lower-level API
-
-`TechneFactory.create()` is still available and is the right call when you need
-full control over the lifecycle (e.g. tests, in-process invocations):
-
-```ts
-import { TechneFactory } from "@kaonashi-dev/techne/core";
-import { AppFeature } from "./src/app.module";
-
-const app = await TechneFactory.create({ features: [AppFeature] });
-app.listen(3000, () => {
-  console.log("Server running at http://localhost:3000");
-});
+```bash
+bun run src/main.ts
+curl http://localhost:3000/app
+# → {"message":"Hello from Techne"}
 ```
 
-## Techne Surfaces
-
-The recommended mental model is:
-
-- `@kaonashi-dev/techne/common` for decorators, exceptions, DTO/schema helpers, logging, and request lifecycle interfaces.
-- `@kaonashi-dev/techne/core` for bootstrap and infrastructure APIs.
-- `@kaonashi-dev/techne/config`, `/jwt`, `/swagger`, `/health`, `/testing`, `/cqrs`, and `/mq` for specialized features.
-
-### Import Map
-
-| Area | Package |
-| --- | --- |
-| Decorators, exceptions, schemas, logging | `@kaonashi-dev/techne/common` |
-| Bootstrap, DI container, reflector, config loader | `@kaonashi-dev/techne/core` |
-| Testing utilities | `@kaonashi-dev/techne/testing` |
-| CQRS buses and event store | `@kaonashi-dev/techne/cqrs` |
-| Queue and worker primitives | `@kaonashi-dev/techne/mq` |
-
-### Migration
-
-| Before | After |
-| --- | --- |
-| `import { Controller } from "@kaonashi-dev/techne";` | `import { Controller } from "@kaonashi-dev/techne/common";` |
-| `import { NotFoundException } from "@kaonashi-dev/techne";` | `import { NotFoundException } from "@kaonashi-dev/techne/common";` |
-| `import { TechneFactory, Reflector } from "@kaonashi-dev/techne";` | `import { TechneFactory, Reflector } from "@kaonashi-dev/techne/core";` |
-| `import { Test } from "@kaonashi-dev/techne";` | `import { Test } from "@kaonashi-dev/techne/testing";` |
-| `import { CommandBus } from "@kaonashi-dev/techne";` | `import { CommandBus } from "@kaonashi-dev/techne/cqrs";` |
-| `import { Queue } from "@kaonashi-dev/techne";` | `import { Queue } from "@kaonashi-dev/techne/mq";` |
-
-`@kaonashi-dev/techne` is now a minimal bootstrap entrypoint. Use it only when you explicitly want the smallest possible surface.
-
-## Core Concepts
-
-### Features
-
-```ts
-import { defineFeature } from "@kaonashi-dev/techne/core";
-
-export const UsersFeature = defineFeature({
-  controllers: [UsersController],
-  providers: [UsersService],
-});
-```
-
-### Controllers and Routes
-
-```ts
-import { Body, Controller, Get, Param, Post, Query } from "@kaonashi-dev/techne/common";
-
-@Controller("users")
-class UsersController {
-  constructor(private readonly usersService: UsersService) {}
-
-  @Get("/")
-  findAll(@Query("page") page?: string) {
-    return this.usersService.findAll(Number(page) || 1);
-  }
-
-  @Get("/:id")
-  findOne(@Param("id") id: string) {
-    return this.usersService.findOne(id);
-  }
-
-  @Post("/", { body: CreateUserSchema })
-  create(@Body() body: any) {
-    return this.usersService.create(body);
-  }
-}
-```
-
-### Single-action controllers
-
-For an endpoint that only needs one route, place the verb decorator on the class
-itself and put the logic in a `handle` method — no separate method decorator
-required (akin to Laravel's invokable controllers or Tempest's single-route
-controllers).
-
-```ts
-import { Body, Controller, Get, Param, Post } from "@kaonashi-dev/techne/common";
-
-@Get("/reports/:id")
-class ShowReport {
-  handle(@Param("id") id: string) {
-    return { id };
-  }
-}
-
-// `@Controller` is optional; when present, its prefix composes with the route.
-// Class-level guards/middleware apply to the single `handle` route.
-@Controller("admin")
-@Post("/reports")
-class CreateReport {
-  handle(@Body() body: any) {
-    return { created: body.title };
-  }
-}
-```
-
-### Dependency Injection
-
-```ts
-import { Inject, Injectable } from "@kaonashi-dev/techne/common";
-
-const API_KEY = Symbol("API_KEY");
-
-@Injectable()
-class AuthService {
-  constructor(@Inject(API_KEY) private readonly apiKey: string) {}
-}
-
-const app = await TechneFactory.create({
-  providers: [
-    AuthService,
-    { provide: API_KEY, useValue: process.env.API_KEY },
-  ],
-});
-```
-
-### Guards and Middleware
-
-```ts
-import { Controller, Get, Injectable, Middleware, UseGuards } from "@kaonashi-dev/techne/common";
-import type { CanActivate } from "@kaonashi-dev/techne/common";
-
-@Injectable()
-class AuthGuard implements CanActivate {
-  canActivate(context: any) {
-    return context.headers.authorization === "Bearer valid-token";
-  }
-}
-
-const logMiddleware = async (context: any) => {
-  console.log(`${context.request.method} ${context.request.url}`);
-};
-
-@Controller("admin")
-@UseGuards(AuthGuard)
-@Middleware(logMiddleware)
-class AdminController {
-  @Get("/dashboard")
-  dashboard() {
-    return { access: "granted" };
-  }
-}
-```
-
-## Validation and DTOs
-
-Techne exposes a `Schema` helper built on `@sinclair/typebox`.
-
-```ts
-import { Body, Controller, Post, Schema } from "@kaonashi-dev/techne/common";
-
-const CreateUserSchema = Schema.Object({
-  name: Schema.String({ minLength: 2 }),
-  email: Schema.String(),
-  role: Schema.enum(["admin", "editor", "viewer"] as const),
-  age: Schema.Optional(Schema.Integer({ minimum: 0 })),
-});
-
-@Controller("users")
-class UsersController {
-  @Post("/", { body: CreateUserSchema })
-  create(@Body() body: any) {
-    return body;
-  }
-}
-```
-
-Decorator-style DTO metadata is also available through exports such as `Dto`, `IsString`, `IsNumber`, `IsInteger`, `IsBoolean`, and `IsEnum`. DTO schemas are passed to Elysia directly, so request validation is a single native Elysia pass. DTOs reject unknown properties by default; use `@Dto({ allowAdditional: true })` to opt out.
-
-### Header validation
-
-`@Headers(DtoClass)` binds the whole headers object and auto-injects a
-header-safe schema into Elysia's native validation. Property names must be
-lowercase header names (quote them); unknown headers are always tolerated —
-real requests carry `host`, `accept`, and friends:
-
-```ts
-@Dto()
-class AuthHeaders {
-  @IsString() @MinLength(10) "x-api-key"!: string;
-  @IsOptional() @IsString() "x-tenant-id"?: string;
-}
-
-@Get("/secure")
-secure(@Headers(AuthHeaders) headers: AuthHeaders) {}
-// Missing/invalid headers → 422 problem+json, same contract as body validation.
-```
-
-### Stripping unknown properties
-
-Instead of rejecting unknown body properties with a 422, they can be silently
-removed before the handler runs (top-level properties only in v1):
-
-```ts
-// Per DTO:
-@Dto({ stripUnknown: true })
-class CreateUserDto { @IsString() name!: string }
-
-// Globally (per-DTO `stripUnknown: false` keeps individual DTOs strict):
-TechneFactory.create({ validation: { stripUnknown: true } });
-```
-
-### Upload validation
-
-`@UploadedFile` accepts constraints; violations return 422 problem+json with
-the standard `errors` array. The MIME type is client-declared (`file.type`) —
-magic-byte sniffing is not performed:
-
-```ts
-@Post("/avatar")
-upload(
-  @UploadedFile("avatar", {
-    maxSize: 5 * 1024 * 1024,            // bytes
-    mimeTypes: ["image/png", "image/*"], // exact or type/* wildcards
-    required: true,                      // default
-  })
-  file: File,
-) {}
-```
-
-## Configuration
-
-The preferred entry point is `defineConfig`, which validates env values against
-a TypeBox schema at startup and produces a typed `AppConfig` object. It pairs
-with `appConfig(config)` so handlers can pull the same object out of
-DI via `@InjectConfig()`.
-
-```ts
-import { appConfig as appConfigPlugin, defineConfig, InjectConfig, t } from "@kaonashi-dev/techne/config";
-import { Controller, Get } from "@kaonashi-dev/techne/common";
-import { TechneFactory } from "@kaonashi-dev/techne/core";
-
-const typedConfig = defineConfig({
-  schema: t.Object({
-    PORT: t.Integer({ minimum: 1, maximum: 65535 }),
-    DATABASE_URL: t.String({ minLength: 1 }),
-    LOG_LEVEL: t.Optional(t.Union([t.Literal("debug"), t.Literal("log")])),
-  }),
-});
-
-type Config = typeof typedConfig;
-
-@Controller("status")
-class StatusController {
-  constructor(@InjectConfig() private readonly config: Config) {}
-
-  @Get("/")
-  status() {
-    return { port: this.config.get("PORT") };
-  }
-}
-
-const app = await TechneFactory.create({
-  plugins: [appConfigPlugin(typedConfig)],
-  controllers: [StatusController],
-});
-```
-
-Invalid or missing env values throw `ConfigValidationError` before the HTTP
-server starts. `t` is a re-export of TypeBox's `Type` for ergonomic schema
-authoring, and `APP_CONFIG` is the DI token `@InjectConfig()` resolves.
-
-`config()` registers `ConfigService` from env files, runtime env, and optional
-load factories:
-
-```ts
-import { ConfigService, config } from "@kaonashi-dev/techne/config";
-
-const app = await TechneFactory.create({
-  plugins: [config({ expandVariables: true })],
-});
-const config = app.get<ConfigService>(ConfigService);
-config.getOrThrow("DATABASE_URL");
-```
-
-## Runtime Features
-
-Prefer declaring runtime options in `techne.config.ts`. The setters below are
-still supported but emit a one-time deprecation warning per process and will
-be removed in v1.0:
-
-```ts
-const app = await TechneFactory.create({ controllers: [UsersController] });
-
-// Deprecated — declare these in techne.config.ts instead.
-app.setGlobalPrefix("api");
-app.enableVersioning({ type: "uri" });
-app.enableCors({ origin: true, credentials: true });
-app.useGlobalGuards(new AuthGuard());
-```
-
-The declarative equivalent:
-
-```ts
-// techne.config.ts
-import { defineTechneConfig } from "@kaonashi-dev/techne/core";
-
-export default defineTechneConfig({
-  features: [UsersFeature],
-  globalPrefix: "api",
-  versioning: { type: "uri" },
-  cors: { origin: true, credentials: true },
-});
-```
-
-`TechneFactory.createApplicationContext()` is also available for standalone flat
-provider graphs without HTTP. Request-scoped providers share a stable context
-across guards and handlers within the same request through `ContextIdFactory`
-from `@kaonashi-dev/techne/core`.
-
-## Security
-
-### Security response headers
-
-`securityHeaders: true` stamps a helmet-style preset on every response —
-including error responses — with zero per-request cost beyond a single header
-merge (the option set is compiled to a frozen record at boot):
-
-```ts
-const app = await TechneFactory.create({
-  controllers: [UsersController],
-  securityHeaders: true,
-});
-// X-Content-Type-Options: nosniff          X-Frame-Options: SAMEORIGIN
-// Strict-Transport-Security: max-age=15552000; includeSubDomains
-// Referrer-Policy: no-referrer             X-Permitted-Cross-Domain-Policies: none
-// Cross-Origin-Opener-Policy: same-origin  Cross-Origin-Resource-Policy: same-origin
-```
-
-Pass an object to tune or disable individual headers. `Content-Security-Policy`
-is opt-in (a string or a directive map), and `custom` merges arbitrary headers
-last:
-
-```ts
-securityHeaders: {
-  frameOptions: "DENY",
-  hsts: { maxAge: 31536000, preload: true },   // or `hsts: false`
-  contentSecurityPolicy: { "default-src": "'none'" },
-  custom: { "x-powered-by": "techne" },
-},
-```
-
-HSTS is always emitted when enabled — browsers ignore it over plain HTTP, so
-local development is unaffected. Raw `Response` short-circuits (CORS preflight
-204, draining 503) bypass the response hooks and intentionally skip these
-headers.
-
-### Native server limits
-
-The `server` option forwards limits to `Bun.serve` when `listen()` binds a
-real socket, so they are enforced by the runtime before any framework code
-runs:
-
-```ts
-server: {
-  maxRequestBodySize: 1_048_576, // bytes; oversized requests → native 413 (plain text)
-  idleTimeout: 30,               // seconds; socket-level idle timeout (0–255)
-},
-```
-
-`idleTimeout` is not a total request deadline — a handler that computes
-indefinitely is not interrupted. Neither limit applies to `app.handle()`
-calls (tests, embedded use), which bypass `Bun.serve` entirely.
-
-### Client IP resolution
-
-`resolveClientIp` from `@kaonashi-dev/techne/security` returns the socket peer
-address by default and only consults `X-Forwarded-For` / `X-Real-IP` when a
-trusted proxy is explicitly declared (rightmost-hops semantics):
-
-```ts
-import { resolveClientIp } from "@kaonashi-dev/techne/security";
-
-resolveClientIp(ctx);                              // socket address
-resolveClientIp(ctx, true);                        // rightmost X-Forwarded-For entry
-resolveClientIp(ctx, { hops: 2 });                 // 2 trusted proxies
-resolveClientIp(ctx, { header: "x-real-ip" });     // alternate header
-```
-
-### Rate limiting
-
-The `rateLimit` option enables a global token-bucket limiter that runs in the
-fused `onRequest` hook — before routing, guards, and body parsing. Capacity is
-`burst ?? limit`; tokens refill at the sustained rate of `limit` per
-`windowMs`. Denials return RFC 7807 429 documents with `Retry-After` and IETF
-`RateLimit-*` headers; allowed responses carry `RateLimit-Remaining` (disable
-with `headers: false`). Omitted entirely: zero hooks, zero per-request cost.
-
-```ts
-const app = await TechneFactory.create({
-  controllers: [UsersController],
-  rateLimit: {
-    limit: 100,            // sustained requests per window
-    windowMs: 60_000,
-    burst: 150,            // optional spike capacity (default: limit)
-    trustProxy: false,     // consult X-Forwarded-For only when explicitly enabled
-    exclude: ["/healthz"], // prefix-matched paths the limiter skips
-    // store: new RedisRateLimitStore(),  // any RateLimitStore implementation
-  },
-});
-```
-
-Clients are keyed by IP via `resolveClientIp` (or a custom `keyExtractor`).
-The default `InMemoryTokenBucketStore` is per-process and LRU-capped at 10k
-keys — implement `RateLimitStore` for multi-instance deployments. Requests
-with no resolvable IP (e.g. `app.handle()` in tests) are allowed fail-open
-with a one-time warning.
-
-Per-route overrides via the `@RateLimit` decorator (method or controller
-level). A decorated route is exempt from the global limiter — its own policy
-is the only one that applies:
-
-```ts
-@RateLimit({ limit: 10, windowMs: 60_000 })  // tighter (or looser) than global
-@Post("/login")
-login() {}
-
-@RateLimit(false)                            // fully exempt from rate limiting
-@Get("/status")
-status() {}
-```
-### Cookies
-
-The `cookies` option forwards signing configuration to Elysia's built-in
-reactive cookie jar; the framework adds a `@Cookie` param decorator and a
-secure-defaults write helper:
-
-```ts
-TechneFactory.create({
-  cookies: { secrets: process.env.COOKIE_SECRET, sign: ["session"] },
-});
-
-@Get("/me")
-profile(@Cookie("session") session: string | undefined) {}
-
-import { setCookie } from "@kaonashi-dev/techne/security";
-// Defaults: httpOnly, SameSite=Lax, Secure in production, Path=/
-setCookie(ctx.cookie, "session", token, { maxAge: 86_400 });
-```
-
-### CSRF protection (double-submit cookie)
-
-Opt-in via the `csrf` factory option — one middleware compiles at boot and
-runs after guards on every route (so 401s take precedence over CSRF 403s).
-Safe methods mint a JS-readable token cookie (`__Host-csrf` in production,
-`csrf` in dev); unsafe methods must echo it in the `x-csrf-token` header,
-compared timing-safely. Mismatches return 403 problem+json.
-
-```ts
-TechneFactory.create({
-  csrf: {
-    exclude: ["/webhooks"],   // signature-authenticated endpoints
-    // cookieName, headerName, methods, cookie attributes are configurable
-  },
-});
-
-@CsrfExempt()                  // method or controller level
-@Post("/webhooks/stripe")
-handleWebhook(@Body() payload: unknown) {}
-```
-
-CSRF only protects cookie-authenticated browser clients — pure Bearer-token
-APIs should exempt routes (or skip the option). When serving cross-origin
-browsers, pair it with `cors: { credentials: true }`.
-
-## Logging
-
-Techne ships with a lightweight structured `Logger` exported from
-`@kaonashi-dev/techne/common`. By default it uses pretty output locally and JSON
-output when `NODE_ENV=production`; `LOG_LEVEL` sets the minimum level and
-defaults to `verbose`.
-
-Configure logging from `techne.config.ts` with the `logger` option:
-
-```ts
-import { defineTechneConfig } from "@kaonashi-dev/techne/core";
-import { AppFeature } from "./src/app.module";
-
-export default defineTechneConfig({
-  features: [AppFeature],
-  logger: {
-    mode: "json", // "pretty" | "json" | false
-    minLevel: "log", // "error" | "warn" | "log" | "debug" | "verbose"
-    redact: ["password", "auth.token"], // JSON output only
-  },
-});
-```
-
-Use `logger: false` to disable all `Logger` output, including framework and
-HTTP request logs, or pass `logger: "pretty"` / `logger: "json"` for a simple
-format override.
-
-Inject a context-bound logger with `@InjectLogger()`:
-
-```ts
-import { InjectLogger, Injectable, Logger } from "@kaonashi-dev/techne/common";
-
-@Injectable()
-class UsersService {
-  constructor(@InjectLogger("UsersService") private readonly logger: Logger) {}
-
-  create(userId: string) {
-    this.logger.log("creating user", { userId });
-  }
-
-  reportFailure(error: Error, userId: string) {
-    this.logger.error(error, { userId });
-  }
-}
-```
-
-The logger supports `log`, `warn`, `error`, `debug`, and `verbose`. Structured
-metadata is appended as `key=value` in pretty mode and merged into the JSON
-record in JSON mode. During HTTP requests, log records automatically pick up the
-request id from `x-request-id` or Techne's generated id; W3C `traceparent`
-headers are exposed as `traceId` / `spanId` in JSON output.
-
-For tests, swap the global sink and restore it afterward:
-
-```ts
-import { Logger } from "@kaonashi-dev/techne/common";
-import { BufferSink } from "@kaonashi-dev/techne/testing";
-
-const previous = Logger.getSink();
-const sink = new BufferSink();
-
-Logger.setSink(sink);
-try {
-  new Logger("Test").log("hello");
-  expect(sink.lines[0]).toContain("hello");
-} finally {
-  Logger.setSink(previous);
-}
-```
-
-Import `NullSink` from `@kaonashi-dev/techne/testing` and use it with the same
-save/restore pattern when you only need to silence output and do not need
-assertions.
-
-## Plugins
-
-Plugins are the sanctioned extension point. A plugin is a named, optionally
-dependency-ordered unit with a single `setup()` function that receives a
-`PluginContext` — the only surface allowed to mutate framework state, register
-DI tokens, hook into lifecycle, or reach the raw Elysia instance.
-
-```ts
-import { definePlugin } from "@kaonashi-dev/techne/core";
-
-interface MetricsOptions {
-  prefix?: string;
-}
-
-const MetricsPlugin = definePlugin<MetricsOptions>({
-  name: "metrics",
-  version: "0.1.0",
-  dependencies: [],
-  setup(ctx, options) {
-    const prefix = options?.prefix ?? "techne_";
-    ctx.logger.log(`registering metrics with prefix "${prefix}"`);
-
-    ctx.provide("METRICS_PREFIX", prefix);
-
-    ctx.http().get("/metrics", () => `# metrics for ${prefix}\n`);
-
-    ctx.onReady(async () => {
-      ctx.logger.log("ready: metrics endpoint live");
-    });
-
-    ctx.onShutdown(async () => {
-      ctx.logger.log("flushing metrics before exit");
-    });
-  },
-});
-
-const app = await TechneFactory.create({ controllers: [], providers: [] });
-await app.register(MetricsPlugin, { prefix: "myapp_" });
-```
-
-- `ctx.provide(token, value)` registers a token in the root DI scope.
-- `ctx.resolve(token)` reads from the root scope.
-- `ctx.onReady(handler)` fires after `onApplicationBootstrap` and before the
-  HTTP server starts listening.
-- `ctx.onShutdown(handler)` fires in LIFO order during graceful shutdown,
-  before the MQ registry closes and before `onModuleDestroy`.
-- `ctx.http()` returns the raw Elysia instance for low-level integrations.
-
-Re-registering the same `name` + `setup` function is a no-op (handy for HMR);
-a different `setup` for the same `name` throws. Missing `dependencies` throw
-at registration time.
-
-Native Elysia plugins can be attached through `app.use()`:
-
-```ts
-import { cors } from "@elysiajs/cors";
-
-app.use(cors());
-```
-
-`app.getRegisteredPlugins()` returns the list of registered plugin names in
-registration order — useful for diagnostics.
-
-## Auth and JWT
-
-```ts
-import { APP_GUARD, Public, Roles, RolesGuard } from "@kaonashi-dev/techne/common";
-import { Reflector, TechneFactory } from "@kaonashi-dev/techne/core";
-import { jwt, JwtAuthGuard, JwtService } from "@kaonashi-dev/techne/jwt";
-
-const app = await TechneFactory.create({
-  plugins: [jwt({ secret: "top-secret" })],
-  providers: [
-    {
-      provide: APP_GUARD,
-      useFactory: (jwt: JwtService, reflector: Reflector) => [
-        new JwtAuthGuard(reflector, jwt),
-        new RolesGuard(reflector),
-      ],
-      inject: [JwtService, Reflector],
-    },
-  ],
-});
-```
-
-Use `@Public()` to skip auth and `@Roles(...)` for role metadata consumed by `RolesGuard`.
-
-## Swagger and Health
-
-`SwaggerModule.createAutoDocument(app, builder?)` walks every registered route
-(including their TypeBox `params`, `query`, `body`, and `response` schemas) and
-emits an OpenAPI 3.1 document — no manual `addPath()` calls required. Anything
-the builder adds explicitly takes precedence, so the auto-generated spec can
-still be patched without forking.
-
-```ts
-import { SwaggerModule, DocumentBuilder } from "@kaonashi-dev/techne/swagger";
-
-const document = SwaggerModule.createAutoDocument(
-  app,
-  new DocumentBuilder().setTitle("My API").setVersion("1.0.0"),
-);
-
-SwaggerModule.setup("/api-docs", app, document);
-```
-
-The lower-level pieces are also exported for callers that want to integrate
-the emitter directly: `emitOpenApiDocument(app, builder?)` and
-`typeboxToOpenApi(schema)` from `@kaonashi-dev/techne/swagger`.
-
-`HealthCheckService` from `@kaonashi-dev/techne/health` still provides
-`pingCheck()` and `memoryCheck()` helpers for callers that want to expose a
-custom health indicator. The auto-registered `/healthz` and `/readyz`
-endpoints described in [Health & Graceful Shutdown](#health--graceful-shutdown)
-are independent and are wired up by `TechneFactory.create()`.
-
-## Response Hooks
-
-```ts
-import { Controller, Get, OnResponse } from "@kaonashi-dev/techne/common";
-import type { ResponseHook } from "@kaonashi-dev/techne/common";
-
-const CacheHeaderHook: ResponseHook = {
-  transform(result, context) {
-    context.ctx.set.headers = {
-      ...(context.ctx.set.headers ?? {}),
-      "cache-control": "no-store",
-    };
-    return result;
-  },
-};
-
-@Controller("reports")
-@OnResponse(CacheHeaderHook)
-class ReportsController {
-  @Get("/")
-  list() {
-    return [];
-  }
-}
-```
+See the [Quickstart](./apps/docs/quickstart.mdx) for the step-by-step version
+and the lower-level `TechneFactory.create()` API.
+
+## Import Map
+
+Techne ships as a set of subpath imports so unused subsystems add no overhead:
+
+| Area                                              | Package                          |
+| ------------------------------------------------- | -------------------------------- |
+| Minimal bootstrap entrypoint                      | `@kaonashi-dev/techne`           |
+| Decorators, exceptions, schemas                   | `@kaonashi-dev/techne/common`    |
+| Bootstrap, DI container, reflector, config loader | `@kaonashi-dev/techne/core`      |
+| Configuration service and helpers                 | `@kaonashi-dev/techne/config`    |
+| JWT auth plugin and guard                         | `@kaonashi-dev/techne/jwt`       |
+| OpenAPI / Swagger document generation             | `@kaonashi-dev/techne/swagger`   |
+| Health checks and readiness                       | `@kaonashi-dev/techne/health`    |
+| Outgoing HTTP client                              | `@kaonashi-dev/techne/http`      |
+| OpenTelemetry tracing and metrics                 | `@kaonashi-dev/techne/telemetry` |
+| CQRS buses and event store                        | `@kaonashi-dev/techne/cqrs`      |
+| Queue and worker primitives                       | `@kaonashi-dev/techne/mq`        |
+| Prisma ORM integration                            | `@kaonashi-dev/techne/prisma`    |
+| Typed RPC contract client and codegen             | `@kaonashi-dev/techne/contract`  |
+| Security primitives (headers, CSRF, rate limit)   | `@kaonashi-dev/techne/security`  |
+| Console (CLI) command subsystem                   | `@kaonashi-dev/techne/console`   |
+| Testing utilities                                 | `@kaonashi-dev/techne/testing`   |
+| Legacy queue compatibility layer                  | `@kaonashi-dev/techne/queue`     |
+
+## Documentation
+
+| Topic | Docs |
+| ----- | ---- |
+| Getting started | [Introduction](./apps/docs/introduction.mdx) · [Installation](./apps/docs/installation.mdx) · [Quickstart](./apps/docs/quickstart.mdx) · [Project structure](./apps/docs/project-structure.mdx) |
+| Concepts | [Features](./apps/docs/concepts/features.mdx) · [Controllers](./apps/docs/concepts/controllers.mdx) · [Dependency injection](./apps/docs/concepts/dependency-injection.mdx) · [Application lifecycle](./apps/docs/concepts/application-lifecycle.mdx) |
+| Configuration | [techne.config.ts](./apps/docs/configuration/techne-config.mdx) · [Typed environment](./apps/docs/configuration/environment.mdx) |
+| HTTP | [Routing](./apps/docs/http/routing.mdx) · [Middleware](./apps/docs/http/middleware.mdx) · [Guards](./apps/docs/http/guards.mdx) · [Validation](./apps/docs/http/validation.mdx) · [Response hooks](./apps/docs/http/response-hooks.mdx) · [Exceptions](./apps/docs/http/exceptions.mdx) · [CORS](./apps/docs/http/cors.mdx) · [HTTP client](./apps/docs/http/client.mdx) |
+| Plugins | [Plugin protocol](./apps/docs/plugins/plugin-protocol.mdx) · [Elysia plugins](./apps/docs/plugins/using-elysia-plugins.mdx) |
+| Auth | [JWT](./apps/docs/auth/jwt.mdx) · [Roles](./apps/docs/auth/roles.mdx) |
+| ORM (Prisma) | [Getting started](./apps/docs/orm/getting-started.mdx) |
+| Swagger | [Auto document](./apps/docs/swagger/auto-document.mdx) · [Custom document](./apps/docs/swagger/custom-document.mdx) |
+| Health | [Endpoints](./apps/docs/health/endpoints.mdx) · [Graceful shutdown](./apps/docs/health/graceful-shutdown.mdx) |
+| Observability (telemetry) | [OpenTelemetry](./apps/docs/observability/opentelemetry.mdx) · [Instrumenting code](./apps/docs/observability/instrumenting-code.mdx) |
+| Testing | [Overview](./apps/docs/testing/overview.mdx) |
+| CQRS | [Overview](./apps/docs/cqrs/overview.mdx) |
+| MQ (queues) | [Overview](./apps/docs/mq/overview.mdx) |
+| Contract (typed RPC) | [RPC client](./apps/docs/contract/rpc-client.mdx) · [Codegen](./apps/docs/contract/codegen.mdx) |
+| Console commands | [Overview](./apps/docs/console/overview.mdx) |
+| CLI | [Overview](./apps/docs/cli/overview.mdx) |
+| Errors (RFC 7807) | [Overview](./apps/docs/errors/overview.mdx) |
+| Performance | [Benchmarks](./apps/docs/performance/benchmarks.mdx) · [Optimizations](./apps/docs/performance/optimizations.mdx) |
+| Migrating to 0.4 | [Migration guide](./apps/docs/reference/migrating.mdx) (also [MIGRATING.md](./MIGRATING.md)) |
 
 ## Exceptions
 
-Techne serializes exceptions as RFC 7807 problem documents with
-`Content-Type: application/problem+json`. Subclasses of `HttpException` accept
-an optional second argument that attaches a machine-readable `code` and an
-explicit problem `type` URI:
+Every HTTP error is serialized as an RFC 7807 problem document with a `type`
+URL of the form
+`https://github.com/kaonashi-dev/techne/blob/main/docs/errors/<slug>.md`
+(see [`docs/errors/`](./docs/errors/)). The `HttpException` API and its
+per-status subclasses are documented in
+[Exceptions](./apps/docs/http/exceptions.mdx).
 
-```ts
-import { NotFoundException } from "@kaonashi-dev/techne/common";
-
-throw new NotFoundException("User #99 not found", { code: "user.not_found" });
-```
-
-The serialized response looks like:
-
-```json
-{
-  "type": "https://github.com/kaonashi-dev/techne/blob/main/docs/errors/not-found",
-  "title": "Not Found",
-  "status": 404,
-  "detail": "User #99 not found",
-  "code": "user.not_found",
-  "instance": "/users/99",
-  "requestId": "<uuid>"
-}
-```
-
-`instance` is the request path and `requestId` is propagated from the
-`x-request-id` header (or generated on the fly when absent) and echoed back on
-the response. `errors` is added on 422 validation failures as a
-`ValidationError[]` extension field. In production, `detail` is omitted for
-non-`HttpException` throws so server-side error messages never leak to
-clients. `REASON_PHRASES` is exported from `@kaonashi-dev/techne/common` for
-callers that need the standard HTTP reason-phrase table.
-
-## Testing
-
-Testing utilities live under `./testing`.
-
-```ts
-import { Test } from "@kaonashi-dev/techne/testing";
-
-const module = await Test.createTestingModule({
-  providers: [UserService, DatabaseService],
-})
-  .overrideProvider(DatabaseService)
-  .useValue({
-    find: () => [{ id: 1, name: "Mock User" }],
-  })
-  .compile();
-
-const userService = module.get<UserService>(UserService);
-```
-
-## CQRS
-
-CQRS utilities live under `./cqrs`.
-
-```ts
-import {
-  Command,
-  CommandBus,
-  CommandHandler,
-  DomainEvent,
-  EventBus,
-  EventHandler,
-} from "@kaonashi-dev/techne/cqrs";
-
-class CreateUserCommand extends Command<{ name: string }> {}
-
-class UserCreatedEvent extends DomainEvent<{ id: number; name: string }> {}
-
-@CommandHandler(CreateUserCommand)
-class CreateUserHandler {
-  constructor(private readonly eventBus: EventBus) {}
-
-  async execute(command: CreateUserCommand) {
-    const user = { id: 1, ...command.payload };
-    await this.eventBus.emit(new UserCreatedEvent(user), `user-${user.id}`);
-    return user;
-  }
-}
-
-@EventHandler(UserCreatedEvent)
-class UserCreatedLogger {
-  handle(event: UserCreatedEvent) {
-    console.log("User created:", event.data.name);
-  }
-}
-```
-
-`TechneFactory.create()` registers the command, query, and event buses automatically.
-
-## MQ
-
-Queue utilities now live under `./mq`. The legacy `./queue` subpath remains as a temporary
-core-only compatibility layer that reexports `Queue`, `Worker`, `Job`, and `QueueEvents`.
-
-```ts
-import {
-  InjectMq,
-  Job,
-  mq,
-  MqProcess,
-  MqProcessor,
-  Queue,
-  Worker,
-} from "@kaonashi-dev/techne/mq";
-
-const queue = new Queue("emails");
-
-await queue.add("send", { email: "user@example.com" }, { attempts: 3, backoff: 1000 });
-
-@MqProcessor("emails")
-class EmailProcessor {
-  constructor(@InjectMq("emails") private readonly emails: Queue<{ email: string }>) {}
-
-  @MqProcess("send")
-  async send(job: Job<{ email: string }>) {
-    return { delivered: job.data.email };
-  }
-}
-
-const worker = new Worker(queue, async (job) => {
-  console.log("Processing:", job.name, job.data);
-  return { ok: true };
-});
-
-await worker.run();
-```
-
-Framework integration is available through the `mq()` plugin:
-
-```ts
-const app = await TechneFactory.create({
-  plugins: [mq({ queues: [{ name: "emails" }] })],
-  providers: [EmailProcessor],
-});
-```
-
-### Queue payload validation
-
-`defineQueue` accepts optional per-job `schemas` (a `@Dto` class or a raw
-TypeBox `TSchema`) plus a `validate` mode. Validators compile once at
-definition time; queues without schemas pay nothing:
-
-```ts
-const TasksQueue = defineQueue(
-  {
-    name: "tasks",
-    jobs: { "initiate-task": {} as InitiateTask },
-    schemas: { "initiate-task": InitiateTaskDto },
-  },
-  { validate: "dispatch" }, // "dispatch" | "consume" | "both"; omit to disable
-);
-
-// Throws QueuePayloadValidationError synchronously at the producer:
-await TasksQueue.dispatchers["initiate-task"]({ taskId: 123 as any });
-```
-
-- `"dispatch"` — rejected before enqueuing. Enforced on the typed dispatchers
-  **and** on direct `Queue.add`/`addBulk` calls, so the low-level path can't
-  bypass the contract.
-- `"consume"` — the worker throws `QueuePayloadValidationError` before the
-  handler runs; it flows into the normal `@OnFailure`/`failed()` lifecycle.
-- Schemas describe the **wire shape** (payloads JSON-roundtrip through the
-  driver — `Date` fields arrive as strings).
-- Misconfiguration is loud at boot: unknown job names in `schemas` and schema
-  classes without DTO metadata both throw `TypeError` from `defineQueue`.
-
-## Health & Graceful Shutdown
-
-`TechneFactory.create()` auto-registers two health endpoints:
-
-- `GET /healthz` — liveness. Always returns 200 once the process is up.
-- `GET /readyz` — readiness. Returns 200 only after `onApplicationBootstrap`
-  has completed AND every configured health check resolves to
-  `healthy: true`. During shutdown, readiness flips to `false` immediately so
-  load balancers can stop routing traffic before in-flight requests drain.
-
-Paths and checks are configurable through the `health` option, and graceful
-shutdown is configured through `shutdown`:
-
-```ts
-// techne.config.ts
-import { defineTechneConfig } from "@kaonashi-dev/techne/core";
-import { AppFeature } from "./src/app.module";
-import { db } from "./src/db";
-
-export default defineTechneConfig({
-  features: [AppFeature],
-  health: {
-    livenessPath: "/healthz",
-    readinessPath: "/readyz",
-    checks: [
-      async () => ({
-        name: "database",
-        healthy: await db.ping(),
-      }),
-    ],
-  },
-  shutdown: {
-    gracePeriod: 15_000,
-    signals: ["SIGTERM", "SIGINT"],
-  },
-});
-```
-
-When a configured signal fires, the adapter starts refusing new requests with
-HTTP 503 and waits up to `gracePeriod` ms (default `10_000`) for in-flight
-work to settle before stopping. Plugin `onShutdown` handlers fire in LIFO
-order, then the MQ registry closes, then `onModuleDestroy` runs.
-
-Set `health: { enabled: false }` to opt out of the auto-registered endpoints
-entirely.
-
-## CLI
+## Repository Scripts
 
 ```bash
-# Create a new project
-bunx techne new my-project
-
-# Run with hot reload and an optional inspector
-bunx techne dev --port 3000 --inspect
-
-# Run without hot reload (production-style)
-bunx techne start --port 3000
-
-# Run the test suite
-bunx techne test tests/ --watch --coverage
-
-# Diagnose tsconfig / project layout
-bunx techne doctor
-
-# Generate framework files
-bunx techne g module users
-bunx techne g controller users
-bunx techne g service users
-bunx techne g resource users
-bunx techne g middleware logger
-bunx techne g guard auth
-bunx techne g filter http-exception
-bunx techne g dto create-user
-
-# Scaffold a multi-stage Bun Dockerfile (+ .dockerignore)
-bunx techne g docker --port 3000
-bunx techne deploy --target docker --port 3000
-
-# Build an entrypoint with bun build
-bunx techne build src/main.ts --out dist/app.bun --minify
-bunx techne build src/main.ts --target node --out dist/app.js
+bun test           # framework test suite
+bun run lint       # oxlint
+bun run bench      # benchmark suite
+bun run build      # tsc build
 ```
 
-Commands: `new`, `create`, `dev`, `start`, `build`, `test`, `deploy`,
-`doctor`, `generate|g`.
-
-Generator types: `module`, `controller`, `service`, `resource`, `middleware`,
-`guard`, `filter`, `dto`, `docker`, `client`.
-
-`techne deploy --target docker` currently writes the same multi-stage
-Dockerfile as the `g docker` generator. Other deploy targets (`fly`, `railway`,
-`cloudflare`, `bun-vm`) are planned but not implemented yet.
-
-Generated starters use `@kaonashi-dev/techne/common` and
-`@kaonashi-dev/techne/core` and emit a `bootstrap()` + `techne.config.ts`
-project skeleton.
-
-## Package Exports
-
-```ts
-import { TechneFactory } from "@kaonashi-dev/techne/core";
-import { Controller, Dto, InjectLogger, IsString, Logger } from "@kaonashi-dev/techne/common";
-import { appConfig, config, ConfigService } from "@kaonashi-dev/techne/config";
-import { jwt, JwtAuthGuard, JwtService } from "@kaonashi-dev/techne/jwt";
-import { SwaggerModule } from "@kaonashi-dev/techne/swagger";
-import { HealthCheckService } from "@kaonashi-dev/techne/health";
-import { BufferSink, NullSink, Test } from "@kaonashi-dev/techne/testing";
-import { CommandBus } from "@kaonashi-dev/techne/cqrs";
-import { mq, Queue } from "@kaonashi-dev/techne/mq";
-import { compileSecurityHeaders, resolveClientIp } from "@kaonashi-dev/techne/security";
-```
-
-## Scripts
-
-```bash
-bun run test
-bun run check
-bun run build
-bun run bench
-```
-
-## Project Structure
-
-```text
-src/
-  cli/            CLI scaffolding and generators
-  common/         Public decorators, exceptions, and schema helpers
-  config/         ConfigService, config plugins, and registerAs helpers
-  core/           Application core, DI container, and bootstrap APIs
-    plugins/      Plugin protocol (`definePlugin`, `PluginContext`)
-  cqrs/           Command, query, event buses and event store
-  decorators/     Routing, DI, and metadata decorators
-  exceptions/     HTTP exception classes
-  factory/        TechneFactory bootstrap implementation
-  health/         Basic health check service and decorator
-  jwt/            JWT plugin, service, and auth guard
-  mq/             BullMQ-style queue core and framework integration
-  platform/       Elysia adapter
-  queue/          Legacy core-only queue compatibility barrel
-  schema/         TypeBox-backed schema helpers and DTO metadata
-  swagger/        Lightweight OpenAPI document generation and setup
-  testing/        Testing module utilities
-```
-
-## Performance
-
-A benchmark matrix lives under [`benchmarks/`](./benchmarks/README.md) covering
-the code paths that actually matter — raw Elysia vs Techne, the arity-specialized
-**fast path** for routes with no enhancers, the cost-tagged **slow path** for
-routes with guards and filters, schema validation (valid + invalid bodies),
-response schemas (exercising the compiled TypeBox stringifier), container
-resolution, and cold start with `Bun.spawn`.
-
-```bash
-bun run benchmarks/index.ts            # full matrix
-bun run benchmarks/index.ts --quick    # CI smoke
-bun run benchmarks/index.ts --json     # machine-readable
-```
-
-Notable optimizations on the hot path:
-
-- Arity-specialized compiled handlers for routes without enhancers.
-- Cost-tagged slow path that hoists static `@Injectable()` guards out at route
-  registration time.
-- Compiled TypeBox stringifiers (`compileStringifier(schema)` from
-  `@kaonashi-dev/techne/schema`) used automatically for routes with a
-  `response` schema, with a per-schema `WeakMap` cache.
-- Cheaper validation error path and lighter request-id / in-flight tracking.
+The demo application in [`apps/demo/`](./apps/demo/) exercises most framework
+features end-to-end and includes an `oha` performance harness.
 
 ## Status
 
-Techne is still experimental. APIs may change quickly, some areas are incomplete, and documentation will continue to evolve with the framework.
+Techne is still experimental. APIs may change quickly, some areas are
+incomplete, and documentation will continue to evolve with the framework.
 
-v0.3 (in progress) introduces declarative config, plugin protocol, RFC 7807
-errors, `/healthz` + `/readyz`, graceful shutdown, expanded CLI, and auto
-OpenAPI.
+The latest release is **0.4.0** (project renamed to Techne) — see the
+[CHANGELOG](./CHANGELOG.md) and the [migration guide](./MIGRATING.md).
 
 ## License
 

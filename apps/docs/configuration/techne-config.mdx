@@ -76,4 +76,5 @@ export default defineTechneConfig({
 `TechneFactory.createApplicationContext()` is also available for
 standalone flat provider graphs without HTTP. Request-scoped providers
 share a stable context across guards and handlers within the same request
-through `ContextIdFactory` from `@kaonashi-dev/techne/core`.
+through a per-request context id; create one manually with
+`ModuleRef.createContextId()` from `@kaonashi-dev/techne/core`.

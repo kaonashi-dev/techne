@@ -18,7 +18,7 @@ The serialized response looks like:
 
 ```json
 {
-  "type": "https://github.com/kaonashi-dev/techne/blob/main/docs/errors/not-found",
+  "type": "https://github.com/kaonashi-dev/techne/blob/main/docs/errors/not-found.md",
   "title": "Not Found",
   "status": 404,
   "detail": "User #99 not found",
@@ -45,6 +45,7 @@ Per-status subclasses live in `@kaonashi-dev/techne/common`:
 - [`ForbiddenException`](/errors/forbidden)
 - [`NotFoundException`](/errors/not-found)
 - [`ConflictException`](/errors/conflict)
+- [`GoneException`](/errors/gone)
 - [`UnprocessableEntityException`](/errors/unprocessable-entity)
 - [`TooManyRequestsException`](/errors/too-many-requests)
 - [`InternalServerErrorException`](/errors/internal-server-error)
