@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import {
+  BadGatewayException,
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  GatewayTimeoutException,
   GoneException,
   HttpException,
   InternalServerErrorException,
@@ -61,6 +63,18 @@ const cases: Array<{
     status: 503,
     reason: "Service Unavailable",
     defaultMessage: "Service Unavailable",
+  },
+  {
+    ctor: BadGatewayException,
+    status: 502,
+    reason: "Bad Gateway",
+    defaultMessage: "Bad Gateway",
+  },
+  {
+    ctor: GatewayTimeoutException,
+    status: 504,
+    reason: "Gateway Timeout",
+    defaultMessage: "Gateway Timeout",
   },
 ];
 
