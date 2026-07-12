@@ -1,4 +1,11 @@
-import { Body, Controller, CsrfExempt, Post, Public, RateLimit } from "../../../../src/common/index.ts";
+import {
+  Body,
+  Controller,
+  CsrfExempt,
+  Post,
+  Public,
+  RateLimit,
+} from "../../../../src/common/index.ts";
 import { JwtService } from "../../../../src/jwt/index.ts";
 import { LoginDto } from "./dto/login.dto";
 
