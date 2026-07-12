@@ -6,7 +6,13 @@
  * Usage (from the repo root):
  *   bun run apps/demo/perf/compare.ts [-n 2000] [-c 20] [--threshold 0.1]
  */
-import { BASELINE_PATH, measureAll, type PerfReport, renderTable, resolveRunOptions } from "./harness";
+import {
+  BASELINE_PATH,
+  measureAll,
+  type PerfReport,
+  renderTable,
+  resolveRunOptions,
+} from "./harness";
 
 const opts = resolveRunOptions();
 
@@ -34,8 +40,12 @@ const p99Delta = pct(c.p99Ms, b.p99Ms);
 
 console.log("\n## Delta vs baseline");
 console.log(`baseline generated: ${baseline.generatedAt}`);
-console.log(`avg req/s:  ${b.rps.toFixed(0)} → ${c.rps.toFixed(0)}  (${(rpsDelta * 100).toFixed(1)}%)`);
-console.log(`avg p99 ms: ${b.p99Ms.toFixed(2)} → ${c.p99Ms.toFixed(2)}  (${(p99Delta * 100).toFixed(1)}%)`);
+console.log(
+  `avg req/s:  ${b.rps.toFixed(0)} → ${c.rps.toFixed(0)}  (${(rpsDelta * 100).toFixed(1)}%)`,
+);
+console.log(
+  `avg p99 ms: ${b.p99Ms.toFixed(2)} → ${c.p99Ms.toFixed(2)}  (${(p99Delta * 100).toFixed(1)}%)`,
+);
 
 if (rpsDelta < -threshold) {
   console.error(

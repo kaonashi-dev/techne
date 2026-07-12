@@ -9,9 +9,8 @@ defaults, automatic retries and timeouts, concurrent request pools, and a
 testing layer that records and fakes requests without touching the network.
 
 <Note>
-  This page covers **outgoing** requests (your app calling another API). For
-  handling **incoming** requests, see [Routing](/http/routing) and
-  [Validation](/http/validation).
+  This page covers **outgoing** requests (your app calling another API). For handling **incoming**
+  requests, see [Routing](/http/routing) and [Validation](/http/validation).
 </Note>
 
 ## Quick start
@@ -121,15 +120,14 @@ await Http.asForm().post("/login", { email, password });
 ```
 
 ```ts Multipart
-await Http.asMultipart()
-  .attach("avatar", fileBlob, "avatar.png")
-  .post("/profile", { name: "Ada" });
+await Http.asMultipart().attach("avatar", fileBlob, "avatar.png").post("/profile", { name: "Ada" });
 // Content-Type: multipart/form-data (boundary added by the runtime)
 ```
 
 ```ts Raw
 await Http.withBody(JSON.stringify(payload), "application/json").post("/ingest");
 ```
+
 </CodeGroup>
 
 ### Query and URL parameters
@@ -186,6 +184,7 @@ res.headers(); // Headers object
 
     Each `throw*` method returns the response when it does not throw, so it
     chains: `const user = res.throw().json<User>();`
+
   </Accordion>
 </AccordionGroup>
 
@@ -193,10 +192,10 @@ res.headers(); // Headers object
 
 Two exception types are thrown by the client:
 
-| Exception             | When                                                          |
-| --------------------- | ------------------------------------------------------------- |
-| `RequestException`    | A 4xx/5xx response when you opt into throwing (`throw*`).     |
-| `ConnectionException` | The request never completed — DNS, network, or timeout.       |
+| Exception             | When                                                      |
+| --------------------- | --------------------------------------------------------- |
+| `RequestException`    | A 4xx/5xx response when you opt into throwing (`throw*`). |
+| `ConnectionException` | The request never completed — DNS, network, or timeout.   |
 
 `RequestException` exposes `.response`, `.status`, and a parsed `.problem`
 ([RFC 7807](/errors/overview)) when the body is `application/problem+json`:
@@ -241,18 +240,22 @@ Http.retry(3, 200);
 Http.retry(3, [200, 500, 1000]);
 
 // Computed backoff + custom retry condition
-Http.retry(3, (attempt) => attempt * 250, (error) => {
-  return error instanceof ConnectionException;
-});
+Http.retry(
+  3,
+  (attempt) => attempt * 250,
+  (error) => {
+    return error instanceof ConnectionException;
+  },
+);
 
 // Don't throw after exhausting retries — return the last response instead
 Http.retry(3, 200, undefined, { throw: false });
 ```
 
 <Note>
-  Without a `when` predicate, network errors always retry and HTTP responses
-  retry when `failed()` is true. When retries are exhausted the client throws a
-  `RequestException` (or the last error) unless `throw: false` is set.
+  Without a `when` predicate, network errors always retry and HTTP responses retry when `failed()`
+  is true. When retries are exhausted the client throws a `RequestException` (or the last error)
+  unless `throw: false` is set.
 </Note>
 
 ## Concurrent requests
@@ -275,10 +278,7 @@ responses[2].ok();
 Limit in-flight requests with the `concurrency` option:
 
 ```ts
-await Http.pool(
-  (pool) => urls.forEach((u) => pool.get(u)),
-  { concurrency: 5 },
-);
+await Http.pool((pool) => urls.forEach((u) => pool.get(u)), { concurrency: 5 });
 ```
 
 For lifecycle callbacks (progress reporting, aggregate error handling), use a
@@ -323,9 +323,7 @@ Http.resetGlobals(); // clear all global config (handy in test teardown)
 You can also register reusable, named request builders with `Http.macro()`:
 
 ```ts
-Http.macro("github", () =>
-  createHttpClient({ baseUrl: "https://api.github.com", token: env.GH }),
-);
+Http.macro("github", () => createHttpClient({ baseUrl: "https://api.github.com", token: env.GH }));
 
 await Http.github().get("/user");
 ```
@@ -357,9 +355,7 @@ test("sends the expected request", async () => {
   expect(res.json<{ name: string }>("name")).toBe("Ada");
 
   Http.assertSentCount(1);
-  Http.assertSent(
-    (req) => req.method() === "POST" && req.data().name === "Ada",
-  );
+  Http.assertSent((req) => req.method() === "POST" && req.data().name === "Ada");
 });
 ```
 
@@ -374,6 +370,7 @@ test("sends the expected request", async () => {
       "*": 503, // bare status code
     });
     ```
+
   </Tab>
   <Tab title="Responder fn">
     Inspect the request and decide the response dynamically.
@@ -385,6 +382,7 @@ test("sends the expected request", async () => {
         : Http.response(null, 404),
     );
     ```
+
   </Tab>
   <Tab title="Sequence">
     Return a different response on each call — ideal for testing retries.
@@ -392,6 +390,7 @@ test("sends the expected request", async () => {
     ```ts
     Http.fakeSequence().pushStatus(503).pushStatus(503).push({ ok: true });
     ```
+
   </Tab>
 </Tabs>
 
@@ -444,8 +443,7 @@ Http.allowStrayRequests(["https://cdn.example.com/*"]); // optional escape hatch
     Build a reusable client with shared `baseUrl`, auth, timeouts, and retries.
   </Card>
   <Card title="HttpResponse" icon="reply">
-    Buffered response with status predicates, body accessors, and `throw*`
-    helpers.
+    Buffered response with status predicates, body accessors, and `throw*` helpers.
   </Card>
   <Card title="RequestException / ConnectionException" icon="triangle-exclamation">
     Thrown for failed responses (when opted in) and network failures.
