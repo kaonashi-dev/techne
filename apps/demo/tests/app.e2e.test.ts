@@ -10,7 +10,12 @@ const BASE = "http://localhost/v1/api";
 
 let app: TechneApplication;
 
-async function req(method: string, path: string, body?: unknown, headers: Record<string, string> = {}) {
+async function req(
+  method: string,
+  path: string,
+  body?: unknown,
+  headers: Record<string, string> = {},
+) {
   const init: RequestInit = { method, headers: { ...headers } };
   if (body !== undefined) {
     init.body = JSON.stringify(body);
@@ -62,12 +67,20 @@ describe("auth: JWT + roles guard", () => {
   });
 
   test("admin token unlocks the dashboard, viewer token is 403", async () => {
-    const adminLogin = await req("POST", "/auth/login", { email: "admin@x.com", password: "secret" });
+    const adminLogin = await req("POST", "/auth/login", {
+      email: "admin@x.com",
+      password: "secret",
+    });
     const { accessToken } = (await adminLogin.json()) as { accessToken: string };
-    const ok = await req("GET", "/admin/dashboard", undefined, { authorization: `Bearer ${accessToken}` });
+    const ok = await req("GET", "/admin/dashboard", undefined, {
+      authorization: `Bearer ${accessToken}`,
+    });
     expect(ok.status).toBe(200);
 
-    const viewerLogin = await req("POST", "/auth/login", { email: "viewer@x.com", password: "secret" });
+    const viewerLogin = await req("POST", "/auth/login", {
+      email: "viewer@x.com",
+      password: "secret",
+    });
     const viewerToken = ((await viewerLogin.json()) as { accessToken: string }).accessToken;
     const forbidden = await req("GET", "/admin/dashboard", undefined, {
       authorization: `Bearer ${viewerToken}`,
@@ -99,9 +112,13 @@ describe("CQRS + MQ + guards + filters", () => {
   });
 
   test("scoped exception filter maps a domain error to 422", async () => {
-    const res = await req("GET", "/status/boom", undefined, { "x-api-key": "demo-api-key-1234567890" });
+    const res = await req("GET", "/status/boom", undefined, {
+      "x-api-key": "demo-api-key-1234567890",
+    });
     expect(res.status).toBe(422);
-    expect((await res.json()) as { error: string }).toMatchObject({ error: "domain_rule_violation" });
+    expect((await res.json()) as { error: string }).toMatchObject({
+      error: "domain_rule_violation",
+    });
   });
 
   test("single-action controller responds", async () => {

@@ -37,6 +37,7 @@ holds every framework option, and `main.ts` becomes a one-liner.
       providers: [AppService],
     });
     ```
+
   </Step>
   <Step title="Configure the app">
     `techne.config.ts` at the project root holds every framework option.
@@ -52,6 +53,7 @@ holds every framework option, and `main.ts` becomes a one-liner.
       cors: { origin: true },
     });
     ```
+
   </Step>
   <Step title="Boot the server">
     `main.ts` becomes a one-liner.
@@ -66,6 +68,7 @@ holds every framework option, and `main.ts` becomes a one-liner.
     ```bash
     bun run src/main.ts
     ```
+
   </Step>
   <Step title="Test it">
     The controller prefix (`app`) composes with the route (`/`):
@@ -74,6 +77,7 @@ holds every framework option, and `main.ts` becomes a one-liner.
     curl http://localhost:3000/app
     # → {"message":"Hello from Techne"}
     ```
+
   </Step>
 </Steps>
 
