@@ -31,9 +31,30 @@ export function mergeHeaders(...inits: (HeadersInit | undefined)[]): Headers {
   const merged = new Headers();
   for (const init of inits) {
     if (!init) continue;
-    new Headers(init).forEach((value, key) => merged.set(key, value));
+    // A `Headers` instance is already iterable, so wrapping it in another
+    // `new Headers(init)` just to walk it allocated a throwaway copy on every
+    // outgoing request. Only non-Headers inits (records, entry arrays) need
+    // the normalizing constructor.
+    const source = init instanceof Headers ? init : new Headers(init);
+    source.forEach((value, key) => merged.set(key, value));
   }
   return merged;
+}
+
+/**
+ * Concatenate two middleware lists without allocating when one is empty.
+ *
+ * Both lists are empty for the vast majority of calls, and returning a shared
+ * frozen empty array in that case keeps the common path allocation-free. The
+ * returned array must be treated as read-only: when exactly one side is
+ * populated it *is* that side, not a copy.
+ */
+const NO_MIDDLEWARE: readonly never[] = Object.freeze([]);
+
+export function joinMiddleware<T>(global: readonly T[], local: readonly T[]): readonly T[] {
+  if (global.length === 0) return local.length === 0 ? (NO_MIDDLEWARE as readonly T[]) : local;
+  if (local.length === 0) return global;
+  return [...global, ...local];
 }
 
 export function parseProblemFromText(
