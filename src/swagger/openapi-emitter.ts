@@ -1,5 +1,12 @@
 import type { TechneApplication } from "../core/techne-application";
 import type { DocumentBuilder } from "./document-builder";
+import {
+  explicitKind,
+  kindOf,
+  requiredKeys,
+  tupleMembers,
+  unionMembers,
+} from "../schema/json-schema-kind";
 
 // ─── Public types ────────────────────────────────────────────────────────────
 
@@ -88,27 +95,12 @@ export interface OpenApiDocument {
   };
 }
 
-// ─── TypeBox detection ───────────────────────────────────────────────────────
-// TypeBox tags every schema node with `Symbol.for("TypeBox.Kind")` and marks
-// optional properties with `Symbol.for("TypeBox.Optional")`. We use these to
-// drive the conversion below.
-const KIND = Symbol.for("TypeBox.Kind");
-const OPTIONAL = Symbol.for("TypeBox.Optional");
-
-type AnyTypeBox = {
-  [KIND]?: string;
-  [OPTIONAL]?: "Optional" | string;
-  [key: string]: unknown;
-};
-
-function isOptional(schema: unknown): boolean {
-  return !!schema && typeof schema === "object" && (schema as AnyTypeBox)[OPTIONAL] === "Optional";
-}
-
-function kindOf(schema: unknown): string | undefined {
-  if (!schema || typeof schema !== "object") return undefined;
-  return (schema as AnyTypeBox)[KIND];
-}
+// ─── Schema detection ────────────────────────────────────────────────────────
+// Node kinds are derived structurally from the JSON Schema itself. TypeBox 1.x
+// (the version Elysia 2 uses) no longer stamps `Symbol.for("TypeBox.Kind")` on
+// its output, so the tag we used to read simply isn't there any more. See
+// `src/schema/json-schema-kind.ts` for the full rationale.
+type AnyTypeBox = { [key: string]: unknown };
 
 // ─── TypeBox → OpenAPI conversion ────────────────────────────────────────────
 
@@ -151,7 +143,6 @@ export function typeboxToOpenApi(schema: unknown): OpenApiSchema {
     case "Null":
       return { type: "null" };
     case "Any":
-    case "Unknown":
       return {};
     case "Never":
       return { not: {} };
@@ -173,11 +164,14 @@ export function typeboxToOpenApi(schema: unknown): OpenApiSchema {
     case "Object": {
       const props = (node.properties ?? {}) as Record<string, unknown>;
       const properties: Record<string, OpenApiSchema> = {};
+      // Optionality is a property of the parent in JSON Schema, not of the
+      // child node, so it has to be read off `required` here rather than
+      // probed per-value the way the old TypeBox `[Optional]` symbol allowed.
+      const declaredRequired = requiredKeys(node);
       const required: string[] = [];
       for (const key of Object.keys(props)) {
-        const value = props[key];
-        properties[key] = typeboxToOpenApi(value);
-        if (!isOptional(value)) required.push(key);
+        properties[key] = typeboxToOpenApi(props[key]);
+        if (declaredRequired.has(key)) required.push(key);
       }
       const out: OpenApiSchema = { type: "object", properties };
       if (required.length > 0) out.required = required;
@@ -190,8 +184,13 @@ export function typeboxToOpenApi(schema: unknown): OpenApiSchema {
       return out;
     }
     case "Union": {
-      const members = (node.anyOf ?? []) as unknown[];
-      return { oneOf: members.map(typeboxToOpenApi) };
+      return { oneOf: unionMembers(node).map(typeboxToOpenApi) };
+    }
+    case "Enum": {
+      return { enum: node.enum as unknown[] };
+    }
+    case "Ref": {
+      return { $ref: node.$ref as string };
     }
     case "Intersect": {
       const members = (node.allOf ?? []) as unknown[];
@@ -207,7 +206,7 @@ export function typeboxToOpenApi(schema: unknown): OpenApiSchema {
       };
     }
     case "Tuple": {
-      const items = (node.items ?? []) as unknown[];
+      const items = tupleMembers(node);
       return {
         type: "array",
         prefixItems: items.map(typeboxToOpenApi),
@@ -218,14 +217,17 @@ export function typeboxToOpenApi(schema: unknown): OpenApiSchema {
   }
 
   // ─── Unknown kind ────────────────────────────────────────────────────────
-  // Fall through with whatever JSON-Schema-shaped data TypeBox produced. We
+  // Fall through with whatever JSON-Schema-shaped data the builder produced. We
   // attach a `x-techne-unknown-kind` marker so downstream tooling can spot the
-  // gap without us silently corrupting the spec.
+  // gap without us silently corrupting the spec. The marker can only name the
+  // kind when the node carried an explicit tag — untagged JSON Schema that we
+  // failed to classify has no name to report.
   const fallback: OpenApiSchema = {};
   for (const key of Object.keys(node)) {
     fallback[key] = node[key] as unknown;
   }
-  if (kind) fallback["x-techne-unknown-kind"] = kind;
+  const tag = kind ?? explicitKind(node);
+  if (tag) fallback["x-techne-unknown-kind"] = tag;
   return fallback;
 }
 
@@ -240,11 +242,13 @@ function paramsFromObjectSchema(schema: unknown, location: "path" | "query"): Op
   const node = schema as AnyTypeBox;
   if (kindOf(node) !== "Object") return [];
   const props = (node.properties ?? {}) as Record<string, unknown>;
-  const required = new Set((node.required as string[]) ?? []);
+  const required = requiredKeys(node);
   const out: OpenApiParameter[] = [];
   for (const name of Object.keys(props)) {
     const value = props[name];
-    const isReq = location === "path" ? true : required.has(name) || !isOptional(value);
+    // Path parameters are required by definition — a route can't match without
+    // them — so the schema's `required` list only governs query parameters.
+    const isReq = location === "path" ? true : required.has(name);
     out.push({
       name,
       in: location,

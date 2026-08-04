@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Type } from "@sinclair/typebox";
+import * as Type from "typebox/type";
 import { compileStringifier } from "../src/schema/fast-stringify";
 function expectEqualsJson(schemaFn: () => any, value: unknown) {
   const stringify = compileStringifier(schemaFn());

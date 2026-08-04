@@ -77,10 +77,10 @@ export function mq(options: MqPluginOptions = {}) {
       // `dispatchAfterResponse()` and `PendingDispatch.afterResponse()` can
       // enqueue jobs that flush only after the HTTP response has been sent.
       const elysia = ctx.http() as any;
-      elysia.onRequest(() => {
+      elysia.request(() => {
         enterDeferredBuffer();
       });
-      elysia.onAfterResponse(async () => {
+      elysia.afterResponse(async () => {
         await flushDeferred();
       });
 

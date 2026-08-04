@@ -109,13 +109,28 @@ function aggregate(name: string, runs: ColdRun[]): ScenarioResult {
   const pct = (xs: number[], q: number) =>
     xs[Math.min(xs.length - 1, Math.floor(q * xs.length))] ?? 0;
 
+  // Wall time (process spawn included) is context, not a gated metric — the
+  // `ScenarioResult` columns carry in-process boot time. Emit it on stderr so
+  // it stays visible during a run without entering the JSON contract that
+  // `bench:check` and `bench:compare` consume.
+  if (!isJson()) {
+    console.error(
+      `   ${name}: boot ${mean(internals).toFixed(1)} ms, wall ${mean(walls).toFixed(1)} ms`,
+    );
+  }
+
   // We report milliseconds as "µs" columns scaled — the table headers are
   // microseconds, but for cold-start that's not a useful unit. Instead we
   // convert ms→µs on the way out so the table prints in microseconds
   // throughout (a 100ms boot becomes 100000 µs). The runner prints a note.
+  // The label must stay identical across runs: `scripts/bench-check.ts` and
+  // `benchmarks/compare.ts` both key rows on it, so interpolating a measured
+  // value here — as this used to — meant the row never matched its own
+  // baseline and was silently reported as "removed plus added" forever, never
+  // gated. Measurements belong in the numeric columns.
   return {
     name: "Cold start",
-    request: `${name} bootstrap (avg ms = ${mean(internals).toFixed(1)}, wall ${mean(walls).toFixed(1)})`,
+    request: `${name} bootstrap`,
     total: runs.length,
     rps: 1_000 / mean(internals),
     avgUs: mean(internals) * 1_000,

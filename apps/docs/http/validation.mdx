@@ -3,7 +3,10 @@ title: "Validation & DTOs"
 description: "Schema helper, Dto class decorators, and how Techne forwards schemas directly to Elysia."
 ---
 
-Techne exposes a `Schema` helper built on `@sinclair/typebox`.
+Techne exposes a `Schema` helper built on [TypeBox](https://github.com/sinclairzx81/typebox) —
+the `typebox` 1.x package that Elysia 2 validates against, not the older
+`@sinclair/typebox` 0.34. Schemas are plain JSON Schema, so optionality lives in
+the parent object's `required` array rather than on the property node.
 
 ```ts
 import { Body, Controller, Post, Schema } from "@kaonashi-dev/techne/common";

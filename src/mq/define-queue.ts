@@ -1,5 +1,6 @@
-import type { TSchema } from "@sinclair/typebox";
-import { TypeCompiler, type TypeCheck } from "@sinclair/typebox/compiler";
+import type { TSchema } from "typebox";
+import { Compile } from "typebox/compile";
+import { toSchemaIssues, type TypeCheck } from "../schema/validator-types";
 import type { Job } from "./job";
 import { PendingDispatch } from "./pending-dispatch";
 import type { Queue } from "./queue";
@@ -238,7 +239,7 @@ function compileJobSchema(
   if (typeof schema === "function") {
     const dtoSchema = getOrCreateDtoSchema(schema as new (...args: any[]) => any);
     if (dtoSchema) {
-      return TypeCompiler.Compile(dtoSchema);
+      return Compile(dtoSchema);
     }
     // A class without DTO metadata would silently validate nothing — make
     // the misconfiguration loud at boot, like the unknown-schema-key check.
@@ -249,7 +250,7 @@ function compileJobSchema(
     );
   }
   // Raw TypeBox TSchema
-  return TypeCompiler.Compile(schema as TSchema);
+  return Compile(schema as TSchema);
 }
 
 /**
@@ -260,10 +261,7 @@ export function validateQueuePayload(queueDef: QueueDef, jobName: string, payloa
   const validator = queueDef.compiledValidators?.get(jobName);
   if (!validator) return;
   if (validator.Check(payload)) return;
-  const errors = [...validator.Errors(payload)].map((e) => ({
-    path: e.path,
-    message: e.message,
-  }));
+  const errors = toSchemaIssues(validator.Errors(payload));
   throw new QueuePayloadValidationError(jobName, queueDef.name, errors);
 }
 
@@ -318,10 +316,7 @@ function finalizeQueueDef(
       if (runDispatchValidation && compiledValidators) {
         const validator = compiledValidators.get(jobName);
         if (validator && !validator.Check(payload)) {
-          const errors = [...validator.Errors(payload)].map((e) => ({
-            path: e.path,
-            message: e.message,
-          }));
+          const errors = toSchemaIssues(validator.Errors(payload));
           throw new QueuePayloadValidationError(jobName, name, errors);
         }
       }
