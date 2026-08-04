@@ -114,8 +114,13 @@
     "check:fix": "bun run lint:fix && bun run format .",
     "bench": "bun run benchmarks/index.ts",
     "bench:http": "bun run benchmarks/http.ts",
+    "bench:socket": "bun run benchmarks/socket.ts",
+    "bench:client": "bun run benchmarks/http-client.ts",
+    "bench:memory": "bun run benchmarks/memory.ts",
     "bench:quick": "bun run benchmarks/index.ts --quick",
+    "bench:ci": "bun run benchmarks/index.ts --quick --skip-socket --skip-memory",
     "bench:check": "bun run scripts/bench-check.ts",
+    "bench:compare": "bun run benchmarks/compare.ts",
     "build": "tsc -p tsconfig.build.json",
     "prepublishOnly": "bun run build"
   },
