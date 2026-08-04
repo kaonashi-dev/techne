@@ -1,5 +1,5 @@
-import type { TSchema } from "@sinclair/typebox";
-import type { TypeCheck } from "@sinclair/typebox/compiler";
+import type { TSchema } from "typebox";
+import { toSchemaIssues, type TypeCheck } from "../schema/validator-types";
 import { QueuePayloadValidationError } from "./errors";
 
 /**
@@ -42,9 +42,6 @@ export function validateDispatchPayload(
   if (!validators) return;
   const validator = validators.get(jobName);
   if (!validator || validator.Check(payload)) return;
-  const errors = [...validator.Errors(payload)].map((e) => ({
-    path: e.path,
-    message: e.message,
-  }));
+  const errors = toSchemaIssues(validator.Errors(payload));
   throw new QueuePayloadValidationError(jobName, queueName, errors);
 }

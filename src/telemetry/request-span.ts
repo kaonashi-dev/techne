@@ -39,7 +39,7 @@ export function installRequestSpanHooks(
   holder: RuntimeHolder,
   enabled: { traces: boolean; metrics: boolean },
 ): void {
-  elysia.onRequest((ctx: any) => {
+  elysia.request((ctx: any) => {
     const rt = holder.runtime;
     if (!rt) return;
 
@@ -99,11 +99,11 @@ export function installRequestSpanHooks(
     finishRequest(holder.runtime, ctx);
   });
 
-  elysia.onError((ctx: any) => {
+  elysia.error((ctx: any) => {
     finishRequest(holder.runtime, ctx);
   });
 
-  elysia.onAfterResponse((ctx: any) => {
+  elysia.afterResponse((ctx: any) => {
     finishRequest(holder.runtime, ctx);
   });
 }
@@ -125,7 +125,7 @@ function finishRequest(rt: TelemetryRuntime | undefined, ctx: any): void {
   if (!rt) return;
 
   const status = responseStatus(ctx);
-  const route = typeof ctx.route === "string" && ctx.route ? ctx.route : undefined;
+  const route = resolveRoute(ctx, status);
 
   try {
     if (span) {
@@ -161,6 +161,27 @@ function finishRequest(rt: TelemetryRuntime | undefined, ctx: any): void {
   }
 }
 
+/**
+ * Resolve the low-cardinality route template for `http.route`.
+ *
+ * Elysia 2 only populates `ctx.route` for parameterized routes. Static routes
+ * leave it `undefined` and carry the literal path in `ctx.path` — which, for a
+ * static route, *is* the template, so it is safe to use.
+ *
+ * The 404 guard is what makes that safe in general. `http.route` must stay
+ * low-cardinality because it is a metric dimension; falling back to `ctx.path`
+ * on an unmatched request would mint a fresh time series for every URL a
+ * scanner probes. When nothing matched there is no template to report, so we
+ * report none.
+ */
+function resolveRoute(ctx: any, status: number): string | undefined {
+  const route = ctx.route;
+  if (typeof route === "string" && route) return route;
+  if (status === 404) return undefined;
+  const path = ctx.path;
+  return typeof path === "string" && path ? path : undefined;
+}
+
 function responseStatus(ctx: any): number {
   const err = ctx.error;
   if (err && typeof err.getStatus === "function") {
@@ -172,14 +193,20 @@ function responseStatus(ctx: any): number {
     }
   }
   if (err && typeof err.status === "number") return err.status;
-  switch (ctx.code) {
-    case "NOT_FOUND":
+  // Elysia 2 removed the string `ctx.code` discriminator in favour of error
+  // classes, and every built-in error class now carries its own numeric
+  // `status` — which the check above already consumed. This name-based switch
+  // remains only for errors that reach us without one (a user class thrown
+  // from a handler that mimics Elysia's naming).
+  switch (err?.name) {
+    case "NotFound":
       return 404;
-    case "VALIDATION":
+    case "ValidationError":
       return 422;
-    case "PARSE":
+    case "ParseError":
       return 400;
-    case "INVALID_COOKIE_SIGNATURE":
+    case "InvalidCookieSignature":
+    case "InvalidCookie":
       return 401;
     default:
       break;

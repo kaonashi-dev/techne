@@ -22,7 +22,7 @@ export const requestIdPlugin = definePlugin<RequestIdPluginOptions | undefined>(
     const header = options?.header ?? "x-request-id";
     const elysia = ctx.http() as any;
 
-    elysia.onRequest((reqCtx: any) => {
+    elysia.request((reqCtx: any) => {
       reqCtx.store = reqCtx.store ?? {};
       if (typeof reqCtx.store.requestId === "string" && reqCtx.store.requestId.length > 0) {
         return;

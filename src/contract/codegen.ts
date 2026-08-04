@@ -1,27 +1,12 @@
 import type { TechneApplication } from "../core/techne-application";
+import { kindOf, requiredKeys, tupleMembers, unionMembers } from "../schema/json-schema-kind";
 
-// ─── TypeBox introspection ───────────────────────────────────────────────────
-// Mirrors the pattern in `src/swagger/openapi-emitter.ts` — we read the
-// `Symbol.for("TypeBox.Kind")` tag to discriminate node kinds, since the
-// surface JSON-Schema-ish shape isn't always enough (Union vs. Literal).
+// ─── Schema introspection ────────────────────────────────────────────────────
+// Mirrors the pattern in `src/swagger/openapi-emitter.ts`: node kinds are
+// derived structurally from the JSON Schema. TypeBox 1.x (used by Elysia 2)
+// dropped the `Symbol.for("TypeBox.Kind")` tags this module used to read.
 
-const KIND = Symbol.for("TypeBox.Kind");
-const OPTIONAL = Symbol.for("TypeBox.Optional");
-
-type AnyTypeBox = {
-  [KIND]?: string;
-  [OPTIONAL]?: "Optional" | string;
-  [key: string]: unknown;
-};
-
-function kindOf(node: unknown): string | undefined {
-  if (!node || typeof node !== "object") return undefined;
-  return (node as AnyTypeBox)[KIND];
-}
-
-function isOptional(node: unknown): boolean {
-  return !!node && typeof node === "object" && (node as AnyTypeBox)[OPTIONAL] === "Optional";
-}
+type AnyTypeBox = { [key: string]: unknown };
 
 /** Format a literal value as a TypeScript source-level expression. */
 function formatLiteral(value: unknown): string {
@@ -55,12 +40,15 @@ export function typeboxToTypeScript(schema: unknown): string {
     case "Null":
       return "null";
     case "Any":
-    case "Unknown":
       return "unknown";
     case "Never":
       return "never";
     case "Literal":
       return formatLiteral(node.const);
+    case "Enum": {
+      const values = (node.enum ?? []) as unknown[];
+      return values.length === 0 ? "never" : values.map(formatLiteral).join(" | ");
+    }
     case "Array": {
       const inner = typeboxToTypeScript(node.items);
       // Wrap unions so `(a | b)[]` parses correctly.
@@ -69,7 +57,7 @@ export function typeboxToTypeScript(schema: unknown): string {
     case "Object":
       return emitObject(node);
     case "Union": {
-      const members = ((node.anyOf ?? []) as unknown[]).map(typeboxToTypeScript);
+      const members = unionMembers(node).map(typeboxToTypeScript);
       if (members.length === 0) return "never";
       return members.join(" | ");
     }
@@ -79,7 +67,7 @@ export function typeboxToTypeScript(schema: unknown): string {
       return members.map((m) => (m.includes("|") ? `(${m})` : m)).join(" & ");
     }
     case "Tuple": {
-      const items = (node.items ?? []) as unknown[];
+      const items = tupleMembers(node);
       if (items.length === 0) return "[]";
       return `[${items.map(typeboxToTypeScript).join(", ")}]`;
     }
@@ -99,10 +87,13 @@ function emitObject(node: AnyTypeBox): string {
   const props = (node.properties ?? {}) as Record<string, unknown>;
   const keys = Object.keys(props);
   if (keys.length === 0) return "Record<string, unknown>";
+  // JSON Schema records optionality on the parent, not the property node, so
+  // the `required` list is the only source of truth here.
+  const required = requiredKeys(node);
   const lines: string[] = [];
   for (const key of keys) {
     const value = props[key];
-    const optionalMark = isOptional(value) ? "?" : "";
+    const optionalMark = required.has(key) ? "" : "?";
     const safeKey = /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key) ? key : JSON.stringify(key);
     lines.push(`${safeKey}${optionalMark}: ${typeboxToTypeScript(value)}`);
   }
