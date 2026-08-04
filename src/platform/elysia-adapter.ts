@@ -1,4 +1,4 @@
-import { Elysia } from "elysia";
+import { Elysia, ValidationError } from "elysia";
 import { Logger, requestContext, type RequestContext } from "../services/logger.service";
 import { Container, globalContainer } from "../core/container";
 import type { CompiledRouteDefinition } from "../core/router/router-execution-context";
@@ -290,7 +290,7 @@ export class ElysiaAdapter {
    * Phases with zero active branches don't register at all — keeps the
    * Elysia hook chain length proportional to the actual feature surface.
    *
-   * User plugins still call `adapter.getInstance().onRequest()` etc. and
+   * User plugins still call `adapter.getInstance().request()` etc. and
    * chain after ours; the fusion only collapses first-party hooks.
    */
   private installFusedHooks(app: Elysia) {
@@ -415,18 +415,18 @@ export class ElysiaAdapter {
       if (rateLimitPolicy) {
         // `needsStore` is always true here, so `ctx.store` is shaped by the
         // core before the limiter reads it.
-        app.onRequest(async (ctx: any) => {
+        app.request(async (ctx: any) => {
           const early = onRequestCore(ctx);
           if (early !== undefined) return early;
           return this.applyRateLimit(ctx, ctx.store as TechneRequestStore, rateLimitPolicy);
         });
       } else {
-        app.onRequest(onRequestCore);
+        app.request(onRequestCore);
       }
     }
 
     if (onAfterHandleActive) {
-      app.onAfterHandle((ctx: any) => {
+      app.afterHandle((ctx: any) => {
         // Security headers go first: applyHeaders copies on the null branch,
         // so the request-id echo below can keep mutating in place.
         if (securityHeaders) {
@@ -482,7 +482,7 @@ export class ElysiaAdapter {
     }
 
     if (onErrorActive) {
-      app.onError((ctx: any) => {
+      app.error((ctx: any) => {
         // Stamp security headers on the error path too — error responses
         // (404s included) bypass `onAfterHandle` and need them most.
         if (securityHeaders) {
@@ -499,12 +499,16 @@ export class ElysiaAdapter {
 
         if (needsRequestId) {
           if (loggingEnabled) {
-            const { request, code, error, set } = ctx;
+            const { request, error, set } = ctx;
             const store = ctx.store as TechneRequestStore | undefined;
             const start = store?.startUs ?? Bun.nanoseconds();
             const duration = Math.round((Bun.nanoseconds() - start) / 1_000_000);
             const path = this.getRequestPath(request.url);
             const stack = error instanceof Error ? error.stack : undefined;
+            // Elysia 2 dropped the string `ctx.code` discriminator in favour of
+            // error classes. The access log still wants a short tag, so derive
+            // one from the constructor name.
+            const code = error?.name ?? "UNKNOWN";
             // L11: sync requestId to ALS context so this.logger picks it up.
             const requestId = store?.requestId;
             const als = requestContext.getStore();
@@ -525,8 +529,15 @@ export class ElysiaAdapter {
         // Validation error mapping — runs last so any header echo above is
         // preserved, and we return the problem+json body that Elysia uses
         // as the response.
-        if (ctx.code !== "VALIDATION") return;
+        //
+        // Elysia 2 removed the string `ctx.code` discriminator; errors are now
+        // matched by class. `instanceof` is both the documented replacement and
+        // cheaper than the old string compare. Elysia 2 would already emit an
+        // RFC 9457 document here on its own, but Techne's `errors[]` shape is
+        // public API, so we keep producing it and just source the entries from
+        // the richer v2 error.
         const { error, set } = ctx;
+        if (!(error instanceof ValidationError)) return;
         set.status = 422;
         const existing = set.headers;
         if (existing == null) {
@@ -537,17 +548,13 @@ export class ElysiaAdapter {
           (existing as Record<string, string>)["content-type"] = "application/problem+json";
         }
 
-        let errors: unknown[];
-        if (exhaustive) {
-          errors = error?.all ?? [];
-        } else {
-          // Default fast path: avoid Elysia's `error.all` getter, which
-          // spreads the entire TypeBox `Errors(...)` iterator. Prefer the
-          // first-error fields the ValidationError already stores on the
-          // instance.
-          const first = error?.first ?? error?.valueError ?? error?.messageValue ?? error?.all?.[0];
-          errors = first ? [first] : [];
-        }
+        // Elysia 2 materializes `errors` eagerly as a plain array, so the
+        // old `error.all` getter — which spread the whole TypeBox `Errors()`
+        // iterator on every invalid request — is gone. Slicing the first entry
+        // is now a cheap array index rather than an iterator drain, which is
+        // why the non-exhaustive path no longer needs a fallback chain.
+        const all = (error as unknown as { errors?: unknown[] }).errors ?? [];
+        const errors = exhaustive ? all : all.length > 0 ? [all[0]] : [];
 
         return {
           type: "https://httpstatuses.com/422",
@@ -657,7 +664,7 @@ export class ElysiaAdapter {
     }
     this.corsHooksInstalled = true;
 
-    app.onRequest(({ request }) => {
+    app.request(({ request }) => {
       if (request.method !== "OPTIONS") return;
       return new Response(null, {
         status: 204,
@@ -665,7 +672,7 @@ export class ElysiaAdapter {
       });
     });
 
-    app.onAfterHandle(({ request, set }) => {
+    app.afterHandle(({ request, set }) => {
       const cors = this.createCorsHeaders(request) as Record<string, string>;
       const existing = set.headers;
       if (existing == null) {
@@ -701,7 +708,12 @@ export class ElysiaAdapter {
         elysiaOptions.beforeHandle = route.beforeHandle;
       }
 
-      (this.app as any)[elysiaMethod](route.fullPath, route.handler, elysiaOptions);
+      // Elysia 2 reordered the route signature to (path, options, handler).
+      // Passing the v1 order does NOT throw — Elysia treats the options object
+      // as the handler and serializes it as the response body, so every route
+      // would silently return its own schema with a 200. Keep this argument
+      // order in sync with the installed Elysia major.
+      (this.app as any)[elysiaMethod](route.fullPath, elysiaOptions, route.handler);
 
       if (this.options?.logger !== false) {
         this.logger.debug(`Mapped {${route.fullPath}, ${route.method}} route`, "Router");

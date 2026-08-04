@@ -1,3 +1,4 @@
+import { toSchemaIssues } from "../schema/validator-types";
 import {
   MQ_ON_FAILURE_METADATA,
   MQ_PROCESSOR_METADATA,
@@ -34,10 +35,7 @@ function validateConsumePayload(queueDef: QueueDef, job: Job): void {
   const validator = queueDef.compiledValidators?.get(job.name);
   if (!validator) return;
   if (validator.Check(job.data)) return;
-  const errors = [...validator.Errors(job.data)].map((e) => ({
-    path: e.path,
-    message: e.message,
-  }));
+  const errors = toSchemaIssues(validator.Errors(job.data));
   throw new QueuePayloadValidationError(job.name, queueDef.name, errors);
 }
 

@@ -6,10 +6,53 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+> **Breaking — Elysia 2.** Techne now builds on `elysia@2.0.0-beta.1` and
+> `typebox@1.x` in place of `elysia@1.4` and `@sinclair/typebox@0.34`. Apps that
+> only use Techne's decorator surface need no changes. Apps that reach through
+> to the Elysia instance (`app.getHttpAdapter()`, `ctx.http()`) or import
+> `@sinclair/typebox` directly **do**. See
+> [MIGRATING.md](./MIGRATING.md#elysia-2) for the recipe.
+
+### Changed
+
+- **Elysia 1.4 → 2.0.0-beta.1.** Lifecycle hooks lost their `on` prefix
+  (`onRequest` → `request`, `onError` → `error`, …), route registration
+  reordered to `(path, options, handler)`, and the string `ctx.code` error
+  discriminator was replaced by error classes.
+- **`@sinclair/typebox@0.34` → `typebox@1.x`**, which is the TypeBox that
+  Elysia 2 validates against — 0.34 schemas are rejected outright by Elysia 2.
+  `TypeCompiler.Compile(schema)` is now `Compile(schema)` from `typebox/compile`.
+- Validation error entries now use the AJV/JSON-Schema field names TypeBox 1.x
+  emits (`instancePath`, `keyword`, `params`) instead of 0.34's `path`/`type`.
+  `ValidationError.constraints` is consequently keyed by a descriptive string
+  (`"minLength"`, `"type"`) rather than a numeric enum.
+- Schema introspection (OpenAPI emitter, contract codegen, config loader) now
+  classifies nodes **structurally** from the JSON Schema rather than by reading
+  `Symbol.for("TypeBox.Kind")`, which TypeBox 1.x no longer emits. Explicit
+  `~kind` / legacy symbol tags are still honoured when present.
+- `exact-mirror` is now a direct dependency, pinned to the `>= 1.2.2` Elysia 2
+  requires. The stale 0.2.7 that Elysia 1.4 pulled in silently disabled the
+  compiled response serializer for `Union` response schemas.
+
 ### Added
 
 - `ResponseHook` and `@OnResponse()` for the Techne v1 flat HTTP response-hook
   metadata surface.
+- Benchmark scenarios for **loopback TCP** (`bench:socket`), **memory and route
+  scaling** (`bench:memory`), and the **outgoing HTTP client**
+  (`bench:client`), plus `bench:compare` for A/B reports between two matrices
+  and `bench:ci` for a fast gate.
+
+### Fixed
+
+- Outgoing HTTP client is ~14 % faster per call (geometric mean across GET/POST
+  shapes). The request body is no longer serialized a second time for the fake
+  recorder on the real-transport path, the outgoing `Request` is only cloned
+  when a retry could actually reuse it, and empty middleware lists no longer
+  allocate.
+- `http.route` is populated again for static routes under Elysia 2, which only
+  sets `ctx.route` for parameterized ones. Unmatched requests still report no
+  route, so the metric dimension stays low-cardinality.
 
 ### Removed
 

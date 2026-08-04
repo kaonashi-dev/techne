@@ -1,4 +1,4 @@
-import { TypeCompiler } from "@sinclair/typebox/compiler";
+import { Compile } from "typebox/compile";
 import { CATCH_METADATA } from "../../common/constants";
 import { ForbiddenException, HttpException, TooManyRequestsException } from "../../exceptions";
 import type { ExceptionFilter } from "../../interfaces/exception-filter.interface";
@@ -592,7 +592,7 @@ export class RouterExecutionContext {
       }
       if (this.validateResponses) {
         try {
-          cache.responseValidator = TypeCompiler.Compile(route.schema.response as any);
+          cache.responseValidator = Compile(route.schema.response as any);
         } catch {
           cache.responseValidator = undefined;
         }

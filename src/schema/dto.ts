@@ -1,6 +1,8 @@
 import "../reflect-setup";
-import { Type, type TSchema } from "@sinclair/typebox";
-import { TypeCompiler, type TypeCheck } from "@sinclair/typebox/compiler";
+import * as Type from "typebox/type";
+import type { TSchema } from "typebox";
+import { Compile } from "typebox/compile";
+import type { TypeCheck } from "./validator-types";
 import { enumType } from "./enum";
 
 const PROPERTY_METADATA_KEY = "schema:properties";
@@ -109,7 +111,7 @@ export function Dto(options: DtoOptions = {}): ClassDecorator {
     dtoOptionsRegistry.set(target, options);
     const schema = buildSchemaFromClass(target as ClassConstructor);
     dtoRegistry.set(target, schema);
-    dtoValidatorRegistry.set(target, TypeCompiler.Compile(schema));
+    dtoValidatorRegistry.set(target, Compile(schema));
   };
 }
 
@@ -227,7 +229,7 @@ function getOrCreateDtoValidator(target: Function): TypeCheck<TSchema> | undefin
   const schema = getOrCreateDtoSchema(target);
   if (!schema) return undefined;
 
-  const validator = TypeCompiler.Compile(schema);
+  const validator = Compile(schema);
   dtoValidatorRegistry.set(target, validator);
   return validator;
 }
@@ -286,7 +288,7 @@ export function validateDto(value: unknown, metatype: Function): ValidationError
   // when the value passes the schema check.
   if (validator.Check(value)) return [];
 
-  return normalizeValidationErrors([...validator.Errors(value)]);
+  return normalizeValidationErrors([...validator.Errors(value)], value);
 }
 
 /**
@@ -318,7 +320,7 @@ export function firstValidationError(
   const iterator = validator.Errors(value)[Symbol.iterator]();
   const next = iterator.next();
   if (next.done || !next.value) return undefined;
-  const errors = normalizeValidationErrors([next.value as Record<string, any>]);
+  const errors = normalizeValidationErrors([next.value as Record<string, any>], value);
   return errors[0];
 }
 
@@ -328,7 +330,7 @@ export function firstValidationError(
 export function computeAllValidationErrors(value: unknown, metatype: Function): ValidationError[] {
   const validator = getOrCreateDtoValidator(metatype);
   if (!validator) return [];
-  return normalizeValidationErrors([...validator.Errors(value)]);
+  return normalizeValidationErrors([...validator.Errors(value)], value);
 }
 
 export async function validate(value: object): Promise<ValidationError[]> {
@@ -566,17 +568,59 @@ function getObjectOptions(klass: ClassConstructor): Record<string, unknown> {
   return { additionalProperties: options?.allowAdditional === true ? true : Type.Never() };
 }
 
-function normalizeValidationErrors(errors: Array<Record<string, any>>): ValidationError[] {
+/**
+ * Collapse a raw validator error list into Techne's property-keyed
+ * `ValidationError[]`.
+ *
+ * TypeBox 1.x (via Elysia 2) reports errors in the AJV/JSON-Schema idiom:
+ * `instancePath` for the JSON Pointer, `keyword` for the failing constraint,
+ * and no `value` field at all. TypeBox 0.34 used `path`, a numeric `type`, and
+ * carried `value`. Both spellings are accepted so a caller passing 0.34-shaped
+ * errors still normalizes correctly.
+ *
+ * `root` is the value that was validated. It exists solely to repopulate
+ * `ValidationError.value`, which is part of Techne's public error shape but no
+ * longer travels with the error itself.
+ */
+function normalizeValidationErrors(
+  errors: Array<Record<string, any>>,
+  root?: unknown,
+): ValidationError[] {
   const grouped = new Map<string, ValidationError>();
 
   for (const error of errors) {
-    const path = normalizeErrorPath(error.path);
+    const pointer = error.instancePath ?? error.path;
+    const path = normalizeErrorPath(pointer);
+
+    // TypeBox 1.x reports every missing required property as a SINGLE error
+    // anchored at the containing object (`instancePath: ""`, `keyword:
+    // "required"`, `params.requiredProperties: [...]`). TypeBox 0.34 instead
+    // reported one error per property, anchored at that property's own path.
+    // Fan the v1 form back out so each missing property gets its own entry —
+    // without this the error lands on an empty path and is dropped entirely,
+    // silently turning "missing required field" into "valid".
+    const missing = error.params?.requiredProperties ?? error.params?.missingProperty;
+    if (error.keyword === "required" && missing !== undefined) {
+      for (const name of Array.isArray(missing) ? missing : [missing]) {
+        const parentPath = path ? `${path}.${name}` : String(name);
+        const segments = parentPath.split(".").filter(Boolean);
+        recordConstraint(
+          grouped,
+          segments,
+          root,
+          "required",
+          `must have required property ${name}`,
+        );
+      }
+      continue;
+    }
+
     const [property, ...rest] = path.split(".").filter(Boolean);
     if (!property) continue;
 
     const existing = grouped.get(property) ?? {
       property,
-      value: error.value,
+      value: "value" in error ? error.value : resolvePointer(root, [property]),
       constraints: {},
       children: [],
     };
@@ -584,12 +628,12 @@ function normalizeValidationErrors(errors: Array<Record<string, any>>): Validati
 
     if (rest.length === 0) {
       (existing.constraints as Record<string, string>)[
-        error.type ?? `rule_${existing.children!.length}`
+        constraintKey(error, existing.children!.length)
       ] = error.message ?? "Validation failed";
       continue;
     }
 
-    addChildError(existing, rest, error);
+    addChildError(existing, rest, error, root, [property]);
   }
 
   return [...grouped.values()].map((entry) => {
@@ -599,24 +643,89 @@ function normalizeValidationErrors(errors: Array<Record<string, any>>): Validati
   });
 }
 
-function addChildError(parent: ValidationError, path: string[], error: Record<string, any>): void {
+/**
+ * Record a single constraint failure at `segments`, creating the intermediate
+ * `children` entries as needed. Used by the required-property expansion, which
+ * synthesizes paths that never appeared in a raw error.
+ */
+function recordConstraint(
+  grouped: Map<string, ValidationError>,
+  segments: string[],
+  root: unknown,
+  keyword: string,
+  message: string,
+): void {
+  const [property, ...rest] = segments;
+  if (!property) return;
+
+  const existing = grouped.get(property) ?? {
+    property,
+    value: resolvePointer(root, [property]),
+    constraints: {},
+    children: [],
+  };
+  grouped.set(property, existing);
+
+  if (rest.length === 0) {
+    existing.constraints ??= {};
+    (existing.constraints as Record<string, string>)[keyword] = message;
+    return;
+  }
+  addChildError(existing, rest, { keyword, message }, root, [property]);
+}
+
+function addChildError(
+  parent: ValidationError,
+  path: string[],
+  error: Record<string, any>,
+  root: unknown,
+  prefix: string[],
+): void {
   const [segment, ...rest] = path;
   parent.children ??= [];
   let child = parent.children.find((entry) => entry.property === segment);
   if (!child) {
-    child = { property: segment, value: error.value, constraints: {}, children: [] };
+    child = {
+      property: segment,
+      value: "value" in error ? error.value : resolvePointer(root, [...prefix, segment!]),
+      constraints: {},
+      children: [],
+    };
     parent.children.push(child);
   }
 
   if (rest.length === 0) {
     child.constraints ??= {};
     (child.constraints as Record<string, string>)[
-      error.type ?? `rule_${child.children?.length ?? 0}`
+      constraintKey(error, child.children?.length ?? 0)
     ] = error.message ?? "Validation failed";
     return;
   }
 
-  addChildError(child, rest, error);
+  addChildError(child, rest, error, root, [...prefix, segment!]);
+}
+
+/**
+ * Key under which a failure is recorded in `constraints`.
+ *
+ * TypeBox 1.x supplies a descriptive string `keyword` (`"minLength"`,
+ * `"type"`), which is what a consumer actually wants to branch on. TypeBox
+ * 0.34 supplied a numeric `type` enum. The positional `rule_N` fallback keeps
+ * distinct failures on one property from overwriting each other when neither
+ * field is present.
+ */
+function constraintKey(error: Record<string, any>, ordinal: number): string {
+  return error.keyword ?? error.type ?? `rule_${ordinal}`;
+}
+
+/** Read a value out of the validated object by property path. */
+function resolvePointer(root: unknown, segments: string[]): unknown {
+  let cursor = root;
+  for (const segment of segments) {
+    if (cursor === null || typeof cursor !== "object") return undefined;
+    cursor = (cursor as Record<string, unknown>)[segment];
+  }
+  return cursor;
 }
 
 function normalizeErrorPath(path: string | undefined): string {

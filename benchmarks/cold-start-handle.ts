@@ -174,9 +174,12 @@ async function measureForN(n: number, iters: number): Promise<ScenarioResult> {
   const meanSec = stats.meanUs / 1_000_000;
   const rps = meanSec > 0 ? 1 / meanSec : 0;
 
+  // Stable label — the measured mean used to be interpolated here, which made
+  // the row key change every run and kept it permanently outside the
+  // regression gate. `iters` is a fixed knob, so it is safe to keep.
   return {
     name: "Cold start (in-process)",
-    request: `N=${n} (${iters} iters, mean ${(stats.meanUs / 1_000).toFixed(2)} ms)`,
+    request: `N=${n} (${iters} iters)`,
     total: iters,
     rps,
     avgUs: stats.meanUs,

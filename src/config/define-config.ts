@@ -1,5 +1,7 @@
-import { Type, type Static, type TSchema } from "@sinclair/typebox";
-import { TypeCompiler } from "@sinclair/typebox/compiler";
+import * as Type from "typebox/type";
+import type { Static, TSchema } from "typebox";
+import { Compile } from "typebox/compile";
+import { requiredKeys } from "../schema/json-schema-kind";
 
 /** Re-export of TypeBox `Type` for ergonomic schema authoring. */
 export const t = Type;
@@ -80,8 +82,13 @@ interface FieldKind {
   itemKind?: "string" | "number" | "integer" | "boolean" | "other";
 }
 
-function describeFieldKind(node: any): FieldKind {
-  const optional = Boolean(node?.[Symbol.for("TypeBox.Optional")]) || node?.optional === true;
+/**
+ * `optional` is supplied by the caller rather than read off `node`. JSON
+ * Schema — which is all TypeBox 1.x emits — records optionality in the parent
+ * object's `required` array, so a property node carries no evidence of it. The
+ * old `Symbol.for("TypeBox.Optional")` tag this used to read no longer exists.
+ */
+function describeFieldKind(node: any, optional: boolean): FieldKind {
   const type = node?.type;
 
   if (type === "number") return { base: "number", optional };
@@ -170,12 +177,13 @@ export function defineConfig<S extends TSchema>(opts: DefineConfigOptions<S>): A
 
   const properties = (schema as any).properties ?? {};
   const propertyKeys = Object.keys(properties);
+  const required = requiredKeys(schema);
 
   const assembled: Record<string, unknown> = {};
   const rawByField: Record<string, unknown> = {};
 
   for (const key of propertyKeys) {
-    const kind = describeFieldKind(properties[key]);
+    const kind = describeFieldKind(properties[key], !required.has(key));
     const raw = source[key];
     rawByField[key] = raw;
 
@@ -190,11 +198,14 @@ export function defineConfig<S extends TSchema>(opts: DefineConfigOptions<S>): A
     assembled[key] = value;
   }
 
-  const validator = TypeCompiler.Compile(schema);
+  const validator = Compile(schema);
   if (!validator.Check(assembled)) {
     const failuresMap = new Map<string, ConfigValidationFailure>();
     for (const error of validator.Errors(assembled)) {
-      const field = topLevelField(error.path) ?? "<root>";
+      // TypeBox 1.x reports JSON-Pointer locations as `instancePath` (the
+      // AJV/JSON-Schema convention). TypeBox 0.34 called the same thing `path`.
+      const error0 = error as unknown as { instancePath?: string; path?: string };
+      const field = topLevelField(error0.instancePath ?? error0.path) ?? "<root>";
       if (failuresMap.has(field)) continue; // first error per field is the most useful
       failuresMap.set(field, {
         field,

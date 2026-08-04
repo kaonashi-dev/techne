@@ -4,6 +4,7 @@ import {
   buildQueryString,
   expandUrlTemplate,
   isPlainObject,
+  joinMiddleware,
   mergeHeaders,
   normalizeBaseUrl,
 } from "./internal";
@@ -314,6 +315,24 @@ export class PendingRequest {
     return "";
   }
 
+  /**
+   * Produce the `Request` to hand to the transport.
+   *
+   * Three cases, cheapest first:
+   *  - no signal, no further attempts → send the original, no copy at all
+   *  - a signal → one `new Request(...)` to attach it (this also consumes the
+   *    source body, which is fine when nothing else will read it)
+   *  - a further attempt is possible → `clone()` so the body stream survives
+   */
+  private _prepareOutgoing(
+    request: Request,
+    signal: AbortSignal | undefined,
+    mayRetry: boolean,
+  ): Request {
+    const source = mayRetry ? request.clone() : request;
+    return signal ? new Request(source, { signal }) : source;
+  }
+
   private async _send(method: string, path: string): Promise<HttpResponse> {
     // ── Steps 1–3: resolve URL and body ──────────────────────────────────
     const url = this._buildUrl(path);
@@ -334,16 +353,21 @@ export class PendingRequest {
       body: body ?? undefined,
     });
 
-    const reqMiddleware = [..._globalRequestMiddleware, ...this._requestMiddleware];
+    // Middleware lists are almost always empty. Concatenating them
+    // unconditionally allocated two spreads plus a joined array on every
+    // outgoing call, so only build the combined list when one side is
+    // non-empty and reuse the populated side directly when the other is not.
+    const reqMiddleware = joinMiddleware(_globalRequestMiddleware, this._requestMiddleware);
     for (const mw of reqMiddleware) {
       request = await mw(request);
     }
 
-    const bodyTextForRecord = this._bodyTextForRecord();
-
     // ── Steps 5–8: retry loop ─────────────────────────────────────────────
     const retryConfig = this._retry;
     const maxAttempts = retryConfig ? retryConfig.times + 1 : 1;
+    // Hoisted out of the retry loop — the list cannot change between attempts,
+    // so rebuilding it per attempt was pure allocation.
+    const respMiddleware = joinMiddleware(_globalResponseMiddleware, this._responseMiddleware);
     let lastResponse: HttpResponse | null = null;
     let lastError: unknown = null;
 
@@ -368,23 +392,33 @@ export class PendingRequest {
         let rawResponse: Response;
         const fakeActive = _isFakeActive();
 
+        // `request` only has to survive the call when another attempt might
+        // reuse it, so cloning is conditional on retries actually being
+        // configured. A clone duplicates the body stream; paying for that on
+        // every single-attempt call — the overwhelmingly common case — is
+        // wasted work. `mayRetry` is computed per attempt because the last
+        // attempt never needs a surviving original either.
+        const mayRetry = attempt < maxAttempts - 1;
+        const outgoing = this._prepareOutgoing(request, signal, mayRetry);
+
         if (fakeActive) {
-          const fakeReq = signal ? new Request(request.clone(), { signal }) : request.clone();
           const isStrayPrevented = _isStrayPrevented();
           if (isStrayPrevented && !_isStrayAllowed(url)) {
             // Will throw inside _resolveFakeResponse for unmatched
           }
-          rawResponse = await _resolveFakeResponse(fakeReq);
-          _recordFakeEntry(fakeReq, bodyTextForRecord, rawResponse);
+          rawResponse = await _resolveFakeResponse(outgoing);
+          // Serializing the body for the recorder is only meaningful when a
+          // fake is installed to record into. Computing it eagerly on the
+          // real-transport path meant every POST paid a second full
+          // `JSON.stringify` of its payload for a value nothing read.
+          _recordFakeEntry(outgoing, this._bodyTextForRecord(), rawResponse);
         } else {
           const fetchFn = this._fetchImpl ?? globalThis.fetch;
-          const reqToSend = signal ? new Request(request.clone(), { signal }) : request.clone();
-          rawResponse = await fetchFn(reqToSend);
+          rawResponse = await fetchFn(outgoing);
         }
 
         // ── Step 8: response middleware + buffer ──────────────────────────
         let processedResponse = rawResponse;
-        const respMiddleware = [..._globalResponseMiddleware, ...this._responseMiddleware];
         for (const mw of respMiddleware) {
           processedResponse = await mw(processedResponse);
         }

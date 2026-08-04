@@ -244,7 +244,7 @@ export class ${className} implements ResponseHook {
 export async function generateDto(name: string, dir: string = ".") {
   const schemaName = `${capitalize(name)}Dto`;
   const content = `import { Schema } from "@kaonashi-dev/techne/common";
-import type { Static } from "@sinclair/typebox";
+import type { Static } from "typebox";
 
 export const ${schemaName} = Schema.Object({
   // TODO: define fields for ${schemaName}
