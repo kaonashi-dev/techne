@@ -92,6 +92,12 @@ export interface FactoryCsrfOptions {
   cookieName?: string;
   /** Request header carrying the submitted token. Default: `"x-csrf-token"` */
   headerName?: string;
+  /**
+   * Optional HMAC secret enabling signed double-submit tokens. When set, tokens
+   * carry a server-issued signature verified on every unsafe request, blocking
+   * cookie-writing attackers from forging tokens. Omit for plain double-submit.
+   */
+  secret?: string;
   /** HTTP methods that require a valid CSRF token. Default: POST, PUT, PATCH, DELETE. */
   methods?: string[];
   /** Path prefixes exempt from CSRF checking (e.g. webhook endpoints). */
