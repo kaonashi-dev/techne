@@ -17,7 +17,7 @@ export default defineTechneConfig({
   globalPrefix: "api",
   globalPrefixOptions: { exclude: ["/metrics", "/healthz", "/readyz"] },
   versioning: { type: "uri", prefix: "v", defaultVersion: "1" },
-  cors: { origin: true, credentials: true },
+  cors: { origin: ["http://localhost:3000"], credentials: true },
 
   // Security
   securityHeaders: true,

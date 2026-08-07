@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { describe, expect, test } from "bun:test";
 import { TechneFactory } from "../src/factory/techne-factory";
 import { Controller } from "../src/decorators/controller.decorator";
@@ -100,7 +101,6 @@ class ExemptClassController {
 }
 
 /** Extract the csrf cookie value from a Set-Cookie response header. */
-// oxlint-disable-next-line no-unused-vars -- kept for ad-hoc debugging of cookie flows
 function _extractCsrfCookie(res: Response, cookieName = "csrf"): string | undefined {
   const setCookieHeader = res.headers.get("set-cookie");
   if (!setCookieHeader) return undefined;
@@ -336,6 +336,102 @@ describe("CSRF middleware — integration", () => {
       }),
     );
     expect(res2.status).toBe(200);
+  });
+
+  // -------------------------------------------------------------------------
+  // Signed double-submit (secret configured)
+  // -------------------------------------------------------------------------
+
+  const SECRET = "csrf-hmac-secret";
+  const signCsrf = (nonce: string) =>
+    `${nonce}.${createHmac("sha256", SECRET).update(nonce).digest("base64url")}`;
+
+  test("signed: valid server-issued token in cookie+header → 200", async () => {
+    const app = await TechneFactory.create({
+      controllers: [ApiController],
+      logger: false,
+      csrf: { cookieName: "csrf", secret: SECRET },
+    });
+    const token = signCsrf("a".repeat(64));
+    const res = await app.handle(
+      new Request("http://localhost/api", {
+        method: "POST",
+        headers: { cookie: `csrf=${token}`, "x-csrf-token": token },
+      }),
+    );
+    expect(res.status).toBe(200);
+  });
+
+  test("signed: attacker-chosen token in BOTH cookie and header → 403", async () => {
+    // The core threat signed double-submit defends against: an attacker who can
+    // write the cookie plants the same token in cookie + header. Unsigned, this
+    // passes; signed, it must fail because there's no valid HMAC.
+    const app = await TechneFactory.create({
+      controllers: [ApiController],
+      logger: false,
+      csrf: { cookieName: "csrf", secret: SECRET },
+    });
+    const token = "attacker-chosen-value-present-in-both-places";
+    const res = await app.handle(
+      new Request("http://localhost/api", {
+        method: "POST",
+        headers: { cookie: `csrf=${token}`, "x-csrf-token": token },
+      }),
+    );
+    expect(res.status).toBe(403);
+  });
+
+  test("signed: tampered signature (length-mismatch) → 403", async () => {
+    const app = await TechneFactory.create({
+      controllers: [ApiController],
+      logger: false,
+      csrf: { cookieName: "csrf", secret: SECRET },
+    });
+    const badToken = `${"a".repeat(64)}.deadbeef`;
+    const res = await app.handle(
+      new Request("http://localhost/api", {
+        method: "POST",
+        headers: { cookie: `csrf=${badToken}`, "x-csrf-token": badToken },
+      }),
+    );
+    expect(res.status).toBe(403);
+  });
+
+  test("signed: GET mints a nonce.signature token that round-trips", async () => {
+    const app = await TechneFactory.create({
+      controllers: [ApiController],
+      logger: false,
+      csrf: { cookieName: "csrf", secret: SECRET },
+    });
+    const getRes = await app.handle(new Request("http://localhost/api"));
+    const minted = _extractCsrfCookie(getRes, "csrf");
+    expect(minted).toBeDefined();
+    expect(minted!.split(".")).toHaveLength(2);
+    const postRes = await app.handle(
+      new Request("http://localhost/api", {
+        method: "POST",
+        headers: { cookie: `csrf=${minted}`, "x-csrf-token": minted! },
+      }),
+    );
+    expect(postRes.status).toBe(200);
+  });
+
+  test("malformed percent-encoding in cookie does not 500", async () => {
+    // A lone "%" is invalid percent-encoding; the raw-header fallback must not
+    // throw a URIError (which would surface as a 500).
+    const app = await TechneFactory.create({
+      controllers: [ApiController],
+      logger: false,
+      csrf: { cookieName: "csrf" },
+    });
+    const res = await app.handle(
+      new Request("http://localhost/api", {
+        method: "POST",
+        headers: { cookie: "csrf=%", "x-csrf-token": "x" },
+      }),
+    );
+    // Token mismatch → 403, NOT a 500 crash.
+    expect(res.status).toBe(403);
   });
 
   test("csrf: false / missing option → no CSRF middleware (zero-cost contract)", async () => {

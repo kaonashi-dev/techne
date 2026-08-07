@@ -262,7 +262,16 @@ function createExtractor(
           const idx = pair.indexOf("=");
           if (idx < 0) continue;
           const k = pair.slice(0, idx).trim();
-          if (k === cookieName) return decodeURIComponent(pair.slice(idx + 1).trim());
+          if (k === cookieName) {
+            const rawValue = pair.slice(idx + 1).trim();
+            // Malformed percent-encoding (e.g. a lone "%") throws URIError;
+            // fall back to the raw value instead of surfacing a per-request 500.
+            try {
+              return decodeURIComponent(rawValue);
+            } catch {
+              return rawValue;
+            }
+          }
         }
         return undefined;
       };

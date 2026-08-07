@@ -13,9 +13,15 @@ import { defineTechneConfig } from "@kaonashi-dev/techne/core";
 export default defineTechneConfig({
   features: [AppFeature],
   port: 3000,
-  cors: { origin: true, credentials: true },
+  cors: { origin: ["https://app.example.com"], credentials: true },
 });
 ```
+
+<Warning>
+  `credentials: true` requires an **explicit** origin allow-list (a string or array). Combining it
+  with a reflected or wildcard origin (`origin: true`, `origin: "*"`, or an omitted `origin`) is
+  rejected at boot — that pairing would let any site read authenticated cross-origin responses.
+</Warning>
 
 ## Plugin form
 

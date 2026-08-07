@@ -55,7 +55,7 @@ const app = await TechneFactory.create({ controllers: [UsersController] });
 // Deprecated — declare these in techne.config.ts instead.
 app.setGlobalPrefix("api");
 app.enableVersioning({ type: "uri" });
-app.enableCors({ origin: true, credentials: true });
+app.enableCors({ origin: ["https://app.example.com"], credentials: true });
 app.useGlobalGuards(new AuthGuard());
 ```
 
@@ -69,7 +69,7 @@ export default defineTechneConfig({
   features: [UsersFeature],
   globalPrefix: "api",
   versioning: { type: "uri" },
-  cors: { origin: true, credentials: true },
+  cors: { origin: ["https://app.example.com"], credentials: true },
 });
 ```
 

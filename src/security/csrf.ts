@@ -1,4 +1,4 @@
-import { timingSafeEqual } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { ForbiddenException } from "../exceptions";
 import {
   isProductionEnv,
@@ -14,6 +14,17 @@ export interface CsrfOptions {
   cookieName?: string;
   /** Request header that carries the token. Default: `"x-csrf-token"` */
   headerName?: string;
+  /**
+   * Optional HMAC secret enabling the **signed** double-submit pattern. When
+   * set, minted tokens carry a server-issued signature (`nonce.hmac`) that is
+   * verified on every unsafe request. This defeats an attacker who can *write*
+   * the victim's CSRF cookie (e.g. a compromised sibling subdomain, or a
+   * dev-mode non-`Secure` cookie): they cannot forge a valid signature without
+   * the secret. Omit to keep the plain (unsigned) double-submit behaviour.
+   *
+   * Use a high-entropy, deployment-stable secret shared across all instances.
+   */
+  secret?: string;
   /** HTTP methods that require a valid CSRF token. Default: POST, PUT, PATCH, DELETE. */
   methods?: string[];
   /**
@@ -34,6 +45,7 @@ export interface CsrfOptions {
 interface CompiledCsrfOptions {
   readonly cookieName: string;
   readonly headerName: string;
+  readonly secret?: string;
   readonly methods: ReadonlySet<string>;
   readonly exclude: readonly string[];
   readonly cookie: {
@@ -53,6 +65,7 @@ export function compileCsrfOptions(opts: CsrfOptions = {}): CompiledCsrfOptions 
   const compiled: CompiledCsrfOptions = Object.freeze({
     cookieName: opts.cookieName ?? defaultCookieName,
     headerName: opts.headerName ?? "x-csrf-token",
+    secret: opts.secret,
     methods: Object.freeze(
       new Set((opts.methods ?? ["POST", "PUT", "PATCH", "DELETE"]).map((m) => m.toUpperCase())),
     ) as ReadonlySet<string>,
@@ -95,9 +108,22 @@ function parseCookieHeader(header: string | null): Record<string, string> {
     if (idx < 0) continue;
     const name = pair.slice(0, idx).trim();
     const value = pair.slice(idx + 1).trim();
-    if (name) result[name] = decodeURIComponent(value);
+    if (name) result[name] = safeDecodeURIComponent(value);
   }
   return result;
+}
+
+/**
+ * `decodeURIComponent` that never throws. Malformed percent-encoding (e.g. a
+ * lone `%`) yields a `URIError`; returning the raw value instead keeps a
+ * hand-crafted cookie from surfacing as a per-request 500.
+ */
+function safeDecodeURIComponent(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
 }
 
 /**
@@ -111,22 +137,47 @@ function timingSafeStringEqual(a: string, b: string): boolean {
   if (bufA.length === bufB.length) {
     return timingSafeEqual(bufA, bufB);
   }
-  // Pad both to the max length so timingSafeEqual never throws.
+  // Lengths differ: run a constant-time comparison against the longer buffer
+  // for timing consistency, but the result is ALWAYS false. Returning the
+  // padded `timingSafeEqual` here would be a bug — two strings differing only
+  // by trailing NUL bytes ("abc" vs "abc\x00") zero-pad to identical buffers
+  // and would compare equal.
   const maxLen = Math.max(bufA.length, bufB.length);
   const paddedA = Buffer.alloc(maxLen);
   const paddedB = Buffer.alloc(maxLen);
   bufA.copy(paddedA);
   bufB.copy(paddedB);
-  // timingSafeEqual returns true only when buffers are identical byte-for-byte.
-  // Because lengths differ, the padded buffers cannot be equal.
-  return timingSafeEqual(paddedA, paddedB);
+  timingSafeEqual(paddedA, paddedB);
+  return false;
+}
+
+/** HMAC-SHA256 of `nonce` under `secret`, base64url-encoded. */
+function signNonce(nonce: string, secret: string): string {
+  return createHmac("sha256", secret).update(nonce).digest("base64url");
 }
 
 /**
- * Mint a 32-byte random hex token.
+ * Mint a CSRF token. Without a secret this is a 32-byte random hex string
+ * (plain double-submit). With a secret the token is `${nonce}.${hmac}` so the
+ * server can later verify it was the issuer (signed double-submit).
  */
-function mintToken(): string {
-  return Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("hex");
+function mintToken(secret?: string): string {
+  const nonce = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("hex");
+  return secret ? `${nonce}.${signNonce(nonce, secret)}` : nonce;
+}
+
+/**
+ * Verifies a signed double-submit token of the form `${nonce}.${hmac}`. The
+ * signature is recomputed over the nonce and compared in constant time. An
+ * unsigned/malformed token returns false so a stripped signature cannot
+ * downgrade the check to plain double-submit.
+ */
+function verifySignedToken(token: string, secret: string): boolean {
+  const dot = token.indexOf(".");
+  if (dot <= 0 || dot >= token.length - 1) return false;
+  const nonce = token.slice(0, dot);
+  const signature = token.slice(dot + 1);
+  return timingSafeStringEqual(signature, signNonce(nonce, secret));
 }
 
 /**
@@ -182,7 +233,7 @@ export function csrfProtection(opts: CsrfOptions = {}) {
     // --- Safe methods: mint token if absent ---
     if (!config.methods.has(method)) {
       if (!cookieToken) {
-        const token = mintToken();
+        const token = mintToken(config.secret);
         const cookieOpts = config.cookie;
         const cookieStr = [
           `${encodeURIComponent(config.cookieName)}=${encodeURIComponent(token)}`,
@@ -233,6 +284,15 @@ export function csrfProtection(opts: CsrfOptions = {}) {
     if (!cookieToken || !headerToken || !timingSafeStringEqual(cookieToken, headerToken)) {
       ctx.set.status = 403;
       return responseController.mapException(ctx, new ForbiddenException("CSRF token mismatch"));
+    }
+
+    // Signed double-submit: when a secret is configured the token must carry a
+    // valid server-issued HMAC. This blocks an attacker who can WRITE the
+    // victim's CSRF cookie from planting a self-chosen token in both the cookie
+    // and the header — they cannot produce the signature without the secret.
+    if (config.secret && !verifySignedToken(cookieToken, config.secret)) {
+      ctx.set.status = 403;
+      return responseController.mapException(ctx, new ForbiddenException("CSRF token invalid"));
     }
   };
 }

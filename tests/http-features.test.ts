@@ -75,7 +75,9 @@ describe("HTTP application features", () => {
       controllers: [CorsController],
       logger: false,
     });
-    app.enableCors({ origin: true, credentials: true });
+    // Credentialed CORS requires an explicit origin allow-list (reflecting an
+    // arbitrary origin with credentials is rejected — see the test below).
+    app.enableCors({ origin: ["https://example.com"], credentials: true });
     const response = await app.handle(
       new Request("http://localhost/cors", {
         headers: { origin: "https://example.com" },
@@ -83,5 +85,27 @@ describe("HTTP application features", () => {
     );
     expect(response.headers.get("access-control-allow-origin")).toBe("https://example.com");
     expect(response.headers.get("access-control-allow-credentials")).toBe("true");
+  });
+
+  test("enableCors rejects credentials + reflected/wildcard origin", async () => {
+    @Controller("cors-insecure")
+    class CorsInsecureController {
+      @Get("/")
+      ok() {
+        return { ok: true };
+      }
+    }
+    const app = await TechneFactory.create({
+      controllers: [CorsInsecureController],
+      logger: false,
+    });
+    // origin: true reflects the request Origin — must not pair with credentials.
+    expect(() => app.enableCors({ origin: true, credentials: true })).toThrow(/Insecure CORS/);
+    // Omitted origin (defaults to reflect) + credentials is equally unsafe.
+    expect(() => app.enableCors({ credentials: true })).toThrow(/Insecure CORS/);
+    // Wildcard origin + credentials.
+    expect(() => app.enableCors({ origin: "*", credentials: true })).toThrow(/Insecure CORS/);
+    // Explicit allow-list + credentials is fine.
+    expect(() => app.enableCors({ origin: "https://ok.example", credentials: true })).not.toThrow();
   });
 });

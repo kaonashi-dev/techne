@@ -776,6 +776,24 @@ export class ElysiaAdapter {
   }
 
   private compileCorsOptions(options: CorsOptions): CompiledCorsOptions {
+    // Security: credentialed CORS must never be combined with a reflected /
+    // wildcard origin. `origin: true` (and the `undefined` default) echoes the
+    // request's `Origin` header verbatim, and `"*"` matches everything — either
+    // one paired with `access-control-allow-credentials: true` lets ANY site
+    // read authenticated cross-origin responses. Fail closed at boot and force
+    // the operator to declare an explicit allow-list (string or string[]).
+    if (options.credentials === true) {
+      const origin = options.origin;
+      if (origin === true || origin === undefined || origin === "*") {
+        throw new Error(
+          "Insecure CORS configuration: `credentials: true` cannot be combined with a " +
+            'reflected or wildcard origin (`origin: true`, `origin: "*"`, or an omitted ' +
+            "origin). Specify an explicit origin allow-list, e.g. " +
+            '`enableCors({ origin: ["https://app.example.com"], credentials: true })`.',
+        );
+      }
+    }
+
     const staticHeaders: Record<string, string> = {
       "access-control-allow-methods": (
         options.methods ?? ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
