@@ -94,6 +94,21 @@ export class JwtService {
       throw new Error("Invalid JWT");
     }
 
+    // Defense-in-depth: pin the algorithm to HS256 explicitly. Verification is
+    // already hardcoded to HMAC-SHA256 (so a forged `alg: "none"` token can't
+    // pass the signature check below), but asserting the header keeps the
+    // invariant explicit — if asymmetric signing is ever added, this rejects
+    // the classic RS256→HS256 key-confusion attack before it can matter.
+    let header: { alg?: unknown };
+    try {
+      header = decodeBase64Url<{ alg?: unknown }>(encodedHeader);
+    } catch {
+      throw new Error("Invalid JWT header");
+    }
+    if (header.alg !== "HS256") {
+      throw new Error("Unsupported JWT algorithm");
+    }
+
     const expectedSignature = this.sign(`${encodedHeader}.${encodedPayload}`);
     const signatureBuffer = Buffer.from(encodedSignature);
     const expectedBuffer = Buffer.from(expectedSignature);
