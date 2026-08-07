@@ -142,6 +142,33 @@ describe("Logger", () => {
       expect(buf.lines[0]).toContain("ERR");
     });
 
+    test("escapes CR/LF in the message (log-forging guard)", () => {
+      const buf = new BufferSink();
+      withSink(buf, () => {
+        withMode("pretty", () => {
+          new Logger("Test").log("real\nINJECTED forged line\rtail");
+        });
+      });
+      // A single write — no injected physical newline splitting the record.
+      expect(buf.lines.length).toBe(1);
+      expect(buf.lines[0]).toContain("real\\nINJECTED");
+      expect(buf.lines[0]).toContain("\\rtail");
+      expect(buf.lines[0]).not.toContain("\n");
+      expect(buf.lines[0]).not.toContain("\r");
+    });
+
+    test("escapes CR/LF in meta values", () => {
+      const buf = new BufferSink();
+      withSink(buf, () => {
+        withMode("pretty", () => {
+          new Logger("Test").log("msg", { ua: "curl/8\nSet-Cookie: evil=1" });
+        });
+      });
+      expect(buf.lines.length).toBe(1);
+      expect(buf.lines[0]).toContain("ua=curl/8\\nSet-Cookie");
+      expect(buf.lines[0]).not.toContain("\n");
+    });
+
     test("error() with trace prints stack as separate line in pretty mode", () => {
       const buf = new BufferSink();
       withSink(buf, () => {

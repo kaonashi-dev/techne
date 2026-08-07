@@ -96,6 +96,21 @@ function formatTime(): string {
   return `${h}:${m}:${s}.${ms}`;
 }
 
+/**
+ * Neutralizes CR/LF and ANSI escape sequences in a value bound for a single
+ * pretty-printed log line. Without this, an attacker-influenced value logged in
+ * pretty mode (a header, a body field) could inject forged log lines
+ * (log-forging) or terminal escape sequences. JSON mode needs no equivalent —
+ * `JSON.stringify` already escapes these characters.
+ */
+// oxlint-disable-next-line no-control-regex -- intentionally matching control chars
+const LOG_UNSAFE_CHARS = /[\r\n\x1b]/g;
+function sanitizeLogText(value: string): string {
+  return value.replace(LOG_UNSAFE_CHARS, (ch) =>
+    ch === "\r" ? "\\r" : ch === "\n" ? "\\n" : "\\x1b",
+  );
+}
+
 /** JSON serializer with circular-reference protection and max-depth guard (L2). */
 export function stringifySafe(value: unknown, indent?: number): string {
   const seen = new Set<unknown>();
@@ -113,9 +128,10 @@ export function stringifySafe(value: unknown, indent?: number): string {
 }
 
 /**
- * Masks the given dotted-path fields in a shallow copy of `obj`.
- * Operates on a single-level clone — does not deep-clone nested objects
- * (redacted paths beyond depth 2 are not supported in this version).
+ * Masks the given dotted-path fields, returning a copy of `obj`. Each object
+ * along a redaction path is cloned before it is written to, so the caller's
+ * `meta`/record objects (which may be reused or shared) are never mutated —
+ * including nested paths like `"auth.token"` at depth ≥ 2.
  */
 function applyRedaction(obj: Record<string, unknown>, paths: string[]): Record<string, unknown> {
   if (paths.length === 0) return obj;
@@ -123,14 +139,20 @@ function applyRedaction(obj: Record<string, unknown>, paths: string[]): Record<s
   for (const path of paths) {
     const parts = path.split(".");
     let target: any = clone;
+    let reachable = true;
     for (let i = 0; i < parts.length - 1; i++) {
-      if (target == null || typeof target !== "object") {
-        target = null;
+      const next = target[parts[i]];
+      if (next == null || typeof next !== "object") {
+        reachable = false;
         break;
       }
-      target = target[parts[i]];
+      // Clone this level before descending so the write below can't touch the
+      // caller's original nested object.
+      const copied: any = Array.isArray(next) ? [...next] : { ...next };
+      target[parts[i]] = copied;
+      target = copied;
     }
-    if (target != null && typeof target === "object") {
+    if (reachable && target != null && typeof target === "object") {
       target[parts[parts.length - 1]] = "[REDACTED]";
     }
   }
@@ -281,15 +303,21 @@ export class Logger {
 
     let body: string;
     if (typeof message === "object" && message !== null) {
+      // stringifySafe → JSON.stringify already escapes control chars.
       body = `\n${stringifySafe(message, 2)}`;
     } else {
-      body = ` ${levelColor}${message}${c.reset}`;
+      body = ` ${levelColor}${sanitizeLogText(String(message))}${c.reset}`;
     }
 
     if (meta && Object.keys(meta).length > 0) {
       const metaStr = Object.entries(meta)
         .filter(([k]) => k !== "context")
-        .map(([k, v]) => `${k}=${typeof v === "object" ? stringifySafe(v) : v}`)
+        .map(
+          ([k, v]) =>
+            `${sanitizeLogText(k)}=${
+              typeof v === "object" ? sanitizeLogText(stringifySafe(v)) : sanitizeLogText(String(v))
+            }`,
+        )
         .join(" ");
       return metaStr ? `${prefix}${body} ${c.gray}${metaStr}${c.reset}` : `${prefix}${body}`;
     }
