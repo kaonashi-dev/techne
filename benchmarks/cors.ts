@@ -32,8 +32,10 @@ const echoAnyApp = await TechneFactory.create({
   controllers: [CorsController],
   logger: false,
   cors: {
+    // Reflected origin exercises the dynamic per-origin header cache. Note it
+    // is NOT combined with `credentials: true` — that combination is rejected
+    // as insecure (any site could read authenticated responses).
     origin: true,
-    credentials: true,
   },
 });
 
