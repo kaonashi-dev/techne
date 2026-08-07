@@ -102,6 +102,18 @@ const LRU_CAP = 10_000;
  * deducted.
  *
  * LRU eviction (Map-insertion-order trick) caps memory at 10k keys.
+ *
+ * **Production caveat — this store is per-process and per-IP.** Two limits it
+ * cannot enforce on its own:
+ *   1. **Multi-instance deployments** each keep an independent bucket, so the
+ *      effective global limit is `N × limit`. Provide a shared {@link
+ *      RateLimitStore} (e.g. Redis) for a cluster-wide limit.
+ *   2. **IP rotation bypass.** Buckets are keyed on the client IP by default and
+ *      every new key starts at full capacity, so an attacker with an IPv6 /64
+ *      (or a botnet) gets `burst` free requests per fresh address; LRU eviction
+ *      of a stale key also resets it to full capacity. For abuse-sensitive
+ *      routes, key on an authenticated identity via `keyExtractor`, and/or
+ *      aggregate IPv6 clients to their /64 prefix before keying.
  */
 export class InMemoryTokenBucketStore implements RateLimitStore {
   private readonly buckets = new Map<string, BucketState>();
