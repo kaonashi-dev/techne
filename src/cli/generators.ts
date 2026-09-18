@@ -437,11 +437,8 @@ export async function createProject(name: string) {
 dist
 coverage
 .DS_Store
-.env
-.env.local
-.env.production.local
-.env.development.local
-.env.test.local
+.env*
+!.env.example
 `,
   );
 
