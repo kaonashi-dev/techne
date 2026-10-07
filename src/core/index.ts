@@ -1,3 +1,4 @@
+/** @deprecated Decorator runtime. New applications use the package root. */
 export * from "./application-context";
 export * from "./techne-application";
 export * from "./container";

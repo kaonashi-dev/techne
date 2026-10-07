@@ -16,7 +16,7 @@ jobs:
         with:
           bun-version: latest
 
-      - run: bun install
+      - run: bun install --frozen-lockfile
 
       - name: Lint
         run: bun run lint
@@ -26,6 +26,12 @@ jobs:
 
       - name: Test
         run: bun test tests/*.test.ts
+
+      - name: Native API type contracts (without decorators)
+        run: bun run test:types
+
+      - name: Native Elysia comparison smoke
+        run: bun run bench:native --quick
 
       - name: Bench smoke (quick matrix)
         run: bun run benchmarks/index.ts --quick --json > bench/current.json
