@@ -267,7 +267,7 @@ export class TechneApplication {
     return `http://${server.hostname}:${server.port}`;
   }
 
-  handle(request: Request): Promise<Response> {
+  async handle(request: Request): Promise<Response> {
     const parentContext = requestContext.getStore();
     let next = () => this.adapter.getInstance().handle(request);
     for (let i = this.requestHandleBoundaries.length - 1; i >= 0; i--) {
@@ -275,7 +275,20 @@ export class TechneApplication {
       const inner = next;
       next = () => boundary(inner);
     }
-    return requestContext.run(parentContext, next);
+    // Start the request in its own microtask frame. The adapter enters the
+    // request context with `enterWith` during the synchronous phase; running
+    // that phase directly from here would mutate the async frame of whoever
+    // called `handle()`. From Bun 1.4.1 `enterWith` no longer leaks into the
+    // next unrelated callback, but it still persists for the remainder of the
+    // frame that is executing, caller included.
+    try {
+      return await Promise.resolve().then(() => requestContext.run(parentContext, next));
+    } finally {
+      // Balance the request context for this frame; `enterWith` provides no
+      // automatic restore, and telemetry's span context does the same in
+      // `finishRequest`. Callers must not observe an ended request's store.
+      requestContext.enterWith(parentContext);
+    }
   }
 
   /** @internal — lets context-propagation plugins scope direct `app.handle()` calls. */
