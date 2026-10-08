@@ -1,0 +1,36 @@
+---
+title: "Migrate to native composition"
+description: "Move from decorated controllers to explicit Elysia feature factories."
+---
+
+The root package now exports `createApp`, `createResources`, `Elysia`, `t`,
+`status` and `problem`. Existing `TechneFactory` imports from the root move to
+`@kaonashi-dev/techne/legacy`. Historical `/core` imports still target that runtime.
+
+| Decorator runtime                 | Native composition                             |
+| --------------------------------- | ---------------------------------------------- |
+| Factory + discovered config       | `buildApp(dependencies)` + explicit `listen`   |
+| Feature controller/provider lists | Function returning an Elysia plugin            |
+| Constructor token injection       | Ordinary arguments and constructors            |
+| Controller/parameter decorators   | Native route methods and inferred context      |
+| DTO wrappers and pipes            | Native `t` schemas in route options            |
+| Guards and response hooks         | `beforeHandle`, `afterHandle`, `afterResponse` |
+| Lifecycle interfaces              | `createResources`, `setup`, `cleanup`          |
+| Test module overrides             | Fake arguments and `app.handle(Request)`       |
+
+Rewrite a controller as a route factory, construct its service in `app.ts`, and
+mount it with `.use()`. Return the chain to preserve types. Remove decorator
+compiler flags when the app no longer imports decorated code.
+
+Native routes use `(path, options, handler)`. Elysia 2 lifecycle methods drop the
+`on` prefix; shutdown registration is `cleanup`, while `stop()` stops the server.
+
+Legacy config, auth, queues, Prisma, Swagger and telemetry factories remain
+legacy plugins. Native apps use explicitly constructed clients or compatible
+Elysia plugins. The outgoing `/http` client works independently.
+
+Register health endpoints and cross-cutting policies explicitly. Error responses
+now follow native Elysia behavior: add a native mapper if clients require the old
+mandatory request IDs or error extensions. See the complete
+[migration guide](https://github.com/kaonashi-dev/techne/blob/main/MIGRATING.md#native-composition)
+and [native composition](/native-composition).

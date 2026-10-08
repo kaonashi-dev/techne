@@ -1,16 +1,21 @@
 {
   "name": "@kaonashi-dev/techne",
   "version": "0.0.1",
-  "description": "Techne — a Bun-native application framework built on Elysia with a decorator-first developer experience",
+  "description": "Techne — explicit application composition on native Elysia, built for Bun",
   "module": "src/index.ts",
   "main": "src/index.ts",
   "types": "dist/types/index.d.ts",
   "type": "module",
   "exports": {
     ".": {
+      "types": "./dist/types/index.d.ts",
       "bun": "./src/index.ts",
-      "import": "./src/index.ts",
-      "types": "./dist/types/index.d.ts"
+      "import": "./src/index.ts"
+    },
+    "./legacy": {
+      "types": "./dist/types/core/index.d.ts",
+      "bun": "./src/core/index.ts",
+      "import": "./src/core/index.ts"
     },
     "./common": {
       "bun": "./src/common/index.ts",
@@ -118,6 +123,8 @@
     "bench:client": "bun run benchmarks/http-client.ts",
     "bench:memory": "bun run benchmarks/memory.ts",
     "bench:quick": "bun run benchmarks/index.ts --quick",
+    "bench:native": "bun run benchmarks/native.ts",
+    "test:types": "tsc -p tests/types/tsconfig.json",
     "bench:ci": "bun run benchmarks/index.ts --quick --skip-socket --skip-memory",
     "bench:check": "bun run scripts/bench-check.ts",
     "bench:compare": "bun run benchmarks/compare.ts",

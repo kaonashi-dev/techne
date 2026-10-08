@@ -17,11 +17,16 @@ function makeFetch(responder: (call: MockCall) => Response | Promise<Response>) 
   const calls: MockCall[] = [];
   const fetchImpl: typeof globalThis.fetch = async (input, init) => {
     const req = input instanceof Request ? input : new Request(input as string, init);
+    // Snapshot headers before reading the body. Bun derives a FormData
+    // request's content-type lazily; consuming the cloned body clears that
+    // lazy header from the in-flight request, so reading it afterwards would
+    // report no content-type even though real fetch sees the boundary.
+    const headers = new Headers(req.headers);
     const body = req.body ? await req.clone().text() : null;
     const call: MockCall = {
       url: req.url,
       method: req.method,
-      headers: req.headers,
+      headers,
       body,
     };
     calls.push(call);

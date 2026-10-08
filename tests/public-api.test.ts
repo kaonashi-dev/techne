@@ -31,11 +31,23 @@ describe("public API", () => {
   });
   test("keeps the root export minimal", async () => {
     const root = await import("@kaonashi-dev/techne");
-    expect(Object.keys(root).sort()).toEqual(["TechneApplication", "TechneFactory"]);
+    expect(Object.keys(root).sort()).toEqual([
+      "Elysia",
+      "createApp",
+      "createResources",
+      "problem",
+      "status",
+      "t",
+    ]);
+    expect("TechneFactory" in root).toBe(false);
     expect("Controller" in root).toBe(false);
     expect("Reflector" in root).toBe(false);
     expect("Test" in root).toBe(false);
     expect("MemoryQueue" in root).toBe(false);
+  });
+  test("exposes the decorator runtime through the explicit legacy entrypoint", async () => {
+    const legacy = await import("@kaonashi-dev/techne/legacy");
+    expect(typeof legacy.TechneFactory).toBe("function");
   });
   test("keeps queue decorators scoped to the queue subpath", async () => {
     const common = await import("@kaonashi-dev/techne/common");

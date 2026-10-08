@@ -1,50 +1,50 @@
 ---
 title: "Installation"
-description: "Install Techne with bun add and run the CLI without a global install."
+description: "Install Techne with Bun and standard strict TypeScript."
 ---
-
-## Prerequisites
-
-Techne is Bun-native and uses Bun's standard library directly.
-
-<Note>
-  Install [Bun](https://bun.sh) **1.1 or newer**. Techne does not target Node.js — the runtime APIs,
-  bundler, and test runner all assume Bun.
-</Note>
 
 ## Install
 
-<Steps>
-  <Step title="Add the package">
-    ```bash
-    bun add @kaonashi-dev/techne
-    ```
-  </Step>
-  <Step title="Verify the CLI">
-    Run the CLI with `bunx` — no global install required:
-
-    ```bash
-    bunx @kaonashi-dev/techne --help
-    ```
-
-  </Step>
-</Steps>
-
-## Scaffold a new project
-
-Prefer to start from a template? The CLI scaffolds a ready-to-run app:
-
-```bash
-bunx @kaonashi-dev/techne new my-app
-cd my-app
-bun install
-bunx @kaonashi-dev/techne dev
+```sh
+bun add github:kaonashi-dev/techne
 ```
 
-`new` and `create` are aliases. See [`techne new`](/cli/new) for the generated
-layout and [`techne dev`](/cli/dev) for the watch-mode dev server.
+To pin a revision:
 
-## Next steps
+```sh
+bun add "github:kaonashi-dev/techne#<tag-or-sha>"
+```
 
-Once installed, continue with the [Quickstart](/quickstart) to boot your first
-app, or browse the [Project structure](/project-structure) reference.
+Techne is not published to a registry yet. Use Bun as the runtime and package
+manager. Elysia is installed with Techne; its native `t`, `status`, `problem` and
+`Elysia` exports are available from the package root.
+
+## TypeScript
+
+```json
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "Preserve",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": ["bun"]
+  },
+  "include": ["src/**/*.ts", "tests/**/*.ts"]
+}
+```
+
+Install `typescript` and `@types/bun` as development dependencies. Native
+applications require neither decorator flags nor metadata setup.
+
+## Scaffold
+
+```sh
+bunx github:kaonashi-dev/techne new my-app
+```
+
+Inside the generated project, run `bun install` and `bun run dev`. The starter
+includes a health endpoint, an HTTP test, strict type checking and Docker support.
+See [project structure](/project-structure).
