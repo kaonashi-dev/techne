@@ -6,6 +6,22 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Native architecture
+
+- **Breaking:** the root API now exports `createApp`, `createResources` and native
+  Elysia primitives. `TechneFactory` is available from `/legacy` (`/core` remains
+  a compatibility alias).
+- The native runtime returns Elysia directly, preserving route inference and
+  compilation without a Techne request pipeline or decorator metadata.
+- Resource scopes support rollback, reverse-order cleanup, aggregated errors,
+  idempotent close and async disposal.
+- CLI projects and feature generators now use explicit dependencies, native
+  routes, strict TypeScript and request-level tests without decorators.
+- Added the `apps/native` reference, architecture guide, native type contracts,
+  generated-project verification and a raw-Elysia comparison benchmark.
+
+The following Elysia migration notes describe the retained legacy runtime.
+
 > **Breaking — Elysia 2.** Techne now builds on `elysia@2.0.0-beta.1` and
 > `typebox@1.x` in place of `elysia@1.4` and `@sinclair/typebox@0.34`. Apps that
 > only use Techne's decorator surface need no changes. Apps that reach through

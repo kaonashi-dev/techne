@@ -1,25 +1,57 @@
 ---
 title: "Project structure"
-description: "Reference for the src/ layout used by Techne and projects scaffolded with the CLI."
+description: "A feature-oriented layout with an explicit composition root."
 ---
 
 ```text
 src/
-  cli/            CLI scaffolding and generators
-  common/         Public decorators, exceptions, and schema helpers
-  config/         ConfigService, config plugins, and registerAs helpers
-  core/           Application core, DI container, and bootstrap APIs
-    plugins/      Plugin protocol (`definePlugin`, `PluginContext`)
-  cqrs/           Command, query, event buses and event store
-  decorators/     Routing, DI, and metadata decorators
-  exceptions/     HTTP exception classes
-  factory/        TechneFactory bootstrap implementation
-  health/         Basic health check service and decorator
-  jwt/            JWT plugin, service, and auth guard
-  mq/             BullMQ-style queue core and framework integration
-  platform/       Elysia adapter
-  queue/          Legacy core-only queue compatibility barrel
-  schema/         TypeBox-backed schema helpers and DTO metadata
-  swagger/        Lightweight OpenAPI document generation and setup
-  testing/        Testing module utilities
+  main.ts
+  app.ts
+  features/
+    users/
+      users.routes.ts
+      users.service.ts
+  infrastructure/
+    postgres-users.ts
+tests/
+  users.test.ts
 ```
+
+| File                   | Owns                                                        |
+| ---------------------- | ----------------------------------------------------------- |
+| `main.ts`              | Environment, infrastructure acquisition, server and signals |
+| `app.ts`               | Construction of services and explicit `.use()` composition  |
+| `*.routes.ts`          | HTTP schemas, policies, status codes and service invocation |
+| `*.service.ts`         | Business rules and small dependency interfaces              |
+| Infrastructure adapter | Implementation of a feature's dependency interface          |
+
+Follow imports from `app.ts` to understand the complete dependency graph. Keep
+services independent of the HTTP context. Request data is passed explicitly;
+shared clients are constructed once for each app instance.
+
+Use functions or plain classes according to the domain. Split schemas and use
+cases into their own files as the feature grows, rather than creating empty
+layers in every feature.
+
+## CLI
+
+```sh
+techne g resource users
+techne g feature reports
+techne g routes reports
+techne g service reports
+techne g schema report
+```
+
+`resource` writes a service, route factory and composition factory under
+`src/features/users/`. Import `usersFeature` and mount it in `app.ts` explicitly.
+Individual generators write to the current directory. The `module`, `controller`
+and `dto` names are aliases for `feature`, `routes` and `schema`.
+
+`techne dev`, `start`, `build`, `test`, `doctor` and `deploy --target docker`
+work with native projects. `run`, `list`, `g command`, `g client` and
+`build --precompile` target the legacy decorator runtime and its config file.
+Native Elysia handles route compilation and infers the application type directly.
+
+The reference implementation is `apps/native/`. `apps/demo/` and
+`test-template-project/` are decorator-era examples/fixtures.

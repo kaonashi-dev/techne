@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "Preserve",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": ["bun"]
+  },
+  "include": ["./*.ts", "../native-*.test.ts", "../resources.test.ts", "../../apps/native/src/**/*.ts", "../../benchmarks/native.ts"]
+}

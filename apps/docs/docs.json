@@ -16,13 +16,18 @@
         "groups": [
           {
             "group": "Get started",
-            "pages": [
-              "introduction",
-              "installation",
-              "quickstart",
-              "project-structure"
-            ]
+            "pages": ["introduction", "installation", "quickstart", "project-structure"]
           },
+          {
+            "group": "Native architecture",
+            "pages": ["native-composition", "native-performance", "native-migration"]
+          }
+        ]
+      },
+      {
+        "anchor": "Legacy reference",
+        "icon": "book-open",
+        "groups": [
           {
             "group": "Concepts",
             "pages": [

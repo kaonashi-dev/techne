@@ -1,5 +1,8 @@
 # Techne Demo
 
+This is the **legacy decorator-runtime** reference. New applications should
+start with [`apps/native`](../native) and the [native architecture](../../ARCHITECTURE.md).
+
 A single reference application that exercises **every zero-infra feature** of the
 Techne framework, plus an [`oha`](https://github.com/hatoo/oha)-based performance
 harness that averages real-HTTP metrics into one file for cross-iteration

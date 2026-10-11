@@ -1,91 +1,44 @@
 ---
 title: "Introduction"
-description: "Techne is an experimental Bun-native application framework built on Elysia🦊 with a decorator-first developer experience."
+description: "Explicit application composition on native Elysia, built for Bun."
 ---
 
-> Experimental Bun-native application framework using Elysia as the HTTP layer.
+Techne is a small wrapper around Elysia with feature-oriented project conventions
+and application-owned resources. Its default API uses ordinary TypeScript
+functions and native Elysia plugins.
 
-**Techne** is a personal project focused on a decorator-first developer
-experience, explicit application architecture, and Bun-native runtime
-ergonomics. It is built for exploration, not production use, and breaking
-changes should be expected.
+## One HTTP execution model
 
-<Note>
-  Techne is experimental software. Expect breaking changes between releases and pin a version if you
-  depend on it.
-</Note>
+`createApp()` returns an actual Elysia instance, with `precompile: true` by default.
+Routing, schemas, hooks, errors and serialization are handled by Elysia. Techne
+does not introduce a second HTTP dispatcher or request-time dependency container.
 
-## Why Techne
+```ts
+import { createApp } from "@kaonashi-dev/techne";
 
-<CardGroup cols={2}>
-  <Card title="Bun-native" icon="bolt">
-    Built for the Bun runtime and its standard library — fast cold starts and a single toolchain for
-    install, build, test, and run.
-  </Card>
-  <Card title="Decorator-first" icon="at">
-    Controllers, providers, and routes declared with decorators and a flat, composable feature
-    config.
-  </Card>
-  <Card title="Dependency injection" icon="diagram-project">
-    A built-in container with singleton and request scopes, factory providers, and `ModuleRef` for
-    dynamic resolution.
-  </Card>
-  <Card title="Typed schemas" icon="shield-check">
-    TypeBox-powered request validation with RFC 7807 error responses out of the box.
-  </Card>
-  <Card title="Batteries included" icon="layer-group">
-    CQRS, message queues, an HTTP client, OpenTelemetry, and testing utilities ship in one package.
-  </Card>
-  <Card title="First-class CLI" icon="terminal">
-    Scaffold projects, generate code, run, build, and ship with the bundled CLI.
-  </Card>
-</CardGroup>
+createApp()
+  .get("/", () => ({ message: "Hello from Techne" }))
+  .listen(3000);
+```
 
-## Surfaces
+## Explicit architecture
 
-Techne ships as a set of subpath imports. The recommended mental model is:
+- **Composition root:** `app.ts` visibly wires dependencies and mounts features.
+- **Feature factories:** take services as arguments and return Elysia plugins.
+- **Plain services:** business logic works independently of HTTP or the framework.
+- **Resource ownership:** `createResources` handles setup rollback and shutdown.
+- **Native types:** route contracts are inferred from the actual Elysia chain.
+- **Local reasoning:** developers and agents can follow imports and function
+  arguments without scanning metadata, registries or decorators.
 
-- `@kaonashi-dev/techne/common` for decorators, exceptions, DTO/schema helpers,
-  and request lifecycle interfaces.
-- `@kaonashi-dev/techne/core` for bootstrap and infrastructure APIs.
-- Specialized features (`/config`, `/jwt`, `/swagger`, `/health`, `/testing`,
-  `/cqrs`, `/mq`, `/http`, `/telemetry`, `/console`, …) are imported only where
-  you use them, so unused subsystems add no overhead.
+Start with the [quickstart](/quickstart), then read [native composition](/native-composition).
+The executable reference is in `apps/native/` in the repository.
 
-### Import map
+## Version and legacy boundary
 
-| Area                                              | Package                          |
-| ------------------------------------------------- | -------------------------------- |
-| Decorators, exceptions, schemas                   | `@kaonashi-dev/techne/common`    |
-| Bootstrap, DI container, reflector, config loader | `@kaonashi-dev/techne/core`      |
-| Configuration service and helpers                 | `@kaonashi-dev/techne/config`    |
-| JWT auth plugin and guard                         | `@kaonashi-dev/techne/jwt`       |
-| OpenAPI / Swagger document generation             | `@kaonashi-dev/techne/swagger`   |
-| Health checks and readiness                       | `@kaonashi-dev/techne/health`    |
-| Outgoing HTTP client                              | `@kaonashi-dev/techne/http`      |
-| OpenTelemetry tracing and metrics                 | `@kaonashi-dev/techne/telemetry` |
-| CQRS buses and event store                        | `@kaonashi-dev/techne/cqrs`      |
-| Queue and worker primitives                       | `@kaonashi-dev/techne/mq`        |
-| Prisma ORM integration                            | `@kaonashi-dev/techne/prisma`    |
-| Typed RPC contract client and codegen             | `@kaonashi-dev/techne/contract`  |
-| Security primitives (headers, CSRF, rate limit)   | `@kaonashi-dev/techne/security`  |
-| Console (CLI) command subsystem                   | `@kaonashi-dev/techne/console`   |
-| Testing utilities                                 | `@kaonashi-dev/techne/testing`   |
-| Legacy queue compatibility layer                  | `@kaonashi-dev/techne/queue`     |
+Techne is experimental and pins `elysia@2.0.0-beta.1`. Examples use that version's
+options-first routes and lifecycle names. Pin the Techne revision you depend on.
 
-`@kaonashi-dev/techne` is a minimal bootstrap entrypoint. Use it only when you
-explicitly want the smallest possible surface.
-
-## Next steps
-
-<CardGroup cols={3}>
-  <Card title="Install" icon="download" href="/installation">
-    Add Techne to a Bun project.
-  </Card>
-  <Card title="Quickstart" icon="rocket" href="/quickstart">
-    Boot your first app in a few lines.
-  </Card>
-  <Card title="Project structure" icon="folder-tree" href="/project-structure">
-    Learn the recommended `src/` layout.
-  </Card>
-</CardGroup>
+Existing decorator applications use `@kaonashi-dev/techne/legacy` or the historical
+`/core` alias. The **Legacy reference** section documents their APIs and integration
+protocol. See [migration](/native-migration) before changing an existing app.

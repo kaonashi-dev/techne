@@ -1,0 +1,38 @@
+---
+title: "Native performance"
+description: "Measure the wrapper against the same routes in raw Elysia."
+---
+
+`createApp()` runs once at composition time and returns native Elysia. It does not
+wrap route handlers, request dispatch or serializers. `createResources()` runs
+at setup and shutdown only. Elysia compiles the HTTP pipeline.
+
+The only constructor default is `precompile: true`, which moves compilation
+before listening. Pass `{ precompile: false }` to opt into Elysia's lazy behavior.
+
+## Reproduce
+
+From the repository root:
+
+```sh
+bun install --frozen-lockfile
+bun run bench:native
+bun run bench:native --quick
+bun run bench:native --json
+```
+
+`benchmarks/native.ts` uses one route builder and identical options for raw Elysia
+and Techne. It exercises static JSON, path parameters with a service call,
+validated JSON, and a native authorization hook. It verifies status and response
+parity before timing, warms up both apps, alternates measurement order between
+scenarios and reports throughput plus latency distributions.
+
+These are in-process `Request`/`Response` measurements, not network capacity.
+Run multiple full trials on the same machine for comparisons; short samples are
+smoke checks, and small differences can be JIT/GC noise. There is no promised
+speedup percentage. Socket throughput, cold import time and memory need their own
+measurements with a representative application.
+
+The older benchmark matrix measures the decorator runtime; those numbers are
+not results for the new root API. Native correctness, plugin isolation and route
+inference are checked with `bun test` and `bun run test:types`.

@@ -1,8 +1,20 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import * as fs from "fs/promises";
-import * as os from "os";
-import * as path from "path";
-import { createProject, generateCommand } from "../src/cli/generators";
+import * as fs from "node:fs/promises";
+import * as os from "node:os";
+import * as path from "node:path";
+import {
+  createProject,
+  generateCommand,
+  generateResource,
+  generateFeature,
+  generateRoutes,
+  generateMiddleware,
+  generateGuard,
+  generateFilter,
+  generateHook,
+  generateSchema,
+} from "../src/cli/generators";
+
 describe("CLI project generator", () => {
   let originalCwd: string;
   let tempRoot: string;
@@ -15,70 +27,76 @@ describe("CLI project generator", () => {
     process.chdir(originalCwd);
     await fs.rm(tempRoot, { recursive: true, force: true });
   });
-  test("creates a complete starter project", async () => {
+
+  test("generates a starter that typechecks and serves requests without decorators", async () => {
     await createProject("my-project");
     const projectDir = path.join(tempRoot, "my-project");
-    const packageJson = JSON.parse(
-      await fs.readFile(path.join(projectDir, "package.json"), "utf8"),
-    );
-    const tsconfig = JSON.parse(await fs.readFile(path.join(projectDir, "tsconfig.json"), "utf8"));
-    const oxlint = JSON.parse(await fs.readFile(path.join(projectDir, "oxlint.json"), "utf8"));
-    const oxfmt = JSON.parse(await fs.readFile(path.join(projectDir, ".oxfmtrc.json"), "utf8"));
-    const appModule = await fs.readFile(path.join(projectDir, "src", "app.module.ts"), "utf8");
-    const appController = await fs.readFile(
-      path.join(projectDir, "src", "app.controller.ts"),
-      "utf8",
-    );
-    const appService = await fs.readFile(path.join(projectDir, "src", "app.service.ts"), "utf8");
-    const mainFile = await fs.readFile(path.join(projectDir, "src", "main.ts"), "utf8");
-    const techneConfig = await fs.readFile(path.join(projectDir, "techne.config.ts"), "utf8");
-    const gitignore = await fs.readFile(path.join(projectDir, ".gitignore"), "utf8");
-    expect(packageJson.dependencies["@kaonashi-dev/techne"]).toBe("latest");
-    expect(packageJson.scripts.build).toBe("techne build");
-    expect(packageJson.scripts["build:bundle"]).toContain("techne build");
-    expect(packageJson.scripts["build:node"]).toContain("techne build");
-    expect(packageJson.scripts.check).toBe("bun run lint && bun run format:check");
-    expect(packageJson.devDependencies.oxlint).toBe("^1.56.0");
-    expect(tsconfig.compilerOptions.noEmit).toBe(true);
-    expect(tsconfig.include).toEqual(["src/**/*"]);
-    expect(oxlint.plugins).toEqual(["typescript"]);
-    expect(oxfmt.ignorePatterns).toEqual(["*.md", "*.json", ".*.json"]);
-    expect(appModule).toContain("AppController");
-    expect(appModule).toContain("AppService");
-    expect(appModule).toContain("@kaonashi-dev/techne/core");
-    expect(appModule).toContain("defineFeature");
-    expect(appController).toContain('@Controller("/")');
-    expect(appController).toContain("@kaonashi-dev/techne/common");
-    expect(appService).toContain("Hello from Techne!");
-    expect(appService).toContain("@kaonashi-dev/techne/common");
-    expect(mainFile).toContain("@kaonashi-dev/techne/core");
-    expect(mainFile).toContain("bootstrap");
-    expect(techneConfig).toContain("defineTechneConfig");
-    expect(techneConfig).toContain("features: [AppFeature]");
-    expect(techneConfig).toContain("Number(Bun.env.PORT ?? 3000)");
-    expect(gitignore).toContain("node_modules");
-    expect(gitignore).toContain("dist");
-  });
-  test("generateCommand writes a command file", async () => {
-    await generateCommand("Greet");
-    const content = await fs.readFile(
-      path.join(tempRoot, "src", "commands", "greet.command.ts"),
-      "utf8",
-    );
-    expect(content).toContain("@ConsoleCommand(");
-    expect(content).toContain("@Argument(");
-    expect(content).toContain("@kaonashi-dev/techne/console");
-    expect(content).toContain("class GreetCommand");
-  });
+    const tsconfig = await Bun.file(path.join(projectDir, "tsconfig.json")).json();
+    expect(tsconfig.compilerOptions.experimentalDecorators).toBeUndefined();
+    expect(tsconfig.compilerOptions.emitDecoratorMetadata).toBeUndefined();
+    expect(await Bun.file(path.join(projectDir, "techne.config.ts")).exists()).toBe(false);
 
-  test("generateCommand strips Command suffix", async () => {
-    await generateCommand("MigrateCommand");
-    const content = await fs.readFile(
-      path.join(tempRoot, "src", "commands", "migrate.command.ts"),
-      "utf8",
+    // Resolve the local package, without installing anything from the network.
+    const modules = path.join(projectDir, "node_modules");
+    await fs.mkdir(path.join(modules, "@kaonashi-dev"), { recursive: true });
+    await fs.symlink(originalCwd, path.join(modules, "@kaonashi-dev", "techne"));
+    await fs.symlink(
+      path.join(originalCwd, "node_modules", "@types"),
+      path.join(modules, "@types"),
     );
+
+    process.chdir(projectDir);
+    await generateResource("user-profiles");
+    for (const generate of [
+      generateFeature,
+      generateRoutes,
+      generateMiddleware,
+      generateGuard,
+      generateFilter,
+      generateHook,
+      generateSchema,
+    ]) {
+      await generate("example", path.join(projectDir, "src"));
+    }
+    for (const command of [
+      [process.execPath, path.join(originalCwd, "node_modules/typescript/bin/tsc"), "--noEmit"],
+      [process.execPath, "test"],
+      [
+        process.execPath,
+        "run",
+        "--bun",
+        path.join(originalCwd, "node_modules/.bin/oxfmt"),
+        "--check",
+        ".",
+      ],
+      [
+        process.execPath,
+        path.join(originalCwd, "src/cli/index.ts"),
+        "build",
+        "--target=bun",
+        "--out",
+        "dist/app.bun",
+      ],
+      [process.execPath, path.join(originalCwd, "src/cli/index.ts"), "doctor"],
+    ]) {
+      const child = Bun.spawn(command, { cwd: projectDir, stdout: "pipe", stderr: "pipe" });
+      const [exitCode, stdout, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
+      expect({ exitCode, output: exitCode === 0 ? "" : stdout + stderr }).toEqual({
+        exitCode: 0,
+        output: "",
+      });
+    }
+  }, 20_000);
+
+  test("retains explicit legacy console command generation", async () => {
+    await generateCommand("MigrateCommand");
+    const content = await Bun.file(path.join(tempRoot, "src/commands/migrate.command.ts")).text();
     expect(content).toContain("class MigrateCommand");
-    expect(content).toContain('"migrate"');
+    expect(content).toContain('@ConsoleCommand("migrate"');
   });
 
   test("fails when target directory is not empty", async () => {

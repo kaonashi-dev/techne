@@ -1,0 +1,105 @@
+---
+title: "Native composition"
+description: "Dependency direction, native HTTP policies and deterministic resource ownership."
+---
+
+## Dependency direction
+
+The application is composed at startup:
+
+```text
+main → app → feature routes → service → dependency interface
+         └─ infrastructure adapter implements the interface
+```
+
+Services use ordinary arguments or constructor parameters. The interface belongs
+to the feature that needs it. Tests supply a fake implementing the same interface.
+No container resolves dependencies during a request.
+
+## Native routes and policies
+
+```ts
+import { createApp, problem } from "@kaonashi-dev/techne";
+
+export function accountRoutes(auth: { identify(token?: string): Promise<string | undefined> }) {
+  return createApp({ prefix: "/account" })
+    .derive(async ({ headers }) => ({ userId: await auth.identify(headers.authorization) }))
+    .beforeHandle(({ userId }) => {
+      if (!userId) return problem(401, { detail: "Sign in first" });
+    })
+    .get("/", ({ userId }) => ({ userId }));
+}
+```
+
+Hooks in this feature are local. Other mounted features do not inherit its
+authorization policy. Request identity lives in `derive`, not a shared store or
+service field. Use an explicitly scoped native plugin for app-wide policies.
+
+Native `t` schemas perform transport validation; services enforce business
+invariants independently. Map domain failures with `.error(DomainError, handler)`
+or return native `problem(status, details)` for an expected HTTP error.
+
+## Inference is part of the API
+
+Always return the fluent chain from a feature factory. Avoid broad `Elysia` or
+`AnyElysia` return annotations, which lose route details. Export
+`type App = ReturnType<typeof buildApp>` for typed clients compatible with the
+pinned Elysia version.
+
+Native Elysia plugins are passed directly to `.use()`. Its `name`/`seed`
+deduplication semantics apply, so use distinct identities for differently
+configured instances that must both mount.
+
+## Resources
+
+```ts
+import { Database } from "bun:sqlite";
+import { createApp, createResources } from "@kaonashi-dev/techne";
+
+const resources = await createResources((onClose) => {
+  const database = new Database(":memory:");
+  onClose(() => database.close());
+  return { database };
+});
+
+try {
+  const app = createApp()
+    .get("/healthz", () => ({ healthy: true }))
+    .cleanup(resources.close)
+    .listen(3000);
+
+  let stopping: Promise<void> | undefined;
+  const stop = () => (stopping ??= Promise.resolve(app.stop()));
+  process.once("SIGINT", stop);
+  process.once("SIGTERM", stop);
+} catch (error) {
+  await resources.close();
+  throw error;
+}
+```
+
+Pass `resources.value` to your composition root. The setup callback can be async.
+Register cleanup immediately after acquisition and before setup returns.
+
+- Failed setup rolls back registered resources.
+- `close()` is idempotent, including concurrent calls.
+- Cleanups run sequentially in reverse registration order.
+- Every cleanup is attempted. Failures are preserved in `AggregateError`.
+- `await using` supports scoped jobs and tests.
+
+Elysia's `stop()` drains a running server before `cleanup` handlers. Handle-only
+tests and failed startup close resources explicitly. Worker entrypoints can use
+`createResources` with the same services, without an HTTP application.
+
+## Integrations
+
+Use compatible native plugins for CORS, telemetry and OpenAPI. Construct database
+and queue clients explicitly and register their shutdown. Configuration is read
+once at the entrypoint and passed to factories. Readiness checks are explicit
+routes for the dependencies required by your application.
+
+`@kaonashi-dev/techne/http` is an independent outgoing HTTP client. The old DI
+integration factories use the legacy protocol and are documented separately.
+
+The full decision record and contributor rules live in
+[`ARCHITECTURE.md`](https://github.com/kaonashi-dev/techne/blob/main/ARCHITECTURE.md).

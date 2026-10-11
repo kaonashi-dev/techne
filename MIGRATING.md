@@ -1,5 +1,78 @@
 # Migrating
 
+## Native composition
+
+The package root now exposes the Elysia-native API. This is a breaking change to
+root imports. The decorator runtime is explicitly available at
+`@kaonashi-dev/techne/legacy`; `/core` remains a compatibility alias.
+
+```ts
+// Existing decorator application
+import { TechneFactory } from "@kaonashi-dev/techne/legacy";
+
+// New application
+import { createApp, t } from "@kaonashi-dev/techne";
+```
+
+### Concept mapping
+
+| Previous architecture | Native composition |
+| --- | --- |
+| `TechneFactory.create()` + config discovery | `buildApp(dependencies)` + `createApp()` |
+| `defineFeature({ controllers, providers })` | Function returning an Elysia plugin |
+| `@Controller` / `@Get` / `@Body` | `.get()` / `.post()` with typed native context |
+| `@Injectable`, tokens, `Container` | Plain functions/classes with explicit arguments |
+| Request-scoped providers | Native `derive` and explicit request data |
+| DTO decorators / pipes | Native `t` schemas in route options |
+| Guards and response hooks | Native `beforeHandle`, `afterHandle`, `afterResponse` |
+| Exception filters | Native `.error(DomainError, handler)`, `problem`, `status` |
+| Module lifecycle hooks | `createResources`, native `setup` / `cleanup` |
+| `app.close()` | Native `app.stop()`; resource `close()` for handle-only tests |
+| Testing module / overrides | Factory arguments with fakes + `app.handle(Request)` |
+| Generated RPC route maps | Inferred `ReturnType<typeof buildApp>` |
+
+### Move one feature
+
+```ts
+import { createApp, t } from "@kaonashi-dev/techne";
+
+function createUsersService() {
+  return { create: (name: string) => ({ name }) };
+}
+
+function usersRoutes(users: ReturnType<typeof createUsersService>) {
+  return createApp({ prefix: "/users" }).post("/", {
+    body: t.Object({ name: t.String({ minLength: 1 }) }),
+  }, ({ body }) => users.create(body.name));
+}
+
+export function buildApp() {
+  return createApp().use(usersRoutes(createUsersService()));
+}
+```
+
+Then listen explicitly from `main.ts`. Remove `experimentalDecorators` and
+`emitDecoratorMetadata` once the application no longer imports decorated code.
+Generated projects now follow this structure and do not load `techne.config.ts`.
+
+Native apps use Elysia 2's `(path, options, handler)` route order, and hook methods
+without the `on` prefix. Register shutdown work with `cleanup`; `stop` executes
+server shutdown. Keep the fluent return type inferred to retain route contracts.
+
+The legacy `config()`, `jwt()`, `mq()`, Prisma, telemetry, Swagger and other DI
+integration factories still target the legacy plugin protocol. Native apps must
+construct clients explicitly or use compatible Elysia plugins. `/http` is an
+independent client and can be used directly. HTTP error defaults now come from
+Elysia; preserve any old request ID or error-envelope contract explicitly in a
+native plugin if your clients rely on it. Health and security policies are
+registered explicitly by the application.
+
+See [ARCHITECTURE.md](./ARCHITECTURE.md) and the executable
+[`apps/native`](./apps/native) example. Sections below describe previous migrations
+and apply to the legacy runtime.
+
+---
+
 Upgrade recipes for Techne's breaking changes live in the docs site:
 
 - **[Migrating](./apps/docs/reference/migrating.mdx)** — the 0.4.0 project
@@ -53,7 +126,7 @@ ctx.http().error((c) => { /* ... */ })
 Full mapping: `onRequest`→`request`, `onParse`→`parse`,
 `onTransform`→`transform`, `onBeforeHandle`→`beforeHandle`,
 `onAfterHandle`→`afterHandle`, `onAfterResponse`→`afterResponse`,
-`onError`→`error`, `onStart`→`setup`, `onStop`→`stop`. `mapResponse` is
+`onError`→`error`, `onStart`→`setup`, `onStop`→`cleanup`. `mapResponse` is
 unchanged. `resolve` is gone — use `derive`.
 
 Two further traps if you register routes on the Elysia instance yourself:

@@ -1,14 +1,14 @@
 #!/usr/bin/env bun
 import * as path from "path";
 import {
-  generateController,
-  generateModule,
+  generateRoutes,
+  generateFeature,
   generateService,
   generateResource,
   generateMiddleware,
   generateGuard,
   generateFilter,
-  generateDto,
+  generateSchema,
   generateHook,
   generateDockerfile,
   generateCommand,
@@ -42,7 +42,8 @@ function flag(name: string): boolean {
 }
 
 function flagValue(name: string): string | undefined {
-  const i = args.indexOf(name);
+  const i = args.findIndex((arg) => arg === name || arg.startsWith(`${name}=`));
+  if (i !== -1 && args[i].startsWith(`${name}=`)) return args[i].slice(name.length + 1);
   if (i === -1 || i === args.length - 1) return undefined;
   return args[i + 1];
 }
@@ -158,24 +159,17 @@ async function doctor() {
   const tsconfigPath = path.join(process.cwd(), "tsconfig.json");
   if (await exists(tsconfigPath)) {
     const tsconfig = (await readJsonIfExists(tsconfigPath)) as
-      | { compilerOptions?: { experimentalDecorators?: boolean; emitDecoratorMetadata?: boolean } }
+      | { compilerOptions?: { strict?: boolean } }
       | undefined;
     if (!tsconfig) {
       warn(`tsconfig.json present but could not be parsed`);
     } else {
       ok(`tsconfig.json present`);
       const opts = tsconfig.compilerOptions ?? {};
-      if (opts.experimentalDecorators === true) {
-        ok(`tsconfig: experimentalDecorators enabled`);
+      if (opts.strict === true) {
+        ok(`tsconfig: strict type checking enabled`);
       } else {
-        fail(`tsconfig: experimentalDecorators is NOT enabled`);
-        hasError = true;
-      }
-      if (opts.emitDecoratorMetadata === true) {
-        ok(`tsconfig: emitDecoratorMetadata enabled`);
-      } else {
-        fail(`tsconfig: emitDecoratorMetadata is NOT enabled`);
-        hasError = true;
+        warn(`Enable tsconfig strict mode for reliable route inference`);
       }
     }
   } else {
@@ -191,11 +185,11 @@ async function doctor() {
     hasError = true;
   }
 
-  // techne.config.ts (informational)
-  if (await exists(path.join(process.cwd(), "techne.config.ts"))) {
-    ok(`techne.config.ts present`);
+  // Explicit composition root
+  if (await exists(path.join(process.cwd(), "src/app.ts"))) {
+    ok(`src/app.ts composition root present`);
   } else {
-    warn(`techne.config.ts not found (optional)`);
+    warn(`src/app.ts not found; compose the app explicitly before listening`);
   }
 
   // .env
@@ -233,18 +227,18 @@ Usage:
   techne generate|g <type> <name>
 
 Available generators:
-  module
-  controller
+  feature         (native Elysia plugin factory)
+  routes          (typed HTTP boundary)
   service
   resource
   middleware
   guard
   filter
   hook
-  dto
-  command         (writes a console command class)
+  schema
+  command         (legacy decorator-based console command)
   docker          (writes Dockerfile + .dockerignore; supports --port, --bun-version, --out, --force, --dry-run)
-  client          (writes a typed RPC route map; supports --out, defaults to src/routes.generated.ts)
+  client          (legacy RPC codegen; native apps export their inferred App type)
 
 Build modes:
   (default)        Standalone binary via bun build --compile. Output: dist/app. No runtime needed on server.
@@ -253,7 +247,7 @@ Build modes:
   --target=browser JS bundle for the browser.
 
 Build flags:
-  --precompile  Writes .techne/routes.json from techne.config.ts before building (AOT route optimization).
+  --precompile  Legacy decorator route manifest. Native apps compile through Elysia.
 
 Deploy targets:
   docker   Multi-stage Bun Dockerfile (only target supported for now)
@@ -449,11 +443,13 @@ async function main() {
     }
 
     switch (type) {
+      case "feature":
       case "module":
-        await generateModule(name);
+        await generateFeature(name);
         break;
+      case "routes":
       case "controller":
-        await generateController(name);
+        await generateRoutes(name);
         break;
       case "service":
         await generateService(name);
@@ -473,8 +469,9 @@ async function main() {
       case "hook":
         await generateHook(name);
         break;
+      case "schema":
       case "dto":
-        await generateDto(name);
+        await generateSchema(name);
         break;
       case "command":
         await generateCommand(name);
@@ -521,4 +518,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});
