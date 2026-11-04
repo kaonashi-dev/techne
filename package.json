@@ -96,6 +96,101 @@
       "bun": "./src/telemetry/index.ts",
       "import": "./src/telemetry/index.ts",
       "types": "./dist/types/telemetry/index.d.ts"
+    },
+    "./elysia": {
+      "bun": "./src/vendor/elysia/index.ts",
+      "import": "./src/vendor/elysia/index.ts",
+      "types": "./dist/types/vendor/elysia/index.d.ts"
+    },
+    "./elysia/types": {
+      "bun": "./src/vendor/elysia/types.ts",
+      "import": "./src/vendor/elysia/types.ts",
+      "types": "./dist/types/vendor/elysia/types.d.ts"
+    },
+    "./elysia/error": {
+      "bun": "./src/vendor/elysia/error.ts",
+      "import": "./src/vendor/elysia/error.ts",
+      "types": "./dist/types/vendor/elysia/error.d.ts"
+    },
+    "./elysia/cookies": {
+      "bun": "./src/vendor/elysia/cookie/index.ts",
+      "import": "./src/vendor/elysia/cookie/index.ts",
+      "types": "./dist/types/vendor/elysia/cookie/index.d.ts"
+    },
+    "./elysia/type": {
+      "bun": "./src/vendor/elysia/type/exports.ts",
+      "import": "./src/vendor/elysia/type/exports.ts",
+      "types": "./dist/types/vendor/elysia/type/exports.d.ts"
+    },
+    "./elysia/trace": {
+      "bun": "./src/vendor/elysia/plugin/trace.ts",
+      "import": "./src/vendor/elysia/plugin/trace.ts",
+      "types": "./dist/types/vendor/elysia/plugin/trace.d.ts"
+    },
+    "./elysia/websocket": {
+      "bun": "./src/vendor/elysia/plugin/websocket.ts",
+      "import": "./src/vendor/elysia/plugin/websocket.ts",
+      "types": "./dist/types/vendor/elysia/plugin/websocket.d.ts"
+    },
+    "./elysia/ws": {
+      "bun": "./src/vendor/elysia/ws/index.ts",
+      "import": "./src/vendor/elysia/ws/index.ts",
+      "types": "./dist/types/vendor/elysia/ws/index.d.ts"
+    },
+    "./elysia/auto-head": {
+      "bun": "./src/vendor/elysia/plugin/auto-head.ts",
+      "import": "./src/vendor/elysia/plugin/auto-head.ts",
+      "types": "./dist/types/vendor/elysia/plugin/auto-head.d.ts"
+    },
+    "./typebox": {
+      "bun": "./src/vendor/typebox/index.ts",
+      "import": "./src/vendor/typebox/index.ts",
+      "types": "./dist/types/vendor/typebox/index.d.ts"
+    },
+    "./typebox/compile": {
+      "bun": "./src/vendor/typebox/compile/index.ts",
+      "import": "./src/vendor/typebox/compile/index.ts",
+      "types": "./dist/types/vendor/typebox/compile/index.d.ts"
+    },
+    "./typebox/error": {
+      "bun": "./src/vendor/typebox/error/index.ts",
+      "import": "./src/vendor/typebox/error/index.ts",
+      "types": "./dist/types/vendor/typebox/error/index.d.ts"
+    },
+    "./typebox/format": {
+      "bun": "./src/vendor/typebox/format/index.ts",
+      "import": "./src/vendor/typebox/format/index.ts",
+      "types": "./dist/types/vendor/typebox/format/index.d.ts"
+    },
+    "./typebox/guard": {
+      "bun": "./src/vendor/typebox/guard/index.ts",
+      "import": "./src/vendor/typebox/guard/index.ts",
+      "types": "./dist/types/vendor/typebox/guard/index.d.ts"
+    },
+    "./typebox/schema": {
+      "bun": "./src/vendor/typebox/schema/index.ts",
+      "import": "./src/vendor/typebox/schema/index.ts",
+      "types": "./dist/types/vendor/typebox/schema/index.d.ts"
+    },
+    "./typebox/system": {
+      "bun": "./src/vendor/typebox/system/index.ts",
+      "import": "./src/vendor/typebox/system/index.ts",
+      "types": "./dist/types/vendor/typebox/system/index.d.ts"
+    },
+    "./typebox/type": {
+      "bun": "./src/vendor/typebox/type/index.ts",
+      "import": "./src/vendor/typebox/type/index.ts",
+      "types": "./dist/types/vendor/typebox/type/index.d.ts"
+    },
+    "./typebox/value": {
+      "bun": "./src/vendor/typebox/value/index.ts",
+      "import": "./src/vendor/typebox/value/index.ts",
+      "types": "./dist/types/vendor/typebox/value/index.d.ts"
+    },
+    "./exact-mirror": {
+      "bun": "./src/vendor/exact-mirror/index.ts",
+      "import": "./src/vendor/exact-mirror/index.ts",
+      "types": "./dist/types/vendor/exact-mirror/index.d.ts"
     }
   },
   "bin": {

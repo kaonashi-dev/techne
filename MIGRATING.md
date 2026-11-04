@@ -1,5 +1,28 @@
 # Migrating
 
+## Zero dependencies
+
+Techne no longer installs `elysia`, `typebox` or `exact-mirror`; their TypeScript
+sources ship inside the package. Point direct imports at the Techne subpaths:
+
+| Before | After |
+| --- | --- |
+| `elysia` | `@kaonashi-dev/techne/elysia` (or the root `@kaonashi-dev/techne`) |
+| `elysia/types`, `elysia/error`, `elysia/cookies`, `elysia/type` | `@kaonashi-dev/techne/elysia/types`, `…/elysia/error`, `…/elysia/cookies`, `…/elysia/type` |
+| `elysia/trace`, `elysia/websocket`, `elysia/ws`, `elysia/auto-head` | `@kaonashi-dev/techne/elysia/trace`, `…/elysia/websocket`, `…/elysia/ws`, `…/elysia/auto-head` |
+| `typebox` | `@kaonashi-dev/techne/typebox` |
+| `typebox/compile`, `typebox/type`, `typebox/value`, … | `@kaonashi-dev/techne/typebox/compile`, `…/typebox/type`, `…/typebox/value`, … |
+| `exact-mirror` | `@kaonashi-dev/techne/exact-mirror` |
+
+Third-party Elysia plugins (for example `@elysiajs/cors`) still declare `elysia`
+as a peer dependency, so installing one installs its own copy of Elysia next to
+Techne's. Elysia composes plugins structurally, but keep that copy on the same
+version (`2.0.0-beta.1`) as Techne's.
+
+Lint and format with Bun's built-in tools: replace `oxlint` with `bun lint` and
+`oxfmt` with `bun fmt`, and move rule and formatter options from `oxlint.json`
+and `.oxfmtrc.json` into the `[lint]` and `[fmt]` sections of `bunfig.toml`.
+
 ## Native composition
 
 The package root now exposes the Elysia-native API. This is a breaking change to
@@ -142,7 +165,7 @@ Two further traps if you register routes on the Elysia instance yourself:
   if (ctx.code === "VALIDATION") { /* ... */ }
 
   // after
-  import { ValidationError } from "elysia"
+  import { ValidationError } from "@kaonashi-dev/techne/elysia"
   if (ctx.error instanceof ValidationError) { /* ... */ }
   ```
 
@@ -160,9 +183,9 @@ import { TypeCompiler } from "@sinclair/typebox/compiler"
 const validator = TypeCompiler.Compile(schema)
 
 // after
-import * as Type from "typebox/type"
-import type { Static, TSchema } from "typebox"
-import { Compile } from "typebox/compile"
+import * as Type from "@kaonashi-dev/techne/typebox/type"
+import type { Static, TSchema } from "@kaonashi-dev/techne/typebox"
+import { Compile } from "@kaonashi-dev/techne/typebox/compile"
 const validator = Compile(schema)
 ```
 
