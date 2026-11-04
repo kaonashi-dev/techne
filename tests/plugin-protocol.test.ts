@@ -1,5 +1,5 @@
 import { test, expect, describe } from "bun:test";
-import { Elysia } from "elysia";
+import { Elysia } from "../src/vendor/elysia/index";
 import { TechneFactory } from "../src/factory/techne-factory";
 import { definePlugin } from "../src/core/plugins/define-plugin";
 import type { PluginDefinition } from "../src/core/plugins/define-plugin";

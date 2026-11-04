@@ -1,5 +1,5 @@
-import type { TSchema } from "typebox";
-import type { Validator } from "typebox/compile";
+import type { TSchema } from "../vendor/typebox/index";
+import type { Validator } from "../vendor/typebox/compile/index";
 
 /**
  * A compiled schema validator, keyed by the schema type.

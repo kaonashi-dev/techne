@@ -18,7 +18,7 @@
  *   bun run benchmarks/http.ts --json
  */
 
-import { Elysia } from "elysia";
+import { Elysia } from "../src/vendor/elysia/index";
 import { Controller, Get, Injectable, Param } from "../src/common";
 import { TechneFactory } from "../src/core";
 import {

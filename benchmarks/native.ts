@@ -2,7 +2,7 @@
  * Same route builder, dependencies and native hooks for both constructors.
  * Measures in-process Request/Response dispatch, not socket throughput.
  */
-import { Elysia, t } from "elysia";
+import { Elysia, t } from "../src/vendor/elysia/index";
 import { createApp } from "../src";
 import { emitResults, getDefaults, isQuick, runScenario, type ScenarioResult } from "./scenarios";
 

@@ -13,7 +13,7 @@
  */
 import "../src/reflect-setup";
 import { afterEach, describe, expect, test } from "bun:test";
-import * as Type from "typebox/type";
+import * as Type from "../src/vendor/typebox/type/index";
 import { TechneFactory } from "../src/factory/techne-factory";
 import {
   Dispatchable,

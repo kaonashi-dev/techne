@@ -31,7 +31,7 @@ export interface PluginContext {
    */
   onShutdown(handler: () => void | Promise<void>): void;
   /** Access the raw Elysia instance for low-level work (routes, hooks, etc.). */
-  http(): import("elysia").Elysia;
+  http(): import("../../vendor/elysia/index").Elysia;
   /** Logger pre-scoped to the plugin's name. */
   logger: Logger;
 }

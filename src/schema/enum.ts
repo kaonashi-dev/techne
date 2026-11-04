@@ -1,4 +1,4 @@
-import { t } from "elysia";
+import { t } from "../vendor/elysia/index";
 
 type PrimitiveEnumValue = string | number;
 type EnumLike = Record<string, PrimitiveEnumValue>;

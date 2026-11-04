@@ -1,6 +1,6 @@
-import * as Type from "typebox/type";
-import type { Static, TSchema } from "typebox";
-import { Compile } from "typebox/compile";
+import * as Type from "../vendor/typebox/type/index";
+import type { Static, TSchema } from "../vendor/typebox/index";
+import { Compile } from "../vendor/typebox/compile/index";
 import { requiredKeys } from "../schema/json-schema-kind";
 
 /** Re-export of TypeBox `Type` for ergonomic schema authoring. */

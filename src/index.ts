@@ -2,6 +2,6 @@
 export { createApp } from "./runtime/create-app";
 export { createResources } from "./runtime/create-resources";
 export type { Cleanup, OnClose, Resources } from "./runtime/create-resources";
-export { Elysia, t, status, problem } from "elysia";
-export type { AnyElysia, Context, Problem } from "elysia";
-export type { ElysiaConfig } from "elysia/types";
+export { Elysia, t, status, problem } from "./vendor/elysia/index";
+export type { AnyElysia, Context, Problem } from "./vendor/elysia/index";
+export type { ElysiaConfig } from "./vendor/elysia/types";

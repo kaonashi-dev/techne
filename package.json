@@ -1,7 +1,7 @@
 {
   "name": "@kaonashi-dev/techne",
   "version": "0.0.1",
-  "description": "Techne — explicit application composition on native Elysia, built for Bun",
+  "description": "Techne \u2014 explicit application composition on native Elysia, built for Bun",
   "module": "src/index.ts",
   "main": "src/index.ts",
   "types": "dist/types/index.d.ts",
@@ -186,10 +186,5 @@
     "@prisma/client": {
       "optional": true
     }
-  },
-  "dependencies": {
-    "elysia": "2.0.0-beta.1",
-    "exact-mirror": "^1.2.2",
-    "typebox": "^1.3.10"
   }
 }

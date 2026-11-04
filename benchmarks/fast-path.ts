@@ -11,7 +11,7 @@
  * overhead column in the table is meaningful.
  */
 
-import { Elysia } from "elysia";
+import { Elysia } from "../src/vendor/elysia/index";
 import { Controller, Get, Injectable, Param } from "../src/common";
 import { TechneFactory } from "../src/core";
 import { emitResults, getDefaults, isQuick, runScenario, type ScenarioResult } from "./scenarios";

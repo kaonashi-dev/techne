@@ -1,4 +1,4 @@
-import type { TSchema } from "typebox";
+import type { TSchema } from "../vendor/typebox/index";
 
 /**
  * Fast schema-driven JSON stringifier.

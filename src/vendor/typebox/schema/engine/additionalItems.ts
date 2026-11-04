@@ -1,0 +1,89 @@
+/*--------------------------------------------------------------------------
+
+TypeBox
+
+The MIT License (MIT)
+
+Copyright (c) 2017-2026 Haydn Paterson 
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+---------------------------------------------------------------------------*/
+
+// deno-fmt-ignore-file
+
+import * as Schema from '../types/index'
+import { Stack } from './_stack'
+import { BuildContext, CheckContext, ErrorContext } from './_context'
+import { Unique } from './_unique'
+import { Guard as G, EmitGuard as E } from '../../guard/index'
+import { BuildSchemaPushStack, CheckSchemaPushStack, ErrorSchemaPushStack } from './schema'
+
+// ------------------------------------------------------------------
+// Valid
+// ------------------------------------------------------------------
+function IsValid(schema: Schema.XSchemaObject): schema is Schema.XItems & { items: Schema.XSchema[] } {
+  return Schema.IsItems(schema) && G.IsArray(schema.items)
+}
+// ------------------------------------------------------------------
+// Build
+// ------------------------------------------------------------------
+function BuildAdditionalItemsStandard(stack: Stack, context: BuildContext, schema: Schema.XAdditionalItems & Schema.XItems & { items: Schema.XSchema[] }, value: string): string {
+  const [item, index] = [Unique(), Unique()]
+  const isSchema = BuildSchemaPushStack(stack, context, schema.additionalItems, item)
+  const isLength = E.IsLessThan(index, E.Constant(schema.items.length))
+  const addIndex = context.AddIndex(index)
+  return E.Every(value, E.Constant(0), [item, index], E.Or(isLength, E.And(isSchema, addIndex)))
+}
+function BuildAdditionalItemsFast(stack: Stack, context: BuildContext, schema: Schema.XAdditionalItems & Schema.XItems & { items: Schema.XSchema[] }, value: string): string {
+  const [item, index] = [Unique(), Unique()]
+  const isSchema = BuildSchemaPushStack(stack, context, schema.additionalItems, item)
+  const isLength = E.IsLessThan(index, E.Constant(schema.items.length))
+  return E.Every(value, E.Constant(0), [item, index], E.Or(isLength, isSchema))
+}
+export function BuildAdditionalItems(stack: Stack, context: BuildContext, schema: Schema.XAdditionalItems, value: string): string {
+  if (!IsValid(schema)) return E.Constant(true)
+  return context.UseUnevaluated()
+    ? BuildAdditionalItemsStandard(stack, context, schema, value)
+    : BuildAdditionalItemsFast(stack, context, schema, value)
+}
+// ------------------------------------------------------------------
+// Check
+// ------------------------------------------------------------------
+export function CheckAdditionalItems(stack: Stack, context: CheckContext, schema: Schema.XAdditionalItems, value: unknown[]): boolean {
+  if (!IsValid(schema)) return true
+  const isAdditionalItems = G.Every(value, 0, (item, index) => {
+    return G.IsLessThan(index, schema.items.length)
+      || (CheckSchemaPushStack(stack, context, schema.additionalItems, item) && context.AddIndex(index))
+  })
+  return isAdditionalItems
+}
+// ------------------------------------------------------------------
+// Error
+// ------------------------------------------------------------------
+export function ErrorAdditionalItems(stack: Stack, context: ErrorContext, schemaPath: string, instancePath: string, schema: Schema.XAdditionalItems, value: unknown[]): boolean {
+  if (!IsValid(schema)) return true
+  const isAdditionalItems = G.Every(value, 0, (item, index) => {
+    const nextSchemaPath = `${schemaPath}/additionalItems`
+    const nextInstancePath = `${instancePath}/${index}`
+    return G.IsLessThan(index, schema.items.length) ||
+      (ErrorSchemaPushStack(stack, context, nextSchemaPath, nextInstancePath, schema.additionalItems, item) && context.AddIndex(index))
+  })
+  return isAdditionalItems
+}

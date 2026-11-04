@@ -1,4 +1,4 @@
-import type { TSchema } from "typebox";
+import type { TSchema } from "../vendor/typebox/index";
 import { toSchemaIssues, type TypeCheck } from "../schema/validator-types";
 import { QueuePayloadValidationError } from "./errors";
 

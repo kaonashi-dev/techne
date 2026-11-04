@@ -1,4 +1,4 @@
-import { Compile } from "typebox/compile";
+import { Compile } from "../../vendor/typebox/compile/index";
 import { CATCH_METADATA } from "../../common/constants";
 import { ForbiddenException, HttpException, TooManyRequestsException } from "../../exceptions";
 import type { ExceptionFilter } from "../../interfaces/exception-filter.interface";

@@ -1,5 +1,5 @@
-import type { TSchema } from "typebox";
-import { Compile } from "typebox/compile";
+import type { TSchema } from "../vendor/typebox/index";
+import { Compile } from "../vendor/typebox/compile/index";
 import { toSchemaIssues, type TypeCheck } from "../schema/validator-types";
 import type { Job } from "./job";
 import { PendingDispatch } from "./pending-dispatch";

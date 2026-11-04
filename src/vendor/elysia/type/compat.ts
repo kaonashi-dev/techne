@@ -1,0 +1,56 @@
+import { useTypebox } from './bridge'
+
+import { Compile } from '../../typebox/compile/index'
+import { Ref } from '../../typebox/type/index'
+import { Create, Decode, HasCodec, Default, Clone, Check } from '../../typebox/value/index'
+import { Settings } from '../../typebox/system/index'
+
+import { applyCoercions } from './coerce'
+import {
+	TypeBoxValidator,
+	TypeBoxValidatorCache,
+	mayHaveFileType
+} from './validator'
+
+import { Intersect } from './elysia/intersect'
+import {
+	coerceFormData,
+	coerceQuery,
+	coerceRoot,
+	coerceStringToStructure,
+	coerceBody
+} from './coerce'
+import { hasTypes } from './utils'
+import { setExactMirror, type CreateMirror } from './validator/exact-mirror'
+
+let setup = false
+export function setupTypebox(options?: { exactMirror?: CreateMirror }) {
+	if (options?.exactMirror) setExactMirror(options.exactMirror)
+	if (setup) return
+
+	setup = true
+
+	Settings.Set({ unionPrioritySort: false })
+
+	useTypebox({
+		Compile,
+		Create,
+		Decode,
+		applyCoercions,
+		TypeBoxValidator: TypeBoxValidator as any,
+		TypeBoxValidatorCache: TypeBoxValidatorCache as any,
+		coerceFormData,
+		coerceQuery,
+		coerceRoot,
+		coerceStringToStructure,
+		coerceBody,
+		hasTypes,
+		mayHaveFileType,
+		HasCodec,
+		Intersect,
+		Default,
+		Ref,
+		Clone,
+		Check
+	})
+}

@@ -1,5 +1,5 @@
-import { Elysia } from "elysia";
-import type { ElysiaConfig, EventScope } from "elysia/types";
+import { Elysia } from "../vendor/elysia/index";
+import type { ElysiaConfig, EventScope } from "../vendor/elysia/types";
 
 /**
  * Create a native Elysia application or feature plugin.

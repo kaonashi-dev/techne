@@ -1,4 +1,4 @@
-import { Elysia, ValidationError } from "elysia";
+import { Elysia, ValidationError } from "../vendor/elysia/index";
 import { Logger, requestContext, type RequestContext } from "../services/logger.service";
 import { Container, globalContainer } from "../core/container";
 import type { CompiledRouteDefinition } from "../core/router/router-execution-context";

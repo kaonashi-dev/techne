@@ -1,4 +1,4 @@
-import { StatusMap } from "elysia";
+import { StatusMap } from "../vendor/elysia/index";
 import { requestContext } from "../services/logger.service";
 import type { RuntimeHolder, TelemetryRuntime } from "./types";
 

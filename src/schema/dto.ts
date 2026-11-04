@@ -1,7 +1,7 @@
 import "../reflect-setup";
-import * as Type from "typebox/type";
-import type { TSchema } from "typebox";
-import { Compile } from "typebox/compile";
+import * as Type from "../vendor/typebox/type/index";
+import type { TSchema } from "../vendor/typebox/index";
+import { Compile } from "../vendor/typebox/compile/index";
 import type { TypeCheck } from "./validator-types";
 import { enumType } from "./enum";
 
