@@ -31,6 +31,7 @@ export async function createPrismaClient(
     if (code === "ERR_MODULE_NOT_FOUND" || message.includes("@prisma/client")) {
       throw new Error(
         "Prisma plugin requires @prisma/client. Install it with `bun add @prisma/client && bun add -D prisma`, then run `bunx prisma generate`.",
+        { cause: error },
       );
     }
     throw error;

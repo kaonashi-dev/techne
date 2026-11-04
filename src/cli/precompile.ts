@@ -355,6 +355,7 @@ function assertJsonSerializable(value: unknown, label: string): void {
   } catch (error) {
     throw new Error(
       `AOT route table cannot serialize ${label}: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
     );
   }
 }
