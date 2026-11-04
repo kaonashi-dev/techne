@@ -15,3 +15,31 @@ app.use(cors());
 `ctx.http()` resolves. Anything that works as an Elysia `.use()` argument
 works here. For Techne-aware extension points (DI, lifecycle, named
 dependencies), prefer [`definePlugin`](/plugins/plugin-protocol).
+
+## Resolve `elysia` to Techne's copy
+
+Techne bundles Elysia and TypeBox as source instead of depending on the
+`elysia` and `typebox` packages. Plugins published to npm still
+`import ... from "elysia"`, and an Elysia instance from a second copy cannot be
+mounted: Elysia keeps its state in private class fields, so `.use()` throws
+`Cannot access invalid private field`. Point those imports at Techne's copy in
+`tsconfig.json`; Bun applies `paths` at runtime too, including to imports
+inside `node_modules`:
+
+```json tsconfig.json
+{
+  "compilerOptions": {
+    "paths": {
+      "elysia": ["./node_modules/@kaonashi-dev/techne/src/vendor/elysia/index.ts"],
+      "elysia/types": ["./node_modules/@kaonashi-dev/techne/src/vendor/elysia/types.ts"],
+      "typebox": ["./node_modules/@kaonashi-dev/techne/src/vendor/typebox/index.ts"],
+      "typebox/*": ["./node_modules/@kaonashi-dev/techne/src/vendor/typebox/*/index.ts"]
+    }
+  }
+}
+```
+
+These paths match the types Techne resolves when it is installed from GitHub
+(source only). If the package also ships `dist/types`, TypeScript reads Techne's
+Elysia from those declarations while the alias points at the source, and
+`.use(plugin)` reports a `#private` mismatch even though it runs.

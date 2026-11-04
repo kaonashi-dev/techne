@@ -14,10 +14,11 @@ sources ship inside the package. Point direct imports at the Techne subpaths:
 | `typebox/compile`, `typebox/type`, `typebox/value`, … | `@kaonashi-dev/techne/typebox/compile`, `…/typebox/type`, `…/typebox/value`, … |
 | `exact-mirror` | `@kaonashi-dev/techne/exact-mirror` |
 
-Third-party Elysia plugins (for example `@elysiajs/cors`) still declare `elysia`
-as a peer dependency, so installing one installs its own copy of Elysia next to
-Techne's. Elysia composes plugins structurally, but keep that copy on the same
-version (`2.0.0-beta.1`) as Techne's.
+Third-party Elysia plugins (for example `@elysiajs/cors`) still import `elysia`,
+and an instance from a second copy of Elysia cannot be mounted (`.use()` throws
+`Cannot access invalid private field`). Alias `elysia` and `typebox` to Techne's
+copy with `compilerOptions.paths` in `tsconfig.json`, which Bun also applies at
+runtime; see [Using Elysia plugins](./apps/docs/plugins/using-elysia-plugins.mdx).
 
 Lint and format with Bun's built-in tools: replace `oxlint` with `bun lint` and
 `oxfmt` with `bun fmt`, and move rule and formatter options from `oxlint.json`
