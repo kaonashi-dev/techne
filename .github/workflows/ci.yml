@@ -14,7 +14,8 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          # `bun lint` ships in canary builds only.
+          bun-version: canary
 
       - run: bun install --frozen-lockfile
 

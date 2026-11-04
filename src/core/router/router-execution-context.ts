@@ -424,7 +424,7 @@ function compileFastHandler(
     default: {
       const n = extractors.length;
       return (ctx) => {
-        // oxlint-disable-next-line no-new-array -- pre-sized for hot path
+        // eslint-disable-next-line unicorn/no-new-array -- pre-sized for hot path
         const args = new Array(n);
         for (let i = 0; i < n; i++) args[i] = extractors[i](ctx);
         return call(...args);
@@ -1103,7 +1103,7 @@ export class RouterExecutionContext {
     const arity = extractors.length;
 
     return (context, routeContext) => {
-      // oxlint-disable-next-line no-new-array -- pre-sized for hot path
+      // eslint-disable-next-line unicorn/no-new-array -- pre-sized for hot path
       const args = new Array(length);
       for (let i = 0; i < arity; i++) {
         args[indexes[i]] = extractors[i](context, routeContext);

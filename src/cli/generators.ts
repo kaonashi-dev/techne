@@ -206,17 +206,15 @@ export async function createProject(name: string) {
       "deploy:docker": "techne deploy --target docker",
       test: "bun test",
       typecheck: "tsc --noEmit",
-      lint: "oxlint .",
-      format: "oxfmt .",
-      "format:check": "oxfmt --check .",
+      lint: "bun lint",
+      format: "bun fmt",
+      "format:check": "bun fmt --check",
       check: "bun run typecheck && bun run lint && bun run format:check",
     },
     dependencies: { "@kaonashi-dev/techne": "github:kaonashi-dev/techne" },
     devDependencies: {
       "@types/bun": "^1.3.11",
       typescript: "^5.9.3",
-      oxlint: "^1.56.0",
-      oxfmt: "^0.41.0",
     },
   });
   await json(path.join(dir, "tsconfig.json"), {
@@ -231,13 +229,13 @@ export async function createProject(name: string) {
     },
     include: ["src/**/*.ts", "tests/**/*.ts"],
   });
-  await json(path.join(dir, "oxlint.json"), {
-    plugins: ["typescript"],
-    ignorePatterns: ["dist/", "node_modules/"],
-  });
-  await json(path.join(dir, ".oxfmtrc.json"), {
-    ignorePatterns: ["*.md", "*.json", ".*.json"],
-  });
+  await write(
+    path.join(dir, "bunfig.toml"),
+    `[fmt]
+printWidth = 100
+ignorePatterns = ["*.md", "*.json", ".*.json"]
+`,
+  );
   await write(path.join(dir, ".gitignore"), "node_modules\ndist\ncoverage\n.env\n.DS_Store");
   await write(path.join(dir, ".env.example"), "PORT=3000\nHOST=0.0.0.0");
   await write(

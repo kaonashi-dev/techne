@@ -116,6 +116,9 @@ Mount generated features explicitly in `app.ts`. See the runnable reference in
 | Import | Purpose |
 | --- | --- |
 | `@kaonashi-dev/techne` | `createApp`, `createResources`, native `Elysia`, `t`, `status`, `problem` |
+| `@kaonashi-dev/techne/elysia`, `/elysia/*` | Bundled Elysia 2 (`/types`, `/error`, `/cookies`, `/type`, `/trace`, `/websocket`, `/ws`, `/auto-head`) |
+| `@kaonashi-dev/techne/typebox`, `/typebox/*` | Bundled TypeBox 1.x (`/compile`, `/type`, `/value`, `/schema`, `/guard`, `/format`, `/system`, `/error`) |
+| `@kaonashi-dev/techne/exact-mirror` | Bundled exact-mirror |
 | `@kaonashi-dev/techne/http` | Independent outgoing HTTP client |
 | `@kaonashi-dev/techne/legacy` | Decorator runtime: `TechneFactory`, container and legacy bootstrap |
 | `@kaonashi-dev/techne/core` | Compatibility alias for the legacy runtime |

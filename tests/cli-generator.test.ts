@@ -61,14 +61,8 @@ describe("CLI project generator", () => {
     for (const command of [
       [process.execPath, path.join(originalCwd, "node_modules/typescript/bin/tsc"), "--noEmit"],
       [process.execPath, "test"],
-      [
-        process.execPath,
-        "run",
-        "--bun",
-        path.join(originalCwd, "node_modules/.bin/oxfmt"),
-        "--check",
-        ".",
-      ],
+      [process.execPath, "fmt", "--check", "--no-script"],
+      [process.execPath, "lint", "--no-script"],
       [
         process.execPath,
         path.join(originalCwd, "src/cli/index.ts"),
@@ -90,7 +84,7 @@ describe("CLI project generator", () => {
         output: "",
       });
     }
-  }, 20_000);
+  }, 60_000);
 
   test("retains explicit legacy console command generation", async () => {
     await generateCommand("MigrateCommand");

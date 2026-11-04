@@ -330,7 +330,7 @@ Documentation table._
 1. `bun install --frozen-lockfile` first (avoids the known `Cannot find package 'elysia'` link breakage).
 2. `bun test tests/http-client*.test.ts` — new suites green.
 3. `bun run test` — **full** suite stays green (no regressions in `contract`, since it is untouched).
-4. `bun run check` — `oxlint` + `oxfmt --check` clean.
+4. `bun run check` — `bun lint` + `bun fmt --check` clean.
 5. `bun run build` (`tsc -p tsconfig.build.json`) — confirms the `./http` subpath emits
    `dist/types/http/index.d.ts` and the public types resolve.
 6. **Manual smoke** — a throwaway `bun run` script:

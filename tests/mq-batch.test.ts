@@ -104,7 +104,7 @@ describe("mq batch jobs", () => {
       WorkJob.dispatch({ id: 2 }),
       WorkJob.dispatch({ id: 3 }),
     ])
-      // oxlint-disable-next-line no-thenable -- fluent batch API
+      // eslint-disable-next-line unicorn/no-thenable -- fluent batch API
       .then(SuccessCb.dispatch({ event: "done" }))
       .catch(FailureCb.dispatch({ event: "failed" }))
       .finally(FinallyCb.dispatch({ event: "finished" }))
@@ -186,7 +186,7 @@ describe("mq batch jobs", () => {
       FailWorkJob.dispatch({ fail: false }),
       FailWorkJob.dispatch({ fail: true }).tries(1),
     ])
-      // oxlint-disable-next-line no-thenable -- fluent batch API
+      // eslint-disable-next-line unicorn/no-thenable -- fluent batch API
       .then(SuccessCb2.dispatch({ event: "done" }))
       .catch(FailureCb2.dispatch({ event: "failed" }))
       .finally(FinallyCb2.dispatch({ event: "finished" }))
@@ -282,7 +282,7 @@ describe("mq batch jobs", () => {
     closers.push(() => ctx.close());
 
     const handle = await batch([AddJobsWorkJob.dispatch({ id: 1 })])
-      // oxlint-disable-next-line no-thenable -- fluent batch API
+      // eslint-disable-next-line unicorn/no-thenable -- fluent batch API
       .then(DoneCb.dispatch({ event: "all-done" }))
       .dispatch();
 
@@ -386,7 +386,7 @@ describe("mq batch jobs", () => {
     closers.push(() => ctx.close());
 
     await batch([])
-      // oxlint-disable-next-line no-thenable -- fluent batch API
+      // eslint-disable-next-line unicorn/no-thenable -- fluent batch API
       .then(EmptyDoneCb.dispatch({ event: "empty-done" }))
       .finally(EmptyDoneCb.dispatch({ event: "empty-finally" }))
       .dispatch();

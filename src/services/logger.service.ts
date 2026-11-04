@@ -103,7 +103,7 @@ function formatTime(): string {
  * (log-forging) or terminal escape sequences. JSON mode needs no equivalent —
  * `JSON.stringify` already escapes these characters.
  */
-// oxlint-disable-next-line no-control-regex -- intentionally matching control chars
+// eslint-disable-next-line no-control-regex -- intentionally matching control chars
 const LOG_UNSAFE_CHARS = /[\r\n\x1b]/g;
 function sanitizeLogText(value: string): string {
   return value.replace(LOG_UNSAFE_CHARS, (ch) =>
