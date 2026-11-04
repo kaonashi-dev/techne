@@ -110,16 +110,14 @@ export class RouterExplorer {
 
       // Read controller-level @RateLimit once for all handlers on this controller.
       const controllerRateLimitMeta:
-        | Pick<RateLimitOptions, "limit" | "windowMs" | "burst">
-        | false
-        | undefined = Reflect.getMetadata(RATE_LIMIT_METADATA, controller);
+        Pick<RateLimitOptions, "limit" | "windowMs" | "burst"> | false | undefined =
+        Reflect.getMetadata(RATE_LIMIT_METADATA, controller);
 
       for (const route of aggregate.routes) {
         const handler = aggregate.getHandler(route.handlerName);
         const paramTypes =
           (Reflect.getMetadata("design:paramtypes", controller.prototype, route.handlerName) as
-            | Function[]
-            | undefined) ?? [];
+            Function[] | undefined) ?? [];
         const methodParams = aggregate.paramsByHandler[route.handlerName] || [];
         const paramsMetadata =
           methodParams.length === 0
@@ -136,9 +134,9 @@ export class RouterExplorer {
         // Handler-level metadata takes precedence over controller-level.
         const handlerFn = controller.prototype[route.handlerName];
         const handlerRateLimitMeta:
-          | Pick<RateLimitOptions, "limit" | "windowMs" | "burst">
-          | false
-          | undefined = handlerFn ? Reflect.getMetadata(RATE_LIMIT_METADATA, handlerFn) : undefined;
+          Pick<RateLimitOptions, "limit" | "windowMs" | "burst"> | false | undefined = handlerFn
+          ? Reflect.getMetadata(RATE_LIMIT_METADATA, handlerFn)
+          : undefined;
         const rateLimitMeta =
           handlerRateLimitMeta !== undefined ? handlerRateLimitMeta : controllerRateLimitMeta;
 

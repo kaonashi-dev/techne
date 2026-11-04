@@ -44,8 +44,7 @@ function coerceOptionsBag(
   for (const [key, value] of Object.entries(raw)) {
     // Determine the design:type of the property on the DTO class.
     const designType = Reflect.getMetadata("design:type", (dtoClass as any).prototype, key) as
-      | Function
-      | undefined;
+      Function | undefined;
 
     if (designType === Number) {
       const n = Number(value);

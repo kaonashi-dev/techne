@@ -113,8 +113,7 @@ function finishRequest(rt: TelemetryRuntime | undefined, ctx: any): void {
   const span = ctx[OTEL_SPAN];
   const endActiveRequest = ctx[OTEL_END_ACTIVE] as (() => void) | undefined;
   const activeMetricAttributes = ctx[OTEL_ACTIVE_METRIC_ATTRS] as
-    | Record<string, string | number>
-    | undefined;
+    Record<string, string | number> | undefined;
   if (!span && !endActiveRequest) return;
 
   ctx[OTEL_ENDED] = true;

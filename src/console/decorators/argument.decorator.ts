@@ -4,8 +4,7 @@ import type { ConsoleParamKind, ConsoleParamMeta } from "../types";
 
 function getMetatype(target: object, propertyKey: string, index: number): Function | undefined {
   const types = Reflect.getMetadata("design:paramtypes", target, propertyKey) as
-    | Function[]
-    | undefined;
+    Function[] | undefined;
   return types?.[index];
 }
 

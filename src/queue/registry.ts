@@ -23,8 +23,7 @@ export class QueueRegistry {
     for (const provider of classes) {
       if (isCustomProvider(provider)) continue;
       const processor = Reflect.getMetadata(QUEUE_PROCESSOR_METADATA, provider) as
-        | QueueProcessorMetadata
-        | undefined;
+        QueueProcessorMetadata | undefined;
       if (!processor) continue;
 
       const processMetadata = (Reflect.getMetadata(QUEUE_PROCESS_METADATA, provider) ||

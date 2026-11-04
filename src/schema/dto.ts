@@ -82,8 +82,7 @@ function getDtoMetaCache(target: Function): DtoMetaCacheEntry {
       nestedTypes.set(
         key,
         Reflect.getMetadata("design:type", (target as ClassConstructor).prototype, key) as
-          | ClassConstructor
-          | undefined,
+          ClassConstructor | undefined,
       );
     }
   }
@@ -484,8 +483,7 @@ function inferBaseSchema(klass: ClassConstructor, key: string, meta: PropertyMet
   }
 
   const designType = Reflect.getMetadata("design:type", klass.prototype, key) as
-    | Function
-    | undefined;
+    Function | undefined;
   const resolvedType = meta.type ?? inferTypeFromMetadata(meta, designType);
 
   switch (resolvedType) {

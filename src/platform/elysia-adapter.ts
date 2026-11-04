@@ -689,11 +689,7 @@ export class ElysiaAdapter {
   public registerRoutes(routes: CompiledRouteDefinition[]) {
     for (const route of routes) {
       const elysiaMethod = route.method.toLowerCase() as
-        | "get"
-        | "post"
-        | "put"
-        | "patch"
-        | "delete";
+        "get" | "post" | "put" | "patch" | "delete";
 
       const elysiaOptions: any = {};
       if (route.schema) {

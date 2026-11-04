@@ -4,14 +4,7 @@ import { getOrCreateControllerDescriptor } from "../core/metadata-store";
 import type { ResponseHookContext } from "../interfaces/response-hook.interface";
 
 export type ParamType =
-  | "body"
-  | "param"
-  | "query"
-  | "headers"
-  | "request"
-  | "file"
-  | "custom"
-  | "cookie";
+  "body" | "param" | "query" | "headers" | "request" | "file" | "custom" | "cookie";
 
 /** Factory signature used by `createParamDecorator`. */
 export type CustomParamFactory<TData = any, TOutput = any> = (
@@ -69,8 +62,7 @@ function getParameterMetatype(
   parameterIndex: number,
 ): Function | undefined {
   const paramTypes = Reflect.getMetadata("design:paramtypes", target, propertyKey) as
-    | Function[]
-    | undefined;
+    Function[] | undefined;
   return paramTypes?.[parameterIndex];
 }
 

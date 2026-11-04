@@ -159,8 +159,7 @@ async function doctor() {
   const tsconfigPath = path.join(process.cwd(), "tsconfig.json");
   if (await exists(tsconfigPath)) {
     const tsconfig = (await readJsonIfExists(tsconfigPath)) as
-      | { compilerOptions?: { strict?: boolean } }
-      | undefined;
+      { compilerOptions?: { strict?: boolean } } | undefined;
     if (!tsconfig) {
       warn(`tsconfig.json present but could not be parsed`);
     } else {
