@@ -23,6 +23,8 @@ Techne has no runtime dependencies. These libraries are kept here as TypeScript 
 - Elysia: `compile/aot.ts` reads its version from `version.ts` instead of `package.json`;
   the TypeBox `TSchemaOptions` augmentation targets the vendored module;
   `WeakMap.prototype.getOrInsertComputed` is replaced with `get`/`set`; the `duplex`
-  request init is cast to `RequestInit`.
+  request init is cast to `RequestInit`; `type/validator/exact-mirror.ts` imports the
+  vendored exact-mirror statically instead of an optional runtime `require('exact-mirror')`
+  (without it Elysia silently falls back to the slower TypeBox `Clean`).
 
 Formatting and lint are not applied to this directory so it stays diffable against upstream.
