@@ -14,6 +14,7 @@ import {
   generateCommand,
   createProject,
 } from "./generators";
+import { runLint } from "./lint";
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -221,6 +222,7 @@ Usage:
   techne build|b [entry] --target <bun|node|browser> [--out <file>] [--minify] [--precompile]  (JS bundle)
   techne deploy --target docker [--out Dockerfile] [--port N] [--bun-version V] [--dry-run] [--force]
   techne doctor
+  techne lint [bun lint flags]                                                (native bun lint; needs Bun canary)
   techne run <command> [args...]
   techne list
   techne generate|g <type> <name>
@@ -396,6 +398,8 @@ async function main() {
     await runTests(pattern, watch, coverage);
   } else if (command === "doctor") {
     await doctor();
+  } else if (command === "lint") {
+    process.exit(await runLint(args.slice(1)));
   } else if (command === "deploy") {
     await runDeploy();
   } else if (command === "run") {

@@ -24,6 +24,11 @@ Lint and format with Bun's built-in tools: replace `oxlint` with `bun lint` and
 `oxfmt` with `bun fmt`, and move rule and formatter options from `oxlint.json`
 and `.oxfmtrc.json` into the `[lint]` and `[fmt]` sections of `bunfig.toml`.
 
+`bun lint` currently ships in Bun canary only (`bun upgrade --canary`). On stable
+Bun, `bun lint` is an alias for `bun run lint`, so a `"lint": "bun lint"` script
+calls itself forever. Use `"lint": "techne lint"` instead. It runs the native
+linter and exits with an explanation when the Bun version doesn't have one.
+
 ## Native composition
 
 The package root now exposes the Elysia-native API. This is a breaking change to

@@ -16,7 +16,12 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `@kaonashi-dev/techne/exact-mirror` instead of `elysia`, `typebox` and
   `exact-mirror`. See [MIGRATING.md](./MIGRATING.md#zero-dependencies).
 - Formatting and linting use Bun's built-in `bun fmt` and `bun lint`; `oxfmt`
-  and `oxlint` are removed, and generated projects follow suit.
+  and `oxlint` are removed, and generated projects follow suit. `bun lint`
+  needs Bun canary. Scripts call `techne lint`, which fails with a clear error
+  on stable Bun instead of recursing through `bun run lint`.
+- Fixed: TypeBox `Code()` emitted relative imports (`../system/index`) that
+  only resolved inside the vendored tree. It now imports from
+  `@kaonashi-dev/techne/typebox/*`.
 
 ### Native architecture
 

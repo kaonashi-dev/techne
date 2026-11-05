@@ -206,7 +206,7 @@ export async function createProject(name: string) {
       "deploy:docker": "techne deploy --target docker",
       test: "bun test",
       typecheck: "tsc --noEmit",
-      lint: "bun lint",
+      lint: "techne lint",
       format: "bun fmt",
       "format:check": "bun fmt --check",
       check: "bun run typecheck && bun run lint && bun run format:check",
@@ -234,6 +234,10 @@ export async function createProject(name: string) {
     `[fmt]
 printWidth = 100
 ignorePatterns = ["*.md", "*.json", ".*.json"]
+
+# Keeps \`bun lint\` from inheriting a parent directory's [lint] settings.
+[lint]
+ignorePatterns = ["dist/"]
 `,
   );
   await write(path.join(dir, ".gitignore"), "node_modules\ndist\ncoverage\n.env\n.DS_Store");

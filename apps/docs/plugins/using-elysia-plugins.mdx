@@ -6,10 +6,15 @@ description: "Attach native Elysia plugins through app.use()."
 Native Elysia plugins can be attached through `app.use()`:
 
 ```ts
-import { cors } from "@elysiajs/cors";
+import { myPlugin } from "some-elysia-2-plugin";
 
-app.use(cors());
+app.use(myPlugin());
 ```
+
+Techne runs on Elysia 2, so the plugin itself must support Elysia 2. Plugins
+written for Elysia 1.x fail even with the alias below. For example,
+`@elysiajs/cors@1.4.x` calls `app.onRequest`, which Elysia 2 removed, and
+mounting it throws `TypeError: app.onRequest is undefined`.
 
 `app.use()` is the same path Techne plugins use under the hood after
 `ctx.http()` resolves. Anything that works as an Elysia `.use()` argument
@@ -32,12 +37,29 @@ inside `node_modules`:
     "paths": {
       "elysia": ["./node_modules/@kaonashi-dev/techne/src/vendor/elysia/index.ts"],
       "elysia/types": ["./node_modules/@kaonashi-dev/techne/src/vendor/elysia/types.ts"],
+      "elysia/error": ["./node_modules/@kaonashi-dev/techne/src/vendor/elysia/error.ts"],
+      "elysia/cookies": ["./node_modules/@kaonashi-dev/techne/src/vendor/elysia/cookie/index.ts"],
+      "elysia/type": ["./node_modules/@kaonashi-dev/techne/src/vendor/elysia/type/exports.ts"],
+      "elysia/trace": ["./node_modules/@kaonashi-dev/techne/src/vendor/elysia/plugin/trace.ts"],
+      "elysia/websocket": [
+        "./node_modules/@kaonashi-dev/techne/src/vendor/elysia/plugin/websocket.ts"
+      ],
+      "elysia/ws": ["./node_modules/@kaonashi-dev/techne/src/vendor/elysia/ws/index.ts"],
+      "elysia/auto-head": [
+        "./node_modules/@kaonashi-dev/techne/src/vendor/elysia/plugin/auto-head.ts"
+      ],
       "typebox": ["./node_modules/@kaonashi-dev/techne/src/vendor/typebox/index.ts"],
-      "typebox/*": ["./node_modules/@kaonashi-dev/techne/src/vendor/typebox/*/index.ts"]
+      "typebox/*": ["./node_modules/@kaonashi-dev/techne/src/vendor/typebox/*/index.ts"],
+      "exact-mirror": ["./node_modules/@kaonashi-dev/techne/src/vendor/exact-mirror/index.ts"]
     }
   }
 }
 ```
+
+These are all the subpaths Techne exports. A plugin that imports another
+upstream subpath (`elysia/ws/types`, `elysia/utils`, `elysia/context`,
+`elysia/base`) has no Techne equivalent and still loads the npm copy, which can
+break `instanceof` checks between the two copies.
 
 These paths match the types Techne resolves when it is installed from GitHub
 (source only). If the package also ships `dist/types`, TypeScript reads Techne's

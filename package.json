@@ -205,8 +205,8 @@
   "scripts": {
     "format": "bun fmt",
     "format:check": "bun fmt --check",
-    "lint": "bun lint",
-    "lint:fix": "bun lint --fix",
+    "lint": "bun src/cli/index.ts lint",
+    "lint:fix": "bun src/cli/index.ts lint --fix",
     "test": "bun test tests/*.test.ts",
     "test:watch": "bun test --watch tests/*.test.ts",
     "test:nestjs": "bun test tests/nestjs/",

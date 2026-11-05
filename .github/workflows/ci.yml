@@ -7,6 +7,21 @@ on:
     branches: [main]
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          # `bun lint` ships in canary builds only; keep canary scoped to this job.
+          bun-version: canary
+
+      - run: bun install --frozen-lockfile
+
+      - name: Lint
+        run: bun run lint
+
   test:
     runs-on: ubuntu-latest
     steps:
@@ -14,13 +29,9 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          # `bun lint` ships in canary builds only.
-          bun-version: canary
+          bun-version: latest
 
       - run: bun install --frozen-lockfile
-
-      - name: Lint
-        run: bun run lint
 
       - name: Format check
         run: bun run format:check
