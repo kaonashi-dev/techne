@@ -45,10 +45,10 @@ function Separator() {
 // ImportSection
 // ------------------------------------------------------------------
 function ImportSection(build: BuildResult): string[] {
-  const context = build.UseUnevaluated() ? [`import { CheckContext } from "../schema/index"`] : []
-  const hashing = `import { Hashing } from "../system/index"`
-  const format = `import { Format } from "../format/index"`
-  const guard = `import { Guard } from "../guard/index"`
+  const context = build.UseUnevaluated() ? [`import { CheckContext } from "@kaonashi-dev/techne/typebox/schema"`] : []
+  const hashing = `import { Hashing } from "@kaonashi-dev/techne/typebox/system"`
+  const format = `import { Format } from "@kaonashi-dev/techne/typebox/format"`
+  const guard = `import { Guard } from "@kaonashi-dev/techne/typebox/guard"`
   return [...context, hashing, format, guard]
 }
 // ------------------------------------------------------------------

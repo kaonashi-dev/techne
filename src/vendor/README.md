@@ -17,6 +17,9 @@ Techne has no runtime dependencies. These libraries are kept here as TypeScript 
 - Bare package specifiers (`typebox`, `typebox/*`, `exact-mirror`, `memoirist`, `deuri`,
   `openapi-types`) are rewritten to relative paths, and `.ts` extensions are dropped from
   relative imports.
+- TypeBox `Code()` (`typebox/compile/code.ts`) emits a module the consumer writes into
+  their own project, so the imports in that generated source point at the
+  `@kaonashi-dev/techne/typebox/*` subpaths rather than at relative paths.
 - Elysia's `plugin/aot` bundler integrations (Vite, esbuild, rspack, unplugin) are not vendored.
 - Class fields without an initializer are marked `declare`, so they keep upstream's
   `useDefineForClassFields: false` behaviour under any consumer tsconfig.
