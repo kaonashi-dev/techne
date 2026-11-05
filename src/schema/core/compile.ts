@@ -392,8 +392,30 @@ function isMultipleOf(value: unknown, multiple: number): boolean {
 const EMAIL =
   /^(?!.*\.\.)[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/i;
 const UUID = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
-const DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
-const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const DATE_TIME =
+  /^(\d{4})-(\d{2})-(\d{2})[Tt](\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:[Zz]|[+-](\d{2}):(\d{2}))$/;
+const DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
+const DAYS = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+/** Shape plus calendar validity: month range, days per month, leap years. */
+function isCalendarDate(year: number, month: number, day: number): boolean {
+  if (month < 1 || month > 12 || day < 1) return false;
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  return day <= (month === 2 && leap ? 29 : DAYS[month]!);
+}
+
+function isDate(value: string): boolean {
+  const m = DATE.exec(value);
+  return m !== null && isCalendarDate(+m[1]!, +m[2]!, +m[3]!);
+}
+
+function isDateTime(value: string): boolean {
+  const m = DATE_TIME.exec(value);
+  if (m === null || !isCalendarDate(+m[1]!, +m[2]!, +m[3]!)) return false;
+  // Seconds may be 60 for a leap second; offsets are at most ±23:59.
+  if (+m[4]! > 23 || +m[5]! > 59 || +m[6]! > 60) return false;
+  return m[7] === undefined || (+m[7] <= 23 && +m[8]! <= 59);
+}
 const URI = /^[a-z][a-z0-9+.-]*:[^\s]*$/i;
 
 function checkFormat(name: string, value: unknown): boolean {
@@ -404,9 +426,9 @@ function checkFormat(name: string, value: unknown): boolean {
     case "uuid":
       return UUID.test(value);
     case "date-time":
-      return DATE_TIME.test(value);
+      return isDateTime(value);
     case "date":
-      return DATE.test(value);
+      return isDate(value);
     case "uri":
       return URI.test(value);
     default:

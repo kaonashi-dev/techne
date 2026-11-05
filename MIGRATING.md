@@ -8,6 +8,8 @@ actually uses: `Object`, `Array`, `Tuple`, `Record`, `Union`, `Intersect`,
 `String`, `Number`, `Integer`, `Boolean`, `Literal`, `Null`, `Any`, `Unknown`,
 `Never`, `Optional`, `Readonly`, `Partial`, `Required`, `Pick` and `Omit`.
 Supported formats are `email`, `uuid`, `date-time`, `date` and `uri`.
+`typeboxToOpenApi` and `typeboxToTypeScript` are renamed `schemaToOpenApi` and
+`schemaToTypeScript`; the old names still work and are deprecated.
 
 Breaking changes:
 

@@ -15,12 +15,17 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Schema all keep working.
 - **Breaking:** the `@kaonashi-dev/techne/typebox` and `/typebox/*` subpaths are
   removed. Import `t`, `Static` and `TSchema` from the package root instead.
-  `Compile()` and `Code()` are no longer public; `Code()` had no remaining
-  users.
+  `Compile()` (with `Check`, `Errors`, `Convert`) is public from
+  `@kaonashi-dev/techne/server`; `Code()` is removed, as it had no users.
+- `schemaToOpenApi` (`/swagger`) and `schemaToTypeScript` (`/contract`) replace
+  `typeboxToOpenApi` and `typeboxToTypeScript`, which remain as deprecated
+  aliases.
 - The builder implements only the surface Techne uses: object/array/tuple/
   record/union/intersection primitives, literals, `Any`/`Unknown`/`Never`/
   `Null`, and the `Optional`/`Readonly`/`Partial`/`Required`/`Pick`/`Omit`
-  transforms. Formats are `email`, `uuid`, `date-time`, `date` and `uri`.
+  transforms. Formats are `email`, `uuid`, `date-time`, `date` and `uri`;
+  `date` and `date-time` check the calendar (days per month, leap years) and
+  time ranges, as TypeBox did.
 - Validation keeps the JSON-Schema-style `instancePath`/`keyword`/
   `schemaPath`/`params` issue shape, and `Convert()` still coerces query,
   params, header and environment strings. `Check()` remains compiled to

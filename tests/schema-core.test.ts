@@ -216,3 +216,29 @@ describe("deprecated TypeBox-named aliases", () => {
     expect(typeboxToTypeScript(schema)).toBe(schemaToTypeScript(schema));
   });
 });
+
+describe("date formats validate the calendar, like TypeBox did", () => {
+  test("date and date-time reject impossible dates and times", async () => {
+    const { Compile, t } = await import("../src/schema/core");
+    const date = Compile(t.String({ format: "date" }));
+    expect(["2024-02-29", "2026-12-31"].map((v) => date.Check(v))).toEqual([true, true]);
+    expect(
+      ["2026-02-29", "2026-02-30", "2026-13-01", "2026-04-31", "2026-00-10"].some((v) =>
+        date.Check(v),
+      ),
+    ).toBe(false);
+    const dateTime = Compile(t.String({ format: "date-time" }));
+    expect(
+      ["2026-11-05T10:00:00Z", "2026-11-05t10:00:00.5+05:30"].map((v) => dateTime.Check(v)),
+    ).toEqual([true, true]);
+    expect(
+      [
+        "2026-02-30T10:00:00Z",
+        "2026-11-05T24:00:00Z",
+        "2026-11-05T10:60:00Z",
+        "2026-11-05 10:00:00Z",
+        "2026-11-05T10:00:00+24:00",
+      ].some((v) => dateTime.Check(v)),
+    ).toBe(false);
+  });
+});
