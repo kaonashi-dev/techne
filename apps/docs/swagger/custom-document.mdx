@@ -5,13 +5,13 @@ description: "Lower-level helpers when you need to integrate the OpenAPI emitter
 
 The lower-level pieces are exported for callers that want to integrate the
 emitter directly: `emitOpenApiDocument(app, builder?)` and
-`typeboxToOpenApi(schema)` from `@kaonashi-dev/techne/swagger`.
+`schemaToOpenApi(schema)` from `@kaonashi-dev/techne/swagger` converts a Techne schema.
 
 ```ts
 import {
   DocumentBuilder,
   emitOpenApiDocument,
-  typeboxToOpenApi,
+  schemaToOpenApi,
 } from "@kaonashi-dev/techne/swagger";
 
 const document = emitOpenApiDocument(
@@ -19,7 +19,7 @@ const document = emitOpenApiDocument(
   new DocumentBuilder().setTitle("My API").setVersion("1.0.0"),
 );
 
-const schema = typeboxToOpenApi(SomeTypeBoxSchema);
+const schema = schemaToOpenApi(SomeSchema);
 ```
 
 Use these when you want to post-process the document (e.g. tag filtering,

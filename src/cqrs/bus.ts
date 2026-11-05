@@ -39,8 +39,7 @@ export class BusRegistry {
       const instance = this.container.get<any>(provider);
 
       const command = Reflect.getMetadata(COMMAND_HANDLER_METADATA, provider) as
-        | Function
-        | undefined;
+        Function | undefined;
       if (command) {
         this.commandBus.register(command, instance);
       }

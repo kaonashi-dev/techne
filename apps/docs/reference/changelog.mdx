@@ -55,7 +55,7 @@ Concrete breaking changes:
 
 ### Added (highlights)
 
-- `defineConfig({ schema })` validates env values against a TypeBox schema
+- `defineConfig({ schema })` validates env values against a Techne schema
   at startup and returns a typed `AppConfig` with `.get()` / `.getOrThrow()`.
 - `defineTechneConfig(config)` typing helper for `techne.config.ts`.
 - `bootstrap(module?, overrides?)` and `techne(module?, options?)` shorthands.
@@ -68,7 +68,7 @@ Concrete breaking changes:
 - Auto-registered `GET /healthz` and `GET /readyz`, configurable via
   `health` + `shutdown` in `techne.config.ts`.
 - `x-request-id` propagation, structured logger modes, and child loggers.
-- `compileStringifier(schema)` fast TypeBox stringifier in `@kaonashi-dev/techne/schema`.
+- `compileStringifier(schema)` fast schema stringifier in `@kaonashi-dev/techne/schema`.
 - CLI commands `dev`, `start`, `test`, `doctor`, and `deploy`; new
   generators `g middleware|guard|filter|interceptor|dto|docker|client`.
 - Multi-stage Bun `Dockerfile` + `.dockerignore` generator.

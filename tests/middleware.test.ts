@@ -1,7 +1,7 @@
 import { test, expect } from "bun:test";
 import { Scanner } from "../src/core/scanner";
 import { RoutesResolver } from "../src/core/router/routes-resolver";
-import { ElysiaAdapter } from "../src/platform/elysia-adapter";
+import { HttpAdapter } from "../src/platform/http-adapter";
 import { Controller, Get, Middleware } from "../src/decorators";
 test("middleware - should apply controller and route middlewares", async () => {
   const log: string[] = [];
@@ -23,7 +23,7 @@ test("middleware - should apply controller and route middlewares", async () => {
   }
   const scanner = new Scanner();
   scanner.scanFlat({ controllers: [TestController] });
-  const adapter = new ElysiaAdapter();
+  const adapter = new HttpAdapter();
   new RoutesResolver(scanner).resolve(adapter);
   const app = adapter.getInstance();
   const response = await app.handle(new Request("http://localhost/test/hello"));

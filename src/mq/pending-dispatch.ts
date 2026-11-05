@@ -182,7 +182,7 @@ export class PendingDispatch<
    * dispatcher context. When `_parked` is true the builder is owned by a
    * `ChainBuilder` or `BatchBuilder`; awaiting it is a no-op.
    */
-  // oxlint-disable-next-line no-thenable -- intentional: this is the builder's terminator
+  // eslint-disable-next-line unicorn/no-thenable -- intentional: this is the builder's terminator
   then<TFulfilled = unknown, TRejected = never>(
     onFulfilled?: ((value: unknown) => TFulfilled | PromiseLike<TFulfilled>) | null,
     onRejected?: ((reason: unknown) => TRejected | PromiseLike<TRejected>) | null,

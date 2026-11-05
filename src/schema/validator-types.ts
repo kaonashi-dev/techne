@@ -1,22 +1,12 @@
-import type { TSchema } from "typebox";
-import type { Validator } from "typebox/compile";
+import type { TSchema, Validator } from "./core/types";
 
 /**
  * A compiled schema validator, keyed by the schema type.
  *
- * TypeBox 0.34 exposed this as `TypeCheck<T extends TSchema>` from
- * `@sinclair/typebox/compiler`. TypeBox 1.x renamed it to `Validator` and
- * reordered the generics so the *context* (the set of named definitions a
- * schema may reference) comes first and the schema second:
- *
- *   Validator<Context extends TProperties, Type extends TSchema, ...>
- *
- * This alias restores the schema-first arity the codebase reads more naturally,
- * defaulting the context slot. Techne compiles self-contained schemas — nothing
- * here uses cross-schema `Ref` definitions — so the default empty context is
- * correct rather than merely convenient.
+ * Kept as `TypeCheck` for the legacy decorator/DTO code. New code can use
+ * `Validator` directly.
  */
-export type TypeCheck<T extends TSchema = TSchema> = Validator<{}, T>;
+export type TypeCheck<T extends TSchema = TSchema> = Validator<T>;
 
 /** A schema failure reduced to the two fields Techne surfaces to callers. */
 export interface SchemaIssue {
@@ -28,10 +18,9 @@ export interface SchemaIssue {
 /**
  * Normalize compiled-validator errors into {@link SchemaIssue}s.
  *
- * TypeBox 1.x reports the failing location as `instancePath`, following the
- * AJV/JSON-Schema convention; TypeBox 0.34 called it `path`. Both are read so
- * the helper stays correct regardless of which produced the error, and so the
- * rename lives in exactly one place instead of at every call site.
+ * Techne reports the failing location as `instancePath`, following the
+ * AJV/JSON-Schema convention. `path` is still read for compatibility with
+ * older callers, and the rename lives in exactly one place.
  */
 export function toSchemaIssues(errors: Iterable<RawSchemaError>): SchemaIssue[] {
   const out: SchemaIssue[] = [];
@@ -47,10 +36,8 @@ export function toSchemaIssues(errors: Iterable<RawSchemaError>): SchemaIssue[] 
 /**
  * The subset of a validator error this module reads.
  *
- * Declared structurally rather than as TypeBox's concrete error union: that
- * union is a discriminated set of interfaces without an index signature, so it
- * is not assignable to `Record<string, unknown>`. All fields are optional
- * because no single member of the union carries all of them.
+ * Declared structurally so callers can pass any issue-shaped object. All
+ * fields are optional because no single error carries all of them.
  */
 interface RawSchemaError {
   instancePath?: string;

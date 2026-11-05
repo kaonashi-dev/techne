@@ -1,14 +1,12 @@
 ---
 title: "Native performance"
-description: "Measure the wrapper against the same routes in raw Elysia."
+description: "Measure the native app against the same routes in a hand-written fetch handler."
 ---
 
-`createApp()` runs once at composition time and returns native Elysia. It does not
-wrap route handlers, request dispatch or serializers. `createResources()` runs
-at setup and shutdown only. Elysia compiles the HTTP pipeline.
-
-The only constructor default is `precompile: true`, which moves compilation
-before listening. Pass `{ precompile: false }` to opt into Elysia's lazy behavior.
+`createApp()` runs once at composition time and returns a Techne `App`. The app
+compiles its routes, hooks and validators once, at `listen()` or on the first
+request, and recompiles only after a route, hook or plugin is added. `createResources()`
+runs at setup and shutdown only.
 
 ## Reproduce
 
@@ -21,8 +19,9 @@ bun run bench:native --quick
 bun run bench:native --json
 ```
 
-`benchmarks/native.ts` uses one route builder and identical options for raw Elysia
-and Techne. It exercises static JSON, path parameters with a service call,
+`benchmarks/native.ts` serves the same routes from a Techne native app and from a
+hand-written `fetch` handler that does routing, validation and serialization by
+hand (the floor). It exercises static JSON, path parameters with a service call,
 validated JSON, and a native authorization hook. It verifies status and response
 parity before timing, warms up both apps, alternates measurement order between
 scenarios and reports throughput plus latency distributions.

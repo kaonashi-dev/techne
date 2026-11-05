@@ -3,7 +3,7 @@
 // Stage-2 decorators don't yet flow controller signatures into a `Routes` type
 // at compile time, so we model the client around an explicit `RouteMap` shape
 // that either (a) the user hand-writes, or (b) `techne generate client`
-// produces from TypeBox schemas.
+// produces from Techne schemas.
 //
 // The runtime client (`createClient`) is fully untyped under the hood — the
 // `RouteMap` only exists at the type layer to constrain proxy access.

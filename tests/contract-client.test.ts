@@ -7,7 +7,7 @@ import {
   ClientError,
   createClient,
   generateRoutesType,
-  typeboxToTypeScript,
+  schemaToTypeScript,
   type RouteHandler,
 } from "../src/contract";
 interface MockCall {
@@ -179,9 +179,9 @@ describe("contract / createClient", () => {
     expect(calls[0]!.url).toBe("http://localhost:3000/things/thing-1");
   });
 });
-describe("contract / typeboxToTypeScript", () => {
+describe("contract / schema type codegen", () => {
   test("emits object types with optional markers", () => {
-    const out = typeboxToTypeScript(
+    const out = schemaToTypeScript(
       Schema.Object({
         id: Schema.String(),
         nickname: Schema.Optional(Schema.String()),
@@ -193,13 +193,13 @@ describe("contract / typeboxToTypeScript", () => {
     expect(out).toContain("count: number");
   });
   test("emits unions, literals, and arrays", () => {
-    expect(typeboxToTypeScript(Schema.Union([Schema.String(), Schema.Number()]))).toBe(
+    expect(schemaToTypeScript(Schema.Union([Schema.String(), Schema.Number()]))).toBe(
       "string | number",
     );
-    expect(typeboxToTypeScript(Schema.Literal("draft"))).toBe(`"draft"`);
-    expect(typeboxToTypeScript(Schema.Array(Schema.String()))).toBe("string[]");
-    expect(typeboxToTypeScript(Schema.Any())).toBe("unknown");
-    expect(typeboxToTypeScript(Schema.Boolean())).toBe("boolean");
+    expect(schemaToTypeScript(Schema.Literal("draft"))).toBe(`"draft"`);
+    expect(schemaToTypeScript(Schema.Array(Schema.String()))).toBe("string[]");
+    expect(schemaToTypeScript(Schema.Any())).toBe("unknown");
+    expect(schemaToTypeScript(Schema.Boolean())).toBe("boolean");
   });
 });
 describe("contract / generateRoutesType", () => {
@@ -234,7 +234,7 @@ describe("contract / generateRoutesType", () => {
     // Both routes are present, keyed by their full path.
     expect(source).toContain(`"/users/:id"`);
     expect(source).toContain(`"/users"`);
-    // GET picked up the response shape from TypeBox.
+    // GET picked up the response shape from the schema.
     expect(source).toMatch(
       /get: RouteHandler<undefined, undefined, \{ id: string \}, \{ id: string; name: string \}>/,
     );

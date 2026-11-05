@@ -4,7 +4,7 @@ description: "SwaggerModule.createAutoDocument walks every route and emits an Op
 ---
 
 `SwaggerModule.createAutoDocument(app, builder?)` walks every registered route
-(including their TypeBox `params`, `query`, `body`, and `response` schemas) and
+(including their `params`, `query`, `body`, and `response` schemas) and
 emits an OpenAPI 3.1 document — no manual `addPath()` calls required. Anything
 the builder adds explicitly takes precedence, so the auto-generated spec can
 still be patched without forking.

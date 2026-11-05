@@ -38,7 +38,7 @@ export class BatchBuilder {
    * Job to dispatch after the batch finishes with zero failures.
    * The passed builder is parked (won't auto-enqueue on await).
    */
-  // oxlint-disable-next-line no-thenable -- intentional: fluent API mirrors Promise chain naming
+  // eslint-disable-next-line unicorn/no-thenable -- intentional: fluent API mirrors Promise chain naming
   then(handler: PendingDispatch): this {
     handler._parked = true;
     this._then = handler;
@@ -74,7 +74,7 @@ export class BatchBuilder {
     const total = this.jobs.length;
 
     const callbacks: BatchCallbacks = {
-      // oxlint-disable-next-line no-thenable -- `then` is a data property key, not a Promise terminator
+      // eslint-disable-next-line unicorn/no-thenable -- `then` is a data property key, not a Promise terminator
       then: this._then ? toPendingDispatchSpec(this._then) : undefined,
       catch: this._catch ? toPendingDispatchSpec(this._catch) : undefined,
       finally: this._finally ? toPendingDispatchSpec(this._finally) : undefined,

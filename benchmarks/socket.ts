@@ -11,7 +11,7 @@
  * and drives them over loopback TCP with real `fetch()` calls. Expect the
  * absolute numbers to be an order of magnitude lower than the `handle()`
  * scenarios — that is the socket floor, not a regression. What matters here is
- * the *ratio* between Elysia and Techne: if the in-process gap is 2x but the
+ * the *ratio* between the native app and the legacy runtime: if the in-process gap is 2x but the
  * on-socket gap is 1.1x, the framework overhead is being amortized by transport
  * cost and is not worth optimizing further.
  *
@@ -19,7 +19,7 @@
  *   bun run benchmarks/socket.ts --quick --json
  */
 
-import { Elysia } from "elysia";
+import { createApp } from "../src";
 import { Controller, Get, Injectable, Param } from "../src/common";
 import { TechneFactory } from "../src/core";
 import {
@@ -70,7 +70,7 @@ const SOCKET_OPTS_QUICK: ScenarioOpts = { total: 2_000, batch: 50, warmup: 200, 
 export async function runSocketBench(): Promise<ScenarioResult[]> {
   const opts = isQuick() ? SOCKET_OPTS_QUICK : SOCKET_OPTS;
 
-  const elysiaApp = new Elysia()
+  const nativeApp = createApp()
     .get("/users", () => [{ id: 1, name: "Alice" }])
     .get("/users/:id", ({ params }) => ({ id: params.id, name: "Alice" }));
 
@@ -84,16 +84,16 @@ export async function runSocketBench(): Promise<ScenarioResult[]> {
 
   // Port 0 asks the OS for any free port; read the real one back off the
   // server handle so parallel bench runs can't collide.
-  elysiaApp.listen(0);
-  const elysiaPort = elysiaApp.server?.port;
-  if (elysiaPort === undefined) throw new Error("raw Elysia app failed to bind a port");
+  nativeApp.listen(0);
+  const nativePort = nativeApp.server?.port;
+  if (nativePort === undefined) throw new Error("native app failed to bind a port");
 
   try {
-    for (const req of socketRequests(elysiaPort)) {
-      out.push(await runScenario("Elysia (socket)", fetchHandler, req, opts));
+    for (const req of socketRequests(nativePort)) {
+      out.push(await runScenario("Native (socket)", fetchHandler, req, opts));
     }
   } finally {
-    elysiaApp.stop();
+    nativeApp.stop();
   }
 
   // `TechneApplication.listen(0)` deliberately runs the full lifecycle without

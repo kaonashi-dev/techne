@@ -1,3 +1,4 @@
+/// <reference path="./global.d.ts" />
 /**
  * Patches the global `Reflect` object with the three methods that
  * `reflect-metadata` normally provides. The default backing store is

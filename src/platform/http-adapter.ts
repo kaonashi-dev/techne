@@ -1,4 +1,4 @@
-import { Elysia, ValidationError } from "elysia";
+import { App, ValidationError } from "../server";
 import { Logger, requestContext, type RequestContext } from "../services/logger.service";
 import { Container, globalContainer } from "../core/container";
 import type { CompiledRouteDefinition } from "../core/router/router-execution-context";
@@ -18,7 +18,7 @@ const randomUUIDv7: () => string =
     ? (Bun as any).randomUUIDv7.bind(Bun)
     : () => crypto.randomUUID();
 
-interface ElysiaAdapterOptions {
+interface HttpAdapterOptions {
   logger?: boolean;
   container?: Container;
   shutdown?: {
@@ -29,7 +29,7 @@ interface ElysiaAdapterOptions {
      * When true, the validation error response includes every error
      * reported by the schema (the legacy behavior). When false/undefined
      * (default), only the first error is returned. Materializing every
-     * error forces TypeBox to walk the whole iterator on every invalid
+     * error forces the validator to walk the whole error list on every invalid
      * request and dominates the invalid-body throughput.
      */
     exhaustive?: boolean;
@@ -37,7 +37,7 @@ interface ElysiaAdapterOptions {
   /**
    * Force-enable (or force-disable) the request-id pipeline. When unset we
    * derive it from `logger` + presence of an RFC 7807 exception filter. See
-   * {@link ElysiaAdapter.computeNeedsRequestId}.
+   * {@link HttpAdapter.computeNeedsRequestId}.
    */
   requestId?: boolean;
   /**
@@ -61,9 +61,9 @@ interface ElysiaAdapterOptions {
    */
   rateLimit?: CompiledRateLimitPolicy;
   /**
-   * Cookie signing configuration forwarded to the Elysia constructor.
-   * Elysia's built-in cookie jar signs/verifies cookies whose names appear
-   * in `sign` using HMAC-SHA256 with the provided `secrets`.
+   * Cookie signing configuration for the HTTP app. Its cookie jar signs and
+   * verifies cookies whose names appear in `sign` using HMAC-SHA256 with the
+   * provided `secrets`.
    */
   cookies?: CookieOptions;
 }
@@ -84,7 +84,7 @@ interface CompiledCorsOptions {
  * lets V8 pin one hidden class for every `ctx.store.*` read/write across
  * the hot hook paths, instead of the megamorphic `ctx.store ?? (ctx.store
  * = {})` coalesce + dynamic property add that used to happen on first
- * touch (Plan A6). `app.derive` was the original target, but Elysia runs
+ * touch (Plan A6). `app.derive` was the original target, but derive runs
  * derive as a transform *after* `onRequest`, so it can't pre-shape the
  * store for our own first hook — we do the assignment inline instead.
  */
@@ -124,14 +124,6 @@ interface TechneRequestStore {
   rateLimitDecision: RateLimitDecision | undefined;
 }
 
-// Hoisted to module scope so the validation error path doesn't allocate a
-// fresh headers object per request. Only the `set.headers == null` branch
-// can share the constant — the mutation branches still have to touch the
-// existing Headers/Record in place.
-const PROBLEM_JSON_HEADERS: Record<string, string> = {
-  "content-type": "application/problem+json",
-};
-
 /**
  * Parse a W3C `traceparent` header into traceId + spanId (L12).
  * Format: `version-traceId-parentId-flags` where version="00",
@@ -146,8 +138,8 @@ export function parseTraceparent(header: string | null): { traceId?: string; spa
   return { traceId, spanId };
 }
 
-export class ElysiaAdapter {
-  private app: Elysia;
+export class HttpAdapter {
+  private app: App<any, any, any, any, any>;
   private logger: Logger;
   private container: Container;
   private compiledCorsOptions?: CompiledCorsOptions;
@@ -175,12 +167,12 @@ export class ElysiaAdapter {
   /** Maps limiter denials to canonical RFC 7807 problem documents. */
   private readonly problemMapper = new RouterResponseController();
 
-  constructor(private options?: ElysiaAdapterOptions) {
+  constructor(private options?: HttpAdapterOptions) {
     this.container = options?.container || globalContainer;
-    this.logger = new Logger("ElysiaAdapter");
+    this.logger = new Logger("HttpAdapter");
     this.trackInflight = options?.shutdown?.gracePeriod !== 0;
     this.loggerEnabled = options?.logger !== false;
-    this.needsRequestId = ElysiaAdapter.computeNeedsRequestId(options, this.loggerEnabled);
+    this.needsRequestId = HttpAdapter.computeNeedsRequestId(options, this.loggerEnabled);
     this.app = this.createApp();
   }
 
@@ -196,7 +188,7 @@ export class ElysiaAdapter {
    * correlation).
    */
   private static computeNeedsRequestId(
-    options: ElysiaAdapterOptions | undefined,
+    options: HttpAdapterOptions | undefined,
     loggerEnabled: boolean,
   ): boolean {
     if (options?.requestId === false) return false;
@@ -266,14 +258,14 @@ export class ElysiaAdapter {
 
   private createApp() {
     const cookieConfig = this.options?.cookies;
-    const elysiaInit: Record<string, unknown> = {};
+    const init: Record<string, unknown> = {};
     if (cookieConfig?.secrets || cookieConfig?.sign) {
-      elysiaInit.cookie = {
+      init.cookie = {
         ...(cookieConfig.secrets !== undefined ? { secrets: cookieConfig.secrets } : {}),
         ...(cookieConfig.sign !== undefined ? { sign: cookieConfig.sign } : {}),
       };
     }
-    const app = Object.keys(elysiaInit).length > 0 ? new Elysia(elysiaInit as any) : new Elysia();
+    const app = new App(init as any);
     this.corsHooksInstalled = false;
     this.installFusedHooks(app);
     this.setupCors(app);
@@ -285,15 +277,15 @@ export class ElysiaAdapter {
    * registration pattern (inflight + request-id + logging + validation) with
    * a single monomorphic callback per phase whose body is composed once at
    * boot from the active feature flags. Each callback sees only one ctx shape
-   * (Elysia's request context), so V8 keeps the call-site monomorphic.
+   * (the request context), so V8 keeps the call-site monomorphic.
    *
    * Phases with zero active branches don't register at all — keeps the
-   * Elysia hook chain length proportional to the actual feature surface.
+   * hook chain length proportional to the actual feature surface.
    *
    * User plugins still call `adapter.getInstance().request()` etc. and
    * chain after ours; the fusion only collapses first-party hooks.
    */
-  private installFusedHooks(app: Elysia) {
+  private installFusedHooks(app: App<any, any, any, any, any>) {
     const trackInflight = this.trackInflight;
     const needsRequestId = this.needsRequestId;
     const loggingEnabled = this.loggerEnabled;
@@ -333,7 +325,7 @@ export class ElysiaAdapter {
         // hidden class, instead of the historical `ctx.store ?? (ctx.store
         // = {})` coalesce + dynamic property add that put the call sites
         // into megamorphic land. `app.derive` runs as a transform after
-        // onRequest in Elysia's compose order, so the derive idiom can't
+        // onRequest in the lifecycle order, so the derive idiom can't
         // pre-shape the store for *this* hook — we do it inline here.
         // Skipped entirely when neither tracking flag is on (nothing reads
         // the store in that case).
@@ -505,9 +497,7 @@ export class ElysiaAdapter {
             const duration = Math.round((Bun.nanoseconds() - start) / 1_000_000);
             const path = this.getRequestPath(request.url);
             const stack = error instanceof Error ? error.stack : undefined;
-            // Elysia 2 dropped the string `ctx.code` discriminator in favour of
-            // error classes. The access log still wants a short tag, so derive
-            // one from the constructor name.
+            // The access log wants a short tag: use the error class name.
             const code = error?.name ?? "UNKNOWN";
             // L11: sync requestId to ALS context so this.logger picks it up.
             const requestId = store?.requestId;
@@ -527,33 +517,14 @@ export class ElysiaAdapter {
         }
 
         // Validation error mapping — runs last so any header echo above is
-        // preserved, and we return the problem+json body that Elysia uses
-        // as the response.
-        //
-        // Elysia 2 removed the string `ctx.code` discriminator; errors are now
-        // matched by class. `instanceof` is both the documented replacement and
-        // cheaper than the old string compare. Elysia 2 would already emit an
-        // RFC 9457 document here on its own, but Techne's `errors[]` shape is
-        // public API, so we keep producing it and just source the entries from
-        // the richer v2 error.
+        // preserved. The HTTP app would emit its own RFC 9457 document, but
+        // Techne's legacy `errors[]` shape is public API, so we produce it.
         const { error, set } = ctx;
         if (!(error instanceof ValidationError)) return;
         set.status = 422;
-        const existing = set.headers;
-        if (existing == null) {
-          set.headers = PROBLEM_JSON_HEADERS;
-        } else if (existing instanceof Headers) {
-          existing.set("content-type", "application/problem+json");
-        } else {
-          (existing as Record<string, string>)["content-type"] = "application/problem+json";
-        }
+        applyHeader(set, "content-type", "application/problem+json");
 
-        // Elysia 2 materializes `errors` eagerly as a plain array, so the
-        // old `error.all` getter — which spread the whole TypeBox `Errors()`
-        // iterator on every invalid request — is gone. Slicing the first entry
-        // is now a cheap array index rather than an iterator drain, which is
-        // why the non-exhaustive path no longer needs a fallback chain.
-        const all = (error as unknown as { errors?: unknown[] }).errors ?? [];
+        const all = error.errors;
         const errors = exhaustive ? all : all.length > 0 ? [all[0]] : [];
 
         return {
@@ -658,13 +629,13 @@ export class ElysiaAdapter {
     return undefined;
   }
 
-  private setupCors(app: Elysia) {
+  private setupCors(app: App<any, any, any, any, any>) {
     if (!this.compiledCorsOptions || this.corsHooksInstalled) {
       return;
     }
     this.corsHooksInstalled = true;
 
-    app.request(({ request }) => {
+    app.request(({ request }: any) => {
       if (request.method !== "OPTIONS") return;
       return new Response(null, {
         status: 204,
@@ -672,7 +643,7 @@ export class ElysiaAdapter {
       });
     });
 
-    app.afterHandle(({ request, set }) => {
+    app.afterHandle(({ request, set }: any) => {
       const cors = this.createCorsHeaders(request) as Record<string, string>;
       const existing = set.headers;
       if (existing == null) {
@@ -688,32 +659,20 @@ export class ElysiaAdapter {
 
   public registerRoutes(routes: CompiledRouteDefinition[]) {
     for (const route of routes) {
-      const elysiaMethod = route.method.toLowerCase() as
-        | "get"
-        | "post"
-        | "put"
-        | "patch"
-        | "delete";
-
-      const elysiaOptions: any = {};
+      const options: Record<string, unknown> = {};
       if (route.schema) {
-        if (route.schema.body) elysiaOptions.body = route.schema.body;
-        if (route.schema.query) elysiaOptions.query = route.schema.query;
-        if (route.schema.params) elysiaOptions.params = route.schema.params;
-        if (route.schema.response) elysiaOptions.response = route.schema.response;
-        if (route.schema.headers) elysiaOptions.headers = route.schema.headers;
+        if (route.schema.body) options.body = route.schema.body;
+        if (route.schema.query) options.query = route.schema.query;
+        if (route.schema.params) options.params = route.schema.params;
+        if (route.schema.response) options.response = route.schema.response;
+        if (route.schema.headers) options.headers = route.schema.headers;
       }
 
       if (route.beforeHandle && route.beforeHandle.length > 0) {
-        elysiaOptions.beforeHandle = route.beforeHandle;
+        options.beforeHandle = route.beforeHandle;
       }
 
-      // Elysia 2 reordered the route signature to (path, options, handler).
-      // Passing the v1 order does NOT throw — Elysia treats the options object
-      // as the handler and serializes it as the response body, so every route
-      // would silently return its own schema with a 200. Keep this argument
-      // order in sync with the installed Elysia major.
-      (this.app as any)[elysiaMethod](route.fullPath, elysiaOptions, route.handler);
+      this.app.route(route.method, route.fullPath, options, route.handler);
 
       if (this.options?.logger !== false) {
         this.logger.debug(`Mapped {${route.fullPath}, ${route.method}} route`, "Router");

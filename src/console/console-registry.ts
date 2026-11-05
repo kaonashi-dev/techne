@@ -13,8 +13,7 @@ export class ConsoleRegistry {
     for (const provider of classes) {
       if (isCustomProvider(provider)) continue;
       const map = Reflect.getMetadata(CONSOLE_COMMAND_METADATA, provider) as
-        | Record<string, ConsoleCommandMeta>
-        | undefined;
+        Record<string, ConsoleCommandMeta> | undefined;
       if (!map) continue;
       if (!this.container.isStatic(provider)) continue;
 

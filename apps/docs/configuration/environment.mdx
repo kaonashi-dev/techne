@@ -1,10 +1,10 @@
 ---
 title: "Environment & config"
-description: "defineConfig validates env values against a TypeBox schema; @InjectConfig pulls the typed AppConfig from DI."
+description: "defineConfig validates env values against a Techne schema; @InjectConfig pulls the typed AppConfig from DI."
 ---
 
 The preferred entry point is `defineConfig`, which validates env values against
-a TypeBox schema at startup and produces a typed `AppConfig` object. It pairs
+a Techne schema at startup and produces a typed `AppConfig` object. It pairs
 with `appConfig(config)` so handlers can pull the same object out of
 DI via `@InjectConfig()`.
 
@@ -45,7 +45,7 @@ const app = await TechneFactory.create({
 ```
 
 Invalid or missing env values throw `ConfigValidationError` before the HTTP
-server starts. `t` is a re-export of TypeBox's `Type` for ergonomic schema
+server starts. `t` is Techne's schema builder for ergonomic schema
 authoring, and `APP_CONFIG` is the DI token `@InjectConfig()` resolves.
 
 ## ConfigService

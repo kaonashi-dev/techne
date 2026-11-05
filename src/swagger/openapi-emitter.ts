@@ -96,13 +96,12 @@ export interface OpenApiDocument {
 }
 
 // ─── Schema detection ────────────────────────────────────────────────────────
-// Node kinds are derived structurally from the JSON Schema itself. TypeBox 1.x
-// (the version Elysia 2 uses) no longer stamps `Symbol.for("TypeBox.Kind")` on
-// its output, so the tag we used to read simply isn't there any more. See
-// `src/schema/json-schema-kind.ts` for the full rationale.
-type AnyTypeBox = { [key: string]: unknown };
+// Node kinds are derived structurally from the JSON Schema itself. Techne's
+// builder emits untagged JSON Schema, so classification uses structure rather
+// than a vendor tag. See `src/schema/json-schema-kind.ts` for the rationale.
+type AnySchema = { [key: string]: unknown };
 
-// ─── TypeBox → OpenAPI conversion ────────────────────────────────────────────
+// ─── Schema → OpenAPI conversion ─────────────────────────────────────────────
 
 const STRING_OPT_KEYS = ["minLength", "maxLength", "pattern", "format"] as const;
 const NUMBER_OPT_KEYS = ["minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum"] as const;
@@ -120,15 +119,17 @@ function pickKeys<T extends Record<string, unknown>>(
 }
 
 /**
- * Convert a TypeBox schema node to an OpenAPI 3.1 schema object.
+ * Convert a Techne schema node to an OpenAPI 3.1 schema object.
  *
- * Walks the schema by inspecting `Symbol.for("TypeBox.Kind")` rather than the
- * `type` field, so we get accurate handling for `Union`, `Literal`, `Optional`,
- * etc. — all of which can produce surprising JSON Schema output.
+ * Walks the schema structurally so `Union`, `Literal`, `Optional` and the other
+ * builder shapes map to the OpenAPI 3.1 equivalents.
  */
-export function typeboxToOpenApi(schema: unknown): OpenApiSchema {
+/** @deprecated Renamed to {@link schemaToOpenApi}; Techne no longer uses TypeBox. */
+export const typeboxToOpenApi = (schema: unknown): OpenApiSchema => schemaToOpenApi(schema);
+
+export function schemaToOpenApi(schema: unknown): OpenApiSchema {
   if (!schema || typeof schema !== "object") return {};
-  const node = schema as AnyTypeBox;
+  const node = schema as AnySchema;
   const kind = kindOf(node);
 
   switch (kind) {
@@ -148,7 +149,7 @@ export function typeboxToOpenApi(schema: unknown): OpenApiSchema {
       return { not: {} };
     case "Literal": {
       // OpenAPI 3.1 supports `const`. The literal's `type` is filled in by
-      // TypeBox for older draft consumers; we mirror it for compatibility.
+      // the builder for older draft consumers; we mirror it for compatibility.
       const out: OpenApiSchema = { const: node.const };
       if (node.type) out.type = node.type as string;
       return out;
@@ -157,7 +158,7 @@ export function typeboxToOpenApi(schema: unknown): OpenApiSchema {
       const items = node.items;
       return {
         type: "array",
-        items: typeboxToOpenApi(items),
+        items: schemaToOpenApi(items),
         ...pickKeys(node, ARRAY_OPT_KEYS),
       };
     }
@@ -166,11 +167,11 @@ export function typeboxToOpenApi(schema: unknown): OpenApiSchema {
       const properties: Record<string, OpenApiSchema> = {};
       // Optionality is a property of the parent in JSON Schema, not of the
       // child node, so it has to be read off `required` here rather than
-      // probed per-value the way the old TypeBox `[Optional]` symbol allowed.
+      // probed per-value.
       const declaredRequired = requiredKeys(node);
       const required: string[] = [];
       for (const key of Object.keys(props)) {
-        properties[key] = typeboxToOpenApi(props[key]);
+        properties[key] = schemaToOpenApi(props[key]);
         if (declaredRequired.has(key)) required.push(key);
       }
       const out: OpenApiSchema = { type: "object", properties };
@@ -178,13 +179,13 @@ export function typeboxToOpenApi(schema: unknown): OpenApiSchema {
       if (node.additionalProperties !== undefined) {
         out.additionalProperties =
           typeof node.additionalProperties === "object"
-            ? typeboxToOpenApi(node.additionalProperties)
+            ? schemaToOpenApi(node.additionalProperties)
             : (node.additionalProperties as boolean);
       }
       return out;
     }
     case "Union": {
-      return { oneOf: unionMembers(node).map(typeboxToOpenApi) };
+      return { oneOf: unionMembers(node).map(schemaToOpenApi) };
     }
     case "Enum": {
       return { enum: node.enum as unknown[] };
@@ -194,10 +195,10 @@ export function typeboxToOpenApi(schema: unknown): OpenApiSchema {
     }
     case "Intersect": {
       const members = (node.allOf ?? []) as unknown[];
-      return { allOf: members.map(typeboxToOpenApi) };
+      return { allOf: members.map(schemaToOpenApi) };
     }
     case "Record": {
-      // TypeBox `Record(K, V)` lowers to `{ type: "object", patternProperties }`.
+      // `Record(K, V)` lowers to `{ type: "object", patternProperties }`.
       // OpenAPI 3.1 understands `patternProperties` directly.
       return {
         type: "object",
@@ -209,7 +210,7 @@ export function typeboxToOpenApi(schema: unknown): OpenApiSchema {
       const items = tupleMembers(node);
       return {
         type: "array",
-        prefixItems: items.map(typeboxToOpenApi),
+        prefixItems: items.map(schemaToOpenApi),
         minItems: items.length,
         maxItems: items.length,
       };
@@ -239,7 +240,7 @@ function transformPathParams(path: string): string {
 
 function paramsFromObjectSchema(schema: unknown, location: "path" | "query"): OpenApiParameter[] {
   if (!schema || typeof schema !== "object") return [];
-  const node = schema as AnyTypeBox;
+  const node = schema as AnySchema;
   if (kindOf(node) !== "Object") return [];
   const props = (node.properties ?? {}) as Record<string, unknown>;
   const required = requiredKeys(node);
@@ -253,7 +254,7 @@ function paramsFromObjectSchema(schema: unknown, location: "path" | "query"): Op
       name,
       in: location,
       required: isReq,
-      schema: typeboxToOpenApi(value),
+      schema: schemaToOpenApi(value),
     });
   }
   return out;
@@ -291,8 +292,8 @@ const PROBLEM_SCHEMA: OpenApiSchema = {
 /**
  * Walk the application's registered routes and produce an OpenAPI 3.1 document.
  *
- * Each `CompiledRouteDefinition` contributes one operation; its TypeBox
- * `schema.{params,query,body,response}` are converted via `typeboxToOpenApi`.
+ * Each `CompiledRouteDefinition` contributes one operation; its
+ * `schema.{params,query,body,response}` are converted via `schemaToOpenApi`.
  * Top-level metadata (title/version/description/servers/tags) comes from the
  * optional `DocumentBuilder`. Manually-added paths on the builder take
  * precedence over auto-discovered ones — this lets escape-hatch users override
@@ -321,7 +322,7 @@ export function emitOpenApiDocument(
     if (route.schema?.response) {
       responses["200"] = {
         description: "Successful response",
-        content: { "application/json": { schema: typeboxToOpenApi(route.schema.response) } },
+        content: { "application/json": { schema: schemaToOpenApi(route.schema.response) } },
       };
     } else {
       responses["200"] = { description: "OK" };
@@ -338,7 +339,7 @@ export function emitOpenApiDocument(
     if (route.schema?.body) {
       operation.requestBody = {
         required: true,
-        content: { "application/json": { schema: typeboxToOpenApi(route.schema.body) } },
+        content: { "application/json": { schema: schemaToOpenApi(route.schema.body) } },
       };
     }
 

@@ -57,8 +57,7 @@ export function createRedisClientAdapter(
   kind: "client" | "subscriber" = "client",
 ): RedisClientAdapter {
   const client = createRawRedisClient(options, kind) as
-    | Record<string, (...args: unknown[]) => unknown>
-    | undefined;
+    Record<string, (...args: unknown[]) => unknown> | undefined;
 
   if (!client) {
     throw new Error("Redis client is not available in this Bun runtime");

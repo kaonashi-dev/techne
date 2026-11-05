@@ -1,7 +1,7 @@
 /**
  * Response-schema benchmark.
  *
- * Exercises the fast TypeBox stringifier (`src/schema/fast-stringify.ts`)
+ * Exercises the fast schema stringifier (`src/schema/fast-stringify.ts`)
  * by declaring a `response` schema on a route. The schema-driven stringifier
  * pre-encodes property keys and avoids the generic property enumeration
  * cost of `JSON.stringify`, so it should at least match — and usually
@@ -9,7 +9,7 @@
  *
  * Validation strategy:
  *  - "with response schema": Techne stringifies via the compiled stringifier.
- *  - "no response schema":   Techne stringifies via Elysia's default path
+ *  - "no response schema":   Techne stringifies via the default JSON path
  *                            (which delegates to `JSON.stringify`).
  *
  * The first should be ≥ the second.

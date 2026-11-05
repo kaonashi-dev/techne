@@ -7,6 +7,21 @@ on:
     branches: [main]
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          # `bun lint` ships in canary builds only; keep canary scoped to this job.
+          bun-version: canary
+
+      - run: bun install --frozen-lockfile
+
+      - name: Lint
+        run: bun run lint
+
   test:
     runs-on: ubuntu-latest
     steps:
@@ -18,19 +33,19 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
-      - name: Lint
-        run: bun run lint
-
       - name: Format check
         run: bun run format:check
 
       - name: Test
         run: bun test tests/*.test.ts
 
+      - name: Typecheck (TypeScript 7)
+        run: bun run typecheck
+
       - name: Native API type contracts (without decorators)
         run: bun run test:types
 
-      - name: Native Elysia comparison smoke
+      - name: Native benchmark smoke
         run: bun run bench:native --quick
 
       - name: Bench smoke (quick matrix)

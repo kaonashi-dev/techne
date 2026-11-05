@@ -1,5 +1,5 @@
 /**
- * HTTP Benchmark — Raw Elysia vs Techne.
+ * HTTP Benchmark — native app vs legacy decorator runtime.
  *
  * Methodology fixes vs the original:
  *  - Concurrent batches of 100 issued via `Promise.all` instead of an awaited
@@ -18,7 +18,7 @@
  *   bun run benchmarks/http.ts --json
  */
 
-import { Elysia } from "elysia";
+import { createApp } from "../src";
 import { Controller, Get, Injectable, Param } from "../src/common";
 import { TechneFactory } from "../src/core";
 import {
@@ -30,9 +30,9 @@ import {
   type ScenarioResult,
 } from "./scenarios";
 
-// ─── Raw Elysia (the ceiling) ───────────────────────────────────────────────
+// ─── Native app (the ceiling) ───────────────────────────────────────────────
 
-const elysiaApp = new Elysia()
+const nativeApp = createApp()
   .get("/users", () => [{ id: 1, name: "Alice" }])
   .get("/users/:id", ({ params }) => ({ id: params.id, name: "Alice" }));
 
@@ -80,7 +80,7 @@ export async function runHttpBench(): Promise<ScenarioResult[]> {
 
   const results: ScenarioResult[] = [];
   for (const req of requests) {
-    results.push(await runScenario("Raw Elysia", (r) => elysiaApp.handle(r), req, opts));
+    results.push(await runScenario("Native app", (r) => nativeApp.handle(r), req, opts));
   }
   for (const req of requests) {
     results.push(await runScenario("Techne", (r) => techneApp.handle(r), req, opts));

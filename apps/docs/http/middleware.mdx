@@ -28,7 +28,7 @@ class AdminController {
 ## Ordering
 
 Middleware runs in the order it is declared on the controller, before
-[guards](/http/guards). Inside the Elysia request lifecycle, middleware
+[guards](/http/guards). Inside the request lifecycle, middleware
 executes during the `beforeHandle` phase.
 
 Combine middleware with `@UseGuards()` to stack cross-cutting concerns:

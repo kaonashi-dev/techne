@@ -1,12 +1,12 @@
 import { Body, Controller, CsrfExempt, Get, Post } from "../../../../src/common/index.ts";
-import { InjectMq, type Queue } from "../../../../src/mq/index.ts";
+import { InjectMq, type MqQueue } from "../../../../src/mq/index.ts";
 import { type SendEmailPayload } from "./email.queue";
 import { SendEmailDto } from "./send-email.dto";
 
 @Controller("mq/emails")
 @CsrfExempt()
 export class MqController {
-  constructor(@InjectMq("emails") private readonly emails: Queue<SendEmailPayload>) {}
+  constructor(@InjectMq("emails") private readonly emails: MqQueue<SendEmailPayload>) {}
 
   @Post("/")
   async enqueue(@Body(SendEmailDto) dto: SendEmailDto) {

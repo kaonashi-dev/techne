@@ -1,10 +1,10 @@
-import * as Type from "typebox/type";
-import type { Static, TSchema } from "typebox";
-import { Compile } from "typebox/compile";
+import { t } from "../schema/core/builder";
+import type { Static, TSchema } from "../schema/core/types";
+import { Compile } from "../schema/core/compile";
 import { requiredKeys } from "../schema/json-schema-kind";
 
-/** Re-export of TypeBox `Type` for ergonomic schema authoring. */
-export const t = Type;
+/** Re-export of Techne's schema builder for ergonomic schema authoring. */
+export { t };
 
 export interface DefineConfigOptions<S extends TSchema> {
   schema: S;
@@ -84,9 +84,9 @@ interface FieldKind {
 
 /**
  * `optional` is supplied by the caller rather than read off `node`. JSON
- * Schema — which is all TypeBox 1.x emits — records optionality in the parent
- * object's `required` array, so a property node carries no evidence of it. The
- * old `Symbol.for("TypeBox.Optional")` tag this used to read no longer exists.
+ * Schema records optionality in the parent object's `required` array, so a
+ * property node carries no evidence of it. The builder's optional marker is
+ * non-enumerable and is only used while constructing the parent schema.
  */
 function describeFieldKind(node: any, optional: boolean): FieldKind {
   const type = node?.type;
@@ -202,8 +202,8 @@ export function defineConfig<S extends TSchema>(opts: DefineConfigOptions<S>): A
   if (!validator.Check(assembled)) {
     const failuresMap = new Map<string, ConfigValidationFailure>();
     for (const error of validator.Errors(assembled)) {
-      // TypeBox 1.x reports JSON-Pointer locations as `instancePath` (the
-      // AJV/JSON-Schema convention). TypeBox 0.34 called the same thing `path`.
+      // The validator reports JSON-Pointer locations as `instancePath` (the
+      // AJV/JSON-Schema convention). Older validators called the same thing `path`.
       const error0 = error as unknown as { instancePath?: string; path?: string };
       const field = topLevelField(error0.instancePath ?? error0.path) ?? "<root>";
       if (failuresMap.has(field)) continue; // first error per field is the most useful

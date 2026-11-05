@@ -1,0 +1,96 @@
+---
+title: "Native plugins"
+description: "Write a plugin as a function that returns a named Techne app, and mount it with .use()."
+---
+
+A native plugin is a function that returns `createApp(...)` with a `name`. Mount
+it with `.use()`. Its hooks, derived context, decorations and routes become part
+of the app that mounts it.
+
+```ts src/plugins/request-timing.ts
+import { createApp } from "@kaonashi-dev/techne";
+
+export function requestTiming(options: { header?: string } = {}) {
+  const header = options.header ?? "server-timing";
+
+  return createApp({ name: "request-timing", seed: options, as: "global" })
+    .derive(() => ({ startedAt: performance.now() }))
+    .afterHandle(({ startedAt, set }) => {
+      set.headers[header] = `app;dur=${(performance.now() - startedAt).toFixed(1)}`;
+    });
+}
+```
+
+```ts src/app.ts
+import { createApp } from "@kaonashi-dev/techne";
+import { requestTiming } from "./plugins/request-timing";
+
+export function buildApp() {
+  return createApp()
+    .get("/healthz", () => ({ healthy: true }))
+    .use(requestTiming());
+}
+```
+
+Return the chain directly so the context the plugin adds (`startedAt` here) stays
+typed for the routes that mount it.
+
+## Scope
+
+`as` sets the default scope of the plugin's hooks and derived context:
+
+- `local` (default): the hooks apply to the plugin's own routes and the apps it mounts.
+- `scoped`: the hooks also apply to the app that mounts the plugin, one level up.
+- `global`: the hooks apply to every route of the root app.
+
+A single hook can override the default with `({ as }, fn)`, e.g.
+`.beforeHandle({ as: "scoped" }, fn)`. Decorations from `.decorate()` always
+propagate to the parent.
+
+Hooks apply to all routes in their scope regardless of registration order. In the
+example above, `/healthz` is registered before `.use(requestTiming())` and still
+gets the header.
+
+```ts src/plugins/api-key.ts
+import { createApp, problem } from "@kaonashi-dev/techne";
+
+export function apiKey(keys: Set<string>) {
+  return createApp({ name: "api-key", as: "scoped" }).beforeHandle(({ headers }) => {
+    if (!keys.has(headers["x-api-key"] ?? "")) {
+      return problem(401, { detail: "Missing or invalid API key" });
+    }
+  });
+}
+```
+
+Mounted inside a feature (`createApp({ prefix: "/admin" }).use(apiKey(keys))`),
+the check covers that feature's routes and nothing else.
+
+## Deduplication
+
+Apps with the same `name` and `seed` are mounted once, however many times they
+are passed to `.use()`. Give `seed` the plugin's options, as above, so that
+differently configured instances both mount. A plugin without a `name` is mounted once
+per instance.
+
+## Available hooks
+
+| Method                         | Runs                                                       |
+| ------------------------------ | ---------------------------------------------------------- |
+| `.request(fn)`                 | Before routing; returning a value responds immediately     |
+| `.derive(fn)`                  | After routing, before validation; merges into the context  |
+| `.beforeHandle(fn)`            | After validation; returning a value skips the handler      |
+| `.afterHandle(fn)`             | After the handler, with `ctx.response`                     |
+| `.mapResponse(fn)`             | Last; may turn the response value into a custom `Response` |
+| `.error(fn)` / `.error(E, fn)` | On errors, including 404s; optionally only for class `E`   |
+| `.afterResponse(fn)`           | After the response is produced; never changes it           |
+| `.cleanup(fn)`                 | On `app.stop()`, in reverse registration order             |
+
+## Elysia plugins
+
+Elysia plugins from npm (`@elysiajs/*`) and Eden are not supported. Techne no
+longer runs on Elysia, so `.use()` accepts only Techne apps. Techne ships its
+own CORS (the [`cors` config option](/http/cors)), security headers
+(`/security`), JWT (`/jwt`), Swagger (`/swagger`) and OpenTelemetry
+(`/telemetry`). For decorator applications, see the
+[plugin protocol](/plugins/plugin-protocol).

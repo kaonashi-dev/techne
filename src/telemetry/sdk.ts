@@ -72,7 +72,7 @@ export async function startTelemetry(
     __setTelemetryRuntime(api, tracer);
 
     // Handler exceptions are caught by the route wrapper and turned into
-    // problem+json responses, so they never reach Elysia's `onError`. Record them
+    // problem+json responses, so they never reach the `error` hooks. Record them
     // on the active server span at the framework's single exception choke point.
     setMappedExceptionObserver((error) => {
       const span = api!.trace.getActiveSpan();

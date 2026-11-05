@@ -7,7 +7,7 @@ import {
   DocumentBuilder,
   SwaggerModule,
   emitOpenApiDocument,
-  typeboxToOpenApi,
+  schemaToOpenApi,
   type OpenApiOperation,
 } from "../src/swagger";
 describe("openapi auto-emitter", () => {
@@ -94,27 +94,27 @@ describe("openapi auto-emitter", () => {
     expect(schema.properties!.tags).toEqual({ type: "array", items: { type: "string" } });
   });
   test("array body schema yields type: array with items", () => {
-    const out = typeboxToOpenApi(Schema.Array(Schema.String({ minLength: 1 }), { minItems: 1 }));
+    const out = schemaToOpenApi(Schema.Array(Schema.String({ minLength: 1 }), { minItems: 1 }));
     expect(out).toEqual({
       type: "array",
       items: { type: "string", minLength: 1 },
       minItems: 1,
     });
   });
-  test("typeboxToOpenApi covers union, literal, and any", () => {
-    expect(typeboxToOpenApi(Schema.Union([Schema.String(), Schema.Number()]))).toEqual({
+  test("schema conversion covers union, literal, and any", () => {
+    expect(schemaToOpenApi(Schema.Union([Schema.String(), Schema.Number()]))).toEqual({
       oneOf: [{ type: "string" }, { type: "number" }],
     });
-    expect(typeboxToOpenApi(Schema.Literal("draft"))).toMatchObject({ const: "draft" });
-    expect(typeboxToOpenApi(Schema.Any())).toEqual({});
-    expect(typeboxToOpenApi(Schema.Boolean())).toEqual({ type: "boolean" });
+    expect(schemaToOpenApi(Schema.Literal("draft"))).toMatchObject({ const: "draft" });
+    expect(schemaToOpenApi(Schema.Any())).toEqual({});
+    expect(schemaToOpenApi(Schema.Boolean())).toEqual({ type: "boolean" });
   });
   test("optional property is omitted from required[] but present in properties", () => {
     const schema = Schema.Object({
       keep: Schema.String(),
       maybe: Schema.Optional(Schema.String()),
     });
-    const out = typeboxToOpenApi(schema);
+    const out = schemaToOpenApi(schema);
     expect(out.required).toEqual(["keep"]);
     expect(Object.keys(out.properties ?? {})).toEqual(["keep", "maybe"]);
   });

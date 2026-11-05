@@ -1,3 +1,4 @@
+/// <reference path="../global.d.ts" />
 import "../reflect-setup";
 import { INJECT_METADATA, INQUIRER, REQUEST, SCOPE_OPTIONS_METADATA } from "../common/constants";
 import { Reflector } from "./reflector";

@@ -4,9 +4,18 @@
     "module": "Preserve",
     "moduleResolution": "Bundler",
     "strict": true,
+    "verbatimModuleSyntax": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "types": ["bun"]
+    "types": [
+      "bun"
+    ]
   },
-  "include": ["./*.ts", "../native-*.test.ts", "../resources.test.ts", "../../apps/native/src/**/*.ts", "../../benchmarks/native.ts"]
+  "include": [
+    "./*.ts",
+    "../native-*.test.ts",
+    "../resources.test.ts",
+    "../../apps/native/src/**/*.ts",
+    "../../benchmarks/native.ts"
+  ]
 }

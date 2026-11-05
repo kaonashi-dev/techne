@@ -1,5 +1,5 @@
 /**
- * Shared merge helpers for Elysia's `set.headers`, which can be `null`, a
+ * Shared merge helpers for `ctx.set.headers`, which can be `null`, a
  * `Headers` instance, or a plain record depending on which hook touched it
  * first — every writer needs the same three-branch merge.
  */

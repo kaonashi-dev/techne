@@ -18,7 +18,7 @@ import { Scanner } from "../core/scanner";
 import { Container, getClassScope, getProviderScope, isCustomProvider } from "../core/container";
 import { Scope } from "../core/scope";
 import { RoutesResolver } from "../core/router/routes-resolver";
-import { ElysiaAdapter } from "../platform/elysia-adapter";
+import { HttpAdapter } from "../platform/http-adapter";
 import { Logger, type LogLevel, type LoggerMode } from "../services/logger.service";
 import { loggerTokens } from "../decorators/inject-logger.decorator";
 import { BusRegistry } from "../cqrs/bus";
@@ -130,7 +130,7 @@ export interface TechneApplicationOptions {
   validateResponses?: boolean;
   /**
    * Guards to apply globally to every route. Because guards are wired into
-   * Elysia's `beforeHandle` at registration time, providing them here is the
+   * each route's `beforeHandle` at registration time, providing them here is the
    * reliable way to ensure they apply to every route. Calling
    * `app.useGlobalGuards()` after `TechneFactory.create()` only applies to
    * routes registered after the call.
@@ -158,7 +158,7 @@ export interface TechneApplicationOptions {
    *
    * By default, a validation failure returns a single-entry `errors` array
    * containing the first reported error. Set `exhaustive: true` to return
-   * every error TypeBox reports (this materializes the full TypeBox iterator
+   * every error the validator reports (this materializes the full error list
    * on every invalid request and is significantly slower; opt in only when
    * clients need all errors at once).
    */
@@ -178,8 +178,8 @@ export interface TechneApplicationOptions {
   server?: TechneServerOptions;
   /**
    * Cookie signing configuration. When set, the `secrets` and `sign` arrays
-   * are passed to the Elysia constructor so Elysia's built-in cookie jar
-   * handles HMAC signing/verification transparently.
+   * configure the HTTP app's cookie jar, which signs and verifies the listed
+   * cookies with HMAC-SHA256 transparently.
    */
   cookies?: CookieOptions;
   /**
@@ -256,7 +256,7 @@ export class TechneFactory {
     const compiledRateLimit = effectiveOptions?.rateLimit
       ? compileRateLimitPolicy(effectiveOptions.rateLimit)
       : undefined;
-    const adapter = new ElysiaAdapter({
+    const adapter = new HttpAdapter({
       logger: loggerEnabled,
       container,
       shutdown: effectiveOptions?.shutdown,
@@ -382,7 +382,7 @@ export class TechneFactory {
     scanner.scanFlat(this.flattenBootstrapConfig(config));
     TechneFactory.registerLoggerProviders(container);
 
-    const adapter = new ElysiaAdapter({
+    const adapter = new HttpAdapter({
       logger: loggerEnabled,
       container,
       validation: config?.validation,
@@ -435,7 +435,7 @@ export class TechneFactory {
 
     container.set(Console, opts?.console ?? new BunConsole());
 
-    const adapter = new ElysiaAdapter({
+    const adapter = new HttpAdapter({
       logger: loggerEnabled,
       container,
       validation: config?.validation,

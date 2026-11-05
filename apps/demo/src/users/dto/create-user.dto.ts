@@ -15,8 +15,8 @@ export const USER_ROLES = ["admin", "editor", "viewer"] as const;
 export type UserRole = (typeof USER_ROLES)[number];
 
 /**
- * Decorator-style DTO. The metadata compiles to a TypeBox schema that Elysia
- * validates natively; unknown properties are rejected with a 422 problem+json.
+ * Decorator-style DTO. The metadata compiles to a Techne schema that the HTTP
+ * core validates natively; unknown properties are rejected with a 422 problem+json.
  */
 @Dto()
 export class CreateUserDto {

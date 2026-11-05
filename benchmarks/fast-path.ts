@@ -4,14 +4,14 @@
  * Targets the arity-specialized compiled handler in
  * `src/core/router/router-execution-context.ts`: routes with no enhancers
  * (no guard / pipe / interceptor / filter / request-scoped dep) and
- * handler arity ≤3. These are the routes that should sit closest to raw
- * Elysia throughput.
+ * handler arity ≤3. These are the routes that should sit closest to the
+ * native app's throughput.
  *
- * Pairs the same two endpoints under both Raw Elysia and Techne so the
- * overhead column in the table is meaningful.
+ * Pairs the same two endpoints under both the native app and the legacy
+ * runtime so the overhead column in the table is meaningful.
  */
 
-import { Elysia } from "elysia";
+import { createApp } from "../src";
 import { Controller, Get, Injectable, Param } from "../src/common";
 import { TechneFactory } from "../src/core";
 import { emitResults, getDefaults, isQuick, runScenario, type ScenarioResult } from "./scenarios";
@@ -41,7 +41,7 @@ class FastController {
   }
 }
 
-const elysiaApp = new Elysia()
+const nativeApp = createApp()
   .get("/users", () => [{ id: 1, name: "Alice" }])
   .get("/users/:id", ({ params }) => ({ id: params.id, name: "Alice" }));
 
@@ -60,7 +60,7 @@ export async function runFastPathBench(): Promise<ScenarioResult[]> {
 
   const out: ScenarioResult[] = [];
   for (const req of requests) {
-    out.push(await runScenario("Elysia (fast)", (r) => elysiaApp.handle(r), req, opts));
+    out.push(await runScenario("Native (fast)", (r) => nativeApp.handle(r), req, opts));
   }
   for (const req of requests) {
     out.push(await runScenario("Techne (fast)", (r) => techneApp.handle(r), req, opts));

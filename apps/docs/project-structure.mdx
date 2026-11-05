@@ -51,7 +51,7 @@ and `dto` names are aliases for `feature`, `routes` and `schema`.
 `techne dev`, `start`, `build`, `test`, `doctor` and `deploy --target docker`
 work with native projects. `run`, `list`, `g command`, `g client` and
 `build --precompile` target the legacy decorator runtime and its config file.
-Native Elysia handles route compilation and infers the application type directly.
+The native `App` compiles its routes itself and infers the application type directly.
 
 The reference implementation is `apps/native/`. `apps/demo/` and
 `test-template-project/` are decorator-era examples/fixtures.

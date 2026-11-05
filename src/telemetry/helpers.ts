@@ -2,7 +2,7 @@ import type { Attributes, Span, Tracer } from "@opentelemetry/api";
 import type { OtelApi } from "./types";
 
 /**
- * DX helpers mirroring `@elysiajs/opentelemetry`'s ergonomics, but reading
+ * DX helpers for OpenTelemetry, reading
  * Techne's own active context. They are safe to import even when telemetry is
  * off or the OTel SDK isn't installed: nothing here statically requires
  * `@opentelemetry/*` (the `import type` is erased), and the runtime refs below

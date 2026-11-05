@@ -5,7 +5,7 @@ import { Controller } from "../src/decorators/controller.decorator";
 import { Get, Post } from "../src/decorators/routes.decorator";
 import { Body, Param, Query } from "../src/decorators/params.decorator";
 import { UseGuards } from "../src/decorators/use-guards.decorator";
-describe("Elysia Adapter via TechneFactory", () => {
+describe("HTTP adapter via TechneFactory", () => {
   test("should handle GET requests", async () => {
     @Controller("test")
     class TestController {

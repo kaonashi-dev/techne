@@ -1,9 +1,10 @@
-import type { TSchema } from "typebox";
+import { isOptionalSchema } from "./core/builder";
+import type { TSchema } from "./core/types";
 
 /**
  * Fast schema-driven JSON stringifier.
  *
- * Compiles a TypeBox schema into a hand-rolled function that emits JSON text
+ * Compiles a Techne schema into a hand-rolled function that emits JSON text
  * with pre-encoded property keys, avoiding the per-key string scan and
  * generic property enumeration cost of `JSON.stringify`. Unsupported nodes
  * fall back to `JSON.stringify` for the affected subtree, so correctness is
@@ -109,7 +110,7 @@ export function compileStringifier(schema: TSchema): Stringifier {
 
         for (const key of keys) {
           const child = props[key];
-          const isOptional = !requiredSet.has(key) || isOptionalNode(child);
+          const isOptional = !requiredSet.has(key) || isOptionalSchema(child);
           const childAccessor = `${obj}[${JSON.stringify(key)}]`;
           const childExpr = buildExpr(child, childAccessor);
           const encodedKey = JSON.stringify(JSON.stringify(key) + ":");
@@ -154,16 +155,4 @@ export function compileStringifier(schema: TSchema): Stringifier {
 
   cache.set(schema, fn);
   return fn;
-}
-
-// TypeBox uses a Symbol-keyed property (`[Modifier]: "Optional"`) to mark
-// optional fields on the inner schema. Detect it without importing the
-// internal symbol: scan symbol-keyed properties.
-function isOptionalNode(node: any): boolean {
-  if (!node || typeof node !== "object") return false;
-  for (const sym of Object.getOwnPropertySymbols(node)) {
-    const v = (node as any)[sym];
-    if (v === "Optional") return true;
-  }
-  return false;
 }

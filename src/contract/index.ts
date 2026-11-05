@@ -8,7 +8,7 @@
 //   import { generateRoutesType } from "@kaonashi-dev/techne/contract";
 
 export { createClient } from "./client";
-export { generateRoutesType, typeboxToTypeScript } from "./codegen";
+export { generateRoutesType, schemaToTypeScript, typeboxToTypeScript } from "./codegen";
 export {
   ClientError,
   type ClientOptions,

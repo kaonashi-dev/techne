@@ -14,6 +14,9 @@ import {
   generateHook,
   generateSchema,
 } from "../src/cli/generators";
+import { hasNativeLint, NATIVE_LINT_MISSING } from "../src/cli/lint";
+
+const nativeLint = await hasNativeLint();
 
 describe("CLI project generator", () => {
   let originalCwd: string;
@@ -58,26 +61,17 @@ describe("CLI project generator", () => {
     ]) {
       await generate("example", path.join(projectDir, "src"));
     }
+    const cli = path.join(originalCwd, "src/cli/index.ts");
+    expect((await Bun.file(path.join(projectDir, "package.json")).json()).scripts.lint).toBe(
+      "techne lint",
+    );
     for (const command of [
       [process.execPath, path.join(originalCwd, "node_modules/typescript/bin/tsc"), "--noEmit"],
       [process.execPath, "test"],
-      [
-        process.execPath,
-        "run",
-        "--bun",
-        path.join(originalCwd, "node_modules/.bin/oxfmt"),
-        "--check",
-        ".",
-      ],
-      [
-        process.execPath,
-        path.join(originalCwd, "src/cli/index.ts"),
-        "build",
-        "--target=bun",
-        "--out",
-        "dist/app.bun",
-      ],
-      [process.execPath, path.join(originalCwd, "src/cli/index.ts"), "doctor"],
+      [process.execPath, "fmt", "--check", "--no-script"],
+      ...(nativeLint ? [[process.execPath, cli, "lint"]] : []),
+      [process.execPath, cli, "build", "--target=bun", "--out", "dist/app.bun"],
+      [process.execPath, cli, "doctor"],
     ]) {
       const child = Bun.spawn(command, { cwd: projectDir, stdout: "pipe", stderr: "pipe" });
       const [exitCode, stdout, stderr] = await Promise.all([
@@ -90,7 +84,32 @@ describe("CLI project generator", () => {
         output: "",
       });
     }
-  }, 20_000);
+  }, 60_000);
+
+  test.skipIf(nativeLint)(
+    "techne lint fails fast when bun lint is unavailable",
+    async () => {
+      // Mirrors a generated project on stable Bun: the `lint` script calls `techne lint`.
+      await Bun.write(
+        path.join(tempRoot, "package.json"),
+        JSON.stringify({
+          scripts: { lint: `bun ${path.join(originalCwd, "src/cli/index.ts")} lint` },
+        }),
+      );
+      const child = Bun.spawn([process.execPath, "run", "lint"], {
+        cwd: tempRoot,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const [exitCode, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stderr).text(),
+      ]);
+      expect(exitCode).toBe(1);
+      expect(stderr).toContain(NATIVE_LINT_MISSING);
+    },
+    10_000,
+  );
 
   test("retains explicit legacy console command generation", async () => {
     await generateCommand("MigrateCommand");

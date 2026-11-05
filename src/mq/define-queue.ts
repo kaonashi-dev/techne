@@ -1,5 +1,5 @@
-import type { TSchema } from "typebox";
-import { Compile } from "typebox/compile";
+import type { TSchema } from "../schema/core/types";
+import { Compile } from "../schema/core/compile";
 import { toSchemaIssues, type TypeCheck } from "../schema/validator-types";
 import type { Job } from "./job";
 import { PendingDispatch } from "./pending-dispatch";
@@ -21,7 +21,7 @@ export interface DispatchDefaults {
 
 /**
  * Schema value accepted in `QueueDefInput.schemas`: either a class decorated
- * with `@Dto()` (resolved via the DTO registry) or a raw TypeBox `TSchema`.
+ * with `@Dto()` (resolved via the DTO registry) or a raw `TSchema`.
  */
 export type JobSchema = (new (...args: any[]) => any) | TSchema;
 
@@ -32,7 +32,7 @@ export interface QueueDefInput<N extends string, T extends JobMap> {
   defaults?: { [K in keyof T & string]?: DispatchDefaults };
   /**
    * Optional per-job validation schemas. Each value is either a `@Dto`-decorated
-   * class or a raw TypeBox `TSchema`. Validators are compiled once at
+   * class or a raw `TSchema`. Validators are compiled once at
    * `defineQueue` call time (boot).
    *
    * Only jobs listed here are validated; omitting a job name is valid and pays
@@ -81,7 +81,7 @@ export interface QueueDef<N extends string = string, T extends JobMap = JobMap> 
    */
   readonly dispatchers: DispatchersOf<T>;
   /**
-   * TypeBox compiled validators, keyed by job name. Only present when the
+   * Compiled validators, keyed by job name. Only present when the
    * queue was defined with a `schemas` entry for that job.
    * @internal
    */
@@ -246,10 +246,10 @@ function compileJobSchema(
     throw new TypeError(
       `defineQueue('${queueName}'): schema class '${schema.name || "(anonymous)"}' for job ` +
         `'${jobName}' has no DTO metadata. Decorate it with @Dto() / @Is* property ` +
-        `decorators, or pass a raw TypeBox TSchema.`,
+        `decorators, or pass a raw TSchema.`,
     );
   }
-  // Raw TypeBox TSchema
+  // Raw TSchema
   return Compile(schema as TSchema);
 }
 

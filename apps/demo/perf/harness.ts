@@ -48,10 +48,11 @@ export function resolveRunOptions(argv: string[] = Bun.argv): Required<RunOption
     const i = argv.indexOf(name);
     return i !== -1 && argv[i + 1] ? Number(argv[i + 1]) : undefined;
   };
+  const env = (value: string | undefined) => (value ? Number(value) : undefined);
   return {
-    port: flag("--port") ?? Number(Bun.env.PERF_PORT) ?? DEFAULTS.port,
-    requests: flag("-n") ?? Number(Bun.env.PERF_REQUESTS) ?? DEFAULTS.requests,
-    concurrency: flag("-c") ?? Number(Bun.env.PERF_CONCURRENCY) ?? DEFAULTS.concurrency,
+    port: flag("--port") ?? env(Bun.env.PERF_PORT) ?? DEFAULTS.port,
+    requests: flag("-n") ?? env(Bun.env.PERF_REQUESTS) ?? DEFAULTS.requests,
+    concurrency: flag("-c") ?? env(Bun.env.PERF_CONCURRENCY) ?? DEFAULTS.concurrency,
   };
 }
 

@@ -4,13 +4,19 @@
     "module": "Preserve",
     "moduleResolution": "Bundler",
     "strict": true,
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "allowSyntheticDefaultImports": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "noEmit": true,
-    "types": ["bun-types"]
+    "types": [
+      "bun"
+    ]
   },
-  "include": ["src/**/*", "tests/**/*", "perf/**/*"]
+  "include": [
+    "src/**/*",
+    "tests/**/*",
+    "perf/**/*"
+  ]
 }

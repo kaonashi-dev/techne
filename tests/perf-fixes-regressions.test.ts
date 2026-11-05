@@ -6,7 +6,7 @@
  *      from outside, but we can observe that the typed route emits a JSON
  *      body with the right `content-type` and a serialized payload.
  *
- *   2. Elysia-native validation failures are formatted as RFC 7807-style
+ *   2. Native validation failures are formatted as RFC 7807-style
  *      422 responses by the adapter's validation error hook.
  *
  *   3. The `x-request-id` response header is still echoed when the framework
@@ -41,7 +41,7 @@ describe("Batch 3 perf-fix regressions", () => {
     expect(res.headers.get("content-type")).toBe("application/json; charset=utf-8");
     expect(await res.json()).toEqual({ id: 1, name: "Alice" });
   });
-  test("invalid DTO body returns RFC 7807-style 422 from Elysia validation", async () => {
+  test("invalid DTO body returns RFC 7807-style 422 from native validation", async () => {
     @Dto()
     class CreateUserDto {
       @IsString({ minLength: 2 })

@@ -1,0 +1,13 @@
+[fmt]
+printWidth = 100
+ignorePatterns = ["*.md", "*.json", ".*.json"]
+
+[lint]
+ignorePatterns = []
+
+[lint.rules]
+"no-unused-vars" = "off"
+"no-prototype-builtins" = "off"
+"@typescript-eslint/no-explicit-any" = "off"
+"@typescript-eslint/no-unsafe-function-type" = "off"
+"@typescript-eslint/no-empty-object-type" = "off"

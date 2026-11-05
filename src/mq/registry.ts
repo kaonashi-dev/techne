@@ -73,8 +73,7 @@ export class MqRegistry {
     for (const provider of classes) {
       if (isCustomProvider(provider)) continue;
       const processor = Reflect.getMetadata(MQ_PROCESSOR_METADATA, provider) as
-        | MqProcessorMetadata
-        | undefined;
+        MqProcessorMetadata | undefined;
       if (!processor) continue;
       if (!this.container.isStatic(provider)) continue;
 

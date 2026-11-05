@@ -41,14 +41,13 @@ or return native `problem(status, details)` for an expected HTTP error.
 
 ## Inference is part of the API
 
-Always return the fluent chain from a feature factory. Avoid broad `Elysia` or
-`AnyElysia` return annotations, which lose route details. Export
-`type App = ReturnType<typeof buildApp>` for typed clients compatible with the
-pinned Elysia version.
+Always return the fluent chain from a feature factory. Avoid broad `App` or
+`AnyApp` return annotations, which lose route details. Export
+`type App = ReturnType<typeof buildApp>` to keep the full route types.
 
-Native Elysia plugins are passed directly to `.use()`. Its `name`/`seed`
-deduplication semantics apply, so use distinct identities for differently
-configured instances that must both mount.
+Native plugins are passed directly to `.use()`. Apps with the same `name` and
+`seed` are mounted once, so use distinct identities for differently configured
+instances that must both mount.
 
 ## Resources
 
@@ -87,13 +86,15 @@ Register cleanup immediately after acquisition and before setup returns.
 - Every cleanup is attempted. Failures are preserved in `AggregateError`.
 - `await using` supports scoped jobs and tests.
 
-Elysia's `stop()` drains a running server before `cleanup` handlers. Handle-only
+`app.stop()` stops a running server before it runs `cleanup` handlers. Handle-only
 tests and failed startup close resources explicitly. Worker entrypoints can use
 `createResources` with the same services, without an HTTP application.
 
 ## Integrations
 
-Use compatible native plugins for CORS, telemetry and OpenAPI. Construct database
+Write [native plugins](/plugins/native-plugins) for cross-cutting HTTP policies
+such as CORS. Telemetry, JWT and OpenAPI ship with Techne
+(`/telemetry`, `/jwt`, `/swagger`) as legacy plugins. Construct database
 and queue clients explicitly and register their shutdown. Configuration is read
 once at the entrypoint and passed to factories. Readiness checks are explicit
 routes for the dependencies required by your application.

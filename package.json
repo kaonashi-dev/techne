@@ -1,7 +1,7 @@
 {
   "name": "@kaonashi-dev/techne",
   "version": "0.0.1",
-  "description": "Techne — explicit application composition on native Elysia, built for Bun",
+  "description": "Techne — explicit application composition for Bun",
   "module": "src/index.ts",
   "main": "src/index.ts",
   "types": "dist/types/index.d.ts",
@@ -11,6 +11,11 @@
       "types": "./dist/types/index.d.ts",
       "bun": "./src/index.ts",
       "import": "./src/index.ts"
+    },
+    "./server": {
+      "bun": "./src/server/index.ts",
+      "import": "./src/server/index.ts",
+      "types": "./dist/types/server/index.d.ts"
     },
     "./legacy": {
       "types": "./dist/types/core/index.d.ts",
@@ -108,15 +113,15 @@
     "LICENSE"
   ],
   "scripts": {
-    "format": "oxfmt .",
-    "format:check": "oxfmt --check .",
-    "lint": "oxlint .",
-    "lint:fix": "oxlint --fix .",
+    "format": "bun fmt",
+    "format:check": "bun fmt --check",
+    "lint": "bun src/cli/index.ts lint",
+    "lint:fix": "bun src/cli/index.ts lint --fix",
     "test": "bun test tests/*.test.ts",
     "test:watch": "bun test --watch tests/*.test.ts",
     "test:nestjs": "bun test tests/nestjs/",
     "check": "bun run lint && bun run format:check",
-    "check:fix": "bun run lint:fix && bun run format .",
+    "check:fix": "bun run lint:fix && bun run format",
     "bench": "bun run benchmarks/index.ts",
     "bench:http": "bun run benchmarks/http.ts",
     "bench:socket": "bun run benchmarks/socket.ts",
@@ -125,6 +130,7 @@
     "bench:quick": "bun run benchmarks/index.ts --quick",
     "bench:native": "bun run benchmarks/native.ts",
     "test:types": "tsc -p tests/types/tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p apps/demo/tsconfig.json",
     "bench:ci": "bun run benchmarks/index.ts --quick --skip-socket --skip-memory",
     "bench:check": "bun run scripts/bench-check.ts",
     "bench:compare": "bun run benchmarks/compare.ts",
@@ -142,9 +148,8 @@
     "@opentelemetry/semantic-conventions": "1.41.1",
     "@prisma/client": "^5",
     "@types/bun": "^1.3.11",
-    "oxfmt": "^0.41.0",
-    "oxlint": "^1.56.0",
-    "prisma": "^5"
+    "prisma": "^5",
+    "typescript": "^7.0.2"
   },
   "peerDependencies": {
     "@opentelemetry/api": ">=1.9.0",
@@ -156,7 +161,7 @@
     "@opentelemetry/sdk-trace-node": ">=2.0.0",
     "@opentelemetry/semantic-conventions": ">=1.30.0",
     "@prisma/client": ">=5",
-    "typescript": "^5"
+    "typescript": ">=7"
   },
   "peerDependenciesMeta": {
     "@opentelemetry/api": {
@@ -186,10 +191,5 @@
     "@prisma/client": {
       "optional": true
     }
-  },
-  "dependencies": {
-    "elysia": "2.0.0-beta.1",
-    "exact-mirror": "^1.2.2",
-    "typebox": "^1.3.10"
   }
 }

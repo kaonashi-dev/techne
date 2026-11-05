@@ -4,14 +4,7 @@ import { getOrCreateControllerDescriptor } from "../core/metadata-store";
 import type { ResponseHookContext } from "../interfaces/response-hook.interface";
 
 export type ParamType =
-  | "body"
-  | "param"
-  | "query"
-  | "headers"
-  | "request"
-  | "file"
-  | "custom"
-  | "cookie";
+  "body" | "param" | "query" | "headers" | "request" | "file" | "custom" | "cookie";
 
 /** Factory signature used by `createParamDecorator`. */
 export type CustomParamFactory<TData = any, TOutput = any> = (
@@ -46,11 +39,11 @@ export interface ParamMetadata {
   index: number;
   type: ParamType;
   name?: string;
-  /** DTO class passed to `@Body(MyDto)` — used to auto-inject the TypeBox schema. */
+  /** DTO class passed to `@Body(MyDto)` — used to auto-inject the DTO schema. */
   dtoClass?: Function;
   /**
    * DTO class passed to `@Headers(DtoClass)` — used to auto-inject the header
-   * TypeBox schema (additionalProperties: true, lowercased keys).
+   * DTO schema (additionalProperties: true, lowercased keys).
    */
   headerDtoClass?: Function;
   /** Reflected parameter type for `@Body() dto: CreateDto`. */
@@ -69,8 +62,7 @@ function getParameterMetatype(
   parameterIndex: number,
 ): Function | undefined {
   const paramTypes = Reflect.getMetadata("design:paramtypes", target, propertyKey) as
-    | Function[]
-    | undefined;
+    Function[] | undefined;
   return paramTypes?.[parameterIndex];
 }
 
@@ -114,8 +106,8 @@ const createBuiltinParamDecorator = (type: ParamType) => {
  * Overloads:
  * - `@Body()`           — whole body, no automatic schema injection
  * - `@Body('field')`    — `body.field`
- * - `@Body(CreateDto)`  — whole body + auto-injects the DTO's TypeBox schema
- *                         into Elysia's validation for this route
+ * - `@Body(CreateDto)`  — whole body + auto-injects the DTO's schema
+ *                         into the route's validation
  */
 export function Body(nameOrDto?: string | Function): ParameterDecorator {
   return (target: object, propertyKey: string | symbol | undefined, parameterIndex: number) => {
@@ -143,8 +135,8 @@ export const Query = createBuiltinParamDecorator("query");
  * - `@Headers()`           — whole `ctx.headers` object
  * - `@Headers('x-api-key')` — single header value
  * - `@Headers(AuthHeaders)` — whole headers object + auto-injects the DTO's
- *                             TypeBox schema (additionalProperties: true,
- *                             lowercased keys) into Elysia's header validation
+ *                             DTO schema (additionalProperties: true,
+ *                             lowercased keys) into the route's header validation
  */
 export function Headers(nameOrDto?: string | Function): ParameterDecorator {
   return (target: object, propertyKey: string | symbol | undefined, parameterIndex: number) => {

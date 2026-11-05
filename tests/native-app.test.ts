@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { createApp, Elysia, problem, status, t } from "../src";
+import { fileURLToPath } from "node:url";
+import { App, createApp, problem, status, t } from "../src";
 
-describe("Elysia-native composition", () => {
+describe("native composition", () => {
   test("keeps legacy and optional subsystems out of the root dependency graph", async () => {
     const build = await Bun.build({
-      entrypoints: [new URL("../src/index.ts", import.meta.url).pathname],
+      entrypoints: [fileURLToPath(new URL("../src/index.ts", import.meta.url))],
       target: "bun",
       metafile: true,
     });
@@ -16,15 +17,10 @@ describe("Elysia-native composition", () => {
     expect(inputs.filter((input) => legacy.test(input))).toEqual([]);
   });
 
-  test("returns an actual Elysia instance with native options", () => {
-    const app = createApp({ prefix: "/api", strictPath: true, precompile: false });
-    expect(Object.getPrototypeOf(app)).toBe(Elysia.prototype);
-    expect(app["~config"]).toMatchObject({
-      prefix: "/api",
-      strictPath: true,
-      precompile: false,
-    });
-    expect(createApp()["~config"]?.precompile).toBe(true);
+  test("returns a Techne App with its options", () => {
+    const app = createApp({ prefix: "/api", strictPath: true });
+    expect(app).toBeInstanceOf(App);
+    expect(app.config).toMatchObject({ prefix: "/api", strictPath: true });
   });
 
   test("composes typed routes with explicit dependencies and native validation", async () => {
@@ -92,7 +88,7 @@ describe("Elysia-native composition", () => {
     expect(await publicResponse.text()).toBe("public");
   });
 
-  test("supports listening, fetching and stopping using Elysia lifecycle", async () => {
+  test("supports listening, fetching and stopping", async () => {
     let stopped = false;
     const app = createApp()
       .get("/", () => "native")
@@ -110,7 +106,7 @@ describe("Elysia-native composition", () => {
   });
 
   test("root import does not initialize the decorator metadata runtime", async () => {
-    const entry = new URL("../src/index.ts", import.meta.url).pathname;
+    const entry = fileURLToPath(new URL("../src/index.ts", import.meta.url));
     const child = Bun.spawn(
       [
         process.execPath,

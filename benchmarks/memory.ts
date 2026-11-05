@@ -3,7 +3,7 @@
  *
  * The rest of the suite measures time. This one measures footprint, which is
  * the axis that decides whether a framework is viable on a 256 MB container or
- * a serverless instance — and the axis Elysia 2 targets most directly.
+ * a serverless instance — and the axis serverless deployments care about most.
  *
  * Three numbers per size:
  *   - `bootMs`   — time to serve-ready (route registration + first compile)

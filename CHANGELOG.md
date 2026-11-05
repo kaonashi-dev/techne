@@ -6,6 +6,64 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Own schema library
+
+- **Breaking:** TypeBox is no longer vendored. `src/vendor/typebox/` (~46k
+  lines) is replaced by Techne's own minimal schema builder and compiler in
+  `src/schema/core/`. Schemas remain plain JSON Schema objects, so OpenAPI
+  emission, contract codegen, the fast stringifier and hand-written JSON
+  Schema all keep working.
+- **Breaking:** the `@kaonashi-dev/techne/typebox` and `/typebox/*` subpaths are
+  removed. Import `t`, `Static` and `TSchema` from the package root instead.
+  `Compile()` (with `Check`, `Errors`, `Convert`) is public from
+  `@kaonashi-dev/techne/server`; `Code()` is removed, as it had no users.
+- `schemaToOpenApi` (`/swagger`) and `schemaToTypeScript` (`/contract`) replace
+  `typeboxToOpenApi` and `typeboxToTypeScript`, which remain as deprecated
+  aliases.
+- The builder implements only the surface Techne uses: object/array/tuple/
+  record/union/intersection primitives, literals, `Any`/`Unknown`/`Never`/
+  `Null`, and the `Optional`/`Readonly`/`Partial`/`Required`/`Pick`/`Omit`
+  transforms. Formats are `email`, `uuid`, `date-time`, `date` and `uri`;
+  `date` and `date-time` check the calendar (days per month, leap years) and
+  time ranges, as TypeBox did.
+- Validation keeps the JSON-Schema-style `instancePath`/`keyword`/
+  `schemaPath`/`params` issue shape, and `Convert()` still coerces query,
+  params, header and environment strings. `Check()` remains compiled to
+  straight-line code and cached by schema identity.
+
+### Own HTTP core
+
+- **Breaking:** Techne no longer builds on Elysia. `createApp()` returns
+  Techne's own `App` (`src/server/`): router, schema validation, lifecycle
+  hooks, composition, cookies (with HMAC signing) and RFC 9457 errors in about
+  2k lines, replacing ~36k vendored lines of Elysia plus exact-mirror,
+  memoirist, deuri and openapi-types. Techne has no runtime `dependencies` and
+  no vendored code; schemas use the schema core above.
+- **Breaking:** the `Elysia` root export, the `@kaonashi-dev/techne/elysia*`
+  and `/exact-mirror` subpaths, `@elysiajs/*` plugin support and Eden are
+  removed. The root adds `App` and `ValidationError`; status helpers and error
+  classes are in the new `@kaonashi-dev/techne/server` subpath. The route
+  type map is now flat (`app["~routes"]["/users/:id"].get`).
+- **Breaking:** hooks apply to every route of their app and its mounted apps
+  regardless of registration order.
+- The decorator runtime's adapter is renamed `ElysiaAdapter` → `HttpAdapter`.
+- Native benchmarks compare against a hand-written `fetch` handler; on the
+  in-process suite the new core matches or beats the previous Elysia-based
+  numbers for static JSON and guarded routes.
+- Type checking uses TypeScript 7 with `verbatimModuleSyntax`; the
+  `typescript` peer dependency is `>= 7`. A new `typecheck` script (also in CI)
+  covers `src/` and `apps/demo`. The legacy `Reflect` metadata typings now load
+  from the import graph, so consumers type-checking the package see them.
+- The schema compiler emits straight-line `Check()` code and falls back to a
+  small interpreter when dynamic code generation is unavailable.
+
+### Toolchain
+
+- Formatting and linting use Bun's built-in `bun fmt` and `bun lint`; `oxfmt`
+  and `oxlint` are removed, and generated projects follow suit. `bun lint`
+  needs Bun canary. Scripts call `techne lint`, which fails with a clear error
+  on stable Bun instead of recursing through `bun run lint`.
+
 ### Native architecture
 
 - **Breaking:** the root API now exports `createApp`, `createResources` and native
@@ -20,7 +78,7 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Added the `apps/native` reference, architecture guide, native type contracts,
   generated-project verification and a raw-Elysia comparison benchmark.
 
-The following Elysia migration notes describe the retained legacy runtime.
+The following Elysia/TypeBox notes are historical; the own HTTP core and own schema library above supersede them.
 
 > **Breaking — Elysia 2.** Techne now builds on `elysia@2.0.0-beta.1` and
 > `typebox@1.x` in place of `elysia@1.4` and `@sinclair/typebox@0.34`. Apps that

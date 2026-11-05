@@ -8,7 +8,7 @@ export interface RequestIdPluginOptions {
 /**
  * Opt-in plugin that stamps a UUID onto `ctx.store.requestId` for every
  * inbound request when one isn't already set by the adapter or an inbound
- * header. The default `ElysiaAdapter` already handles this for first-party
+ * header. The default `HttpAdapter` already handles this for first-party
  * use; this plugin exists as a proof-of-concept for the plugin API and as
  * an extension point for users who disable the adapter-level behavior.
  *
@@ -20,9 +20,9 @@ export const requestIdPlugin = definePlugin<RequestIdPluginOptions | undefined>(
   version: "1.0.0",
   setup(ctx, options) {
     const header = options?.header ?? "x-request-id";
-    const elysia = ctx.http() as any;
+    const http = ctx.http() as any;
 
-    elysia.request((reqCtx: any) => {
+    http.request((reqCtx: any) => {
       reqCtx.store = reqCtx.store ?? {};
       if (typeof reqCtx.store.requestId === "string" && reqCtx.store.requestId.length > 0) {
         return;

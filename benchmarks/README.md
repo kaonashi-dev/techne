@@ -6,11 +6,11 @@ A small, deterministic-as-possible suite for tracking framework performance acro
 
 | File                 | Measures                                                                   |
 | -------------------- | -------------------------------------------------------------------------- |
-| `http.ts`            | Drop-in replacement for the original head-to-head: raw Elysia vs Techne.    |
-| `fast-path.ts`       | Arity-specialized compiled handler (no enhancers, arity ≤ 3).              |
+| `http.ts`            | Head-to-head: native app vs the legacy decorator runtime.                  |
+| `fast-path.ts`       | Arity-specialized compiled handler (no enhancers, arity ≤ 3) vs native.    |
 | `slow-path.ts`       | Cost-tagged enhancer path: static `@Injectable() CanActivate` guard.       |
-| `validation.ts`      | POST with TypeBox `body` schema, valid + invalid bodies.                   |
-| `response-schema.ts` | Routes with a `response` schema (exercises the fast TypeBox stringifier).  |
+| `validation.ts`      | POST with a `body` schema, valid + invalid bodies.                         |
+| `response-schema.ts` | Routes with a `response` schema (exercises the fast schema stringifier).   |
 | `di.ts`              | Container resolution throughput, cold (1st call) vs warm (100k calls).     |
 | `cold-start.ts`      | Time-to-first-request via a `Bun.spawn` child, N = 1, 10, 50 modules.      |
 | `socket.ts`          | The same routes over **real loopback TCP**, through `Bun.serve`.           |
@@ -21,7 +21,7 @@ Most HTTP scenarios use `app.handle()` in-process — no port, no socket, no ker
 scheduling noise. `socket.ts` is the deliberate exception: it exists to show how
 much of the in-process gap survives once real transport cost is added. Expect its
 absolute numbers to be an order of magnitude lower; the interesting figure is the
-Elysia-vs-Techne *ratio*, which is much tighter there.
+native-vs-decorator *ratio*.
 
 ## How to run
 
@@ -49,7 +49,7 @@ optimization.
 bun run benchmarks/index.ts --json > before.json
 # ...make the change...
 bun run benchmarks/index.ts --json > after.json
-bun run bench:compare before.json after.json --labels "Elysia 1.4,Elysia 2.0"
+bun run bench:compare before.json after.json --labels "before,after"
 ```
 
 It reports per-row deltas plus a **geometric mean**, which is the right summary
@@ -102,7 +102,7 @@ Two traps the harness now guards against, worth knowing if you extend it:
 
 ## Interpretation
 
-- **Raw Elysia is the absolute ceiling.** Anything Techne does costs something; a small constant overhead (a few µs of avg latency, ~10–40 % rps gap) is expected and healthy.
+- **The native app is the reference.** The decorator runtime adds DI, enhancer dispatch and parameter binding on top of it, so a small constant overhead over the native rows is expected.
 - The **slow-path** vs **fast-path** delta is the pure cost of the enhancer dispatcher. A static guard should hoist out at registration time, so the gap should be small.
 - **Validation invalid > valid** means error construction is fast; **validation invalid ≪ valid** signals eager rich-error allocation worth investigating.
 - **Response schema** with a stringifier should match or beat the plain JSON path. If it loses, the stringifier didn't fire — likely a schema-identity cache miss.

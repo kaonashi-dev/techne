@@ -181,7 +181,7 @@ function verifySignedToken(token: string, secret: string): boolean {
 }
 
 /**
- * Returns an Elysia `beforeHandle` middleware function that implements CSRF
+ * Returns a `beforeHandle` middleware function that implements CSRF
  * double-submit cookie protection.
  *
  * - **Safe methods** (GET, HEAD, OPTIONS): mints a fresh token into the CSRF
@@ -215,7 +215,7 @@ export function csrfProtection(opts: CsrfOptions = {}) {
     }
 
     // --- Cookie token resolution ---
-    // Prefer Elysia's structured cookie jar; fall back to raw header parse.
+    // Prefer the structured cookie jar; fall back to raw header parse.
     let cookieToken: string | undefined;
     const jar = (ctx as any).cookie;
     if (jar && typeof jar === "object") {
@@ -243,7 +243,7 @@ export function csrfProtection(opts: CsrfOptions = {}) {
           cookieOpts.httpOnly ? "; HttpOnly" : "",
         ].join("");
 
-        // Try to set via Elysia cookie jar first
+        // Try to set via the cookie jar first
         if (jar && typeof jar === "object" && jar[config.cookieName] !== undefined) {
           jar[config.cookieName].set({
             value: token,

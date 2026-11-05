@@ -5,9 +5,9 @@ interface MetricsOptions {
 }
 
 /**
- * A first-class Techne plugin. It registers a DI token, exposes a raw Elysia
+ * A first-class Techne plugin. It registers a DI token, exposes a raw HTTP
  * route at `/metrics`, and hooks the ready/shutdown lifecycle. The `/metrics`
- * route is registered directly on the Elysia instance, so it is not subject to
+ * route is registered directly on the underlying `App`, so it is not subject to
  * the global prefix, guards, or versioning.
  */
 export const MetricsPlugin = definePlugin<MetricsOptions>({

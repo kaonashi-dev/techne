@@ -1,7 +1,7 @@
 /**
  * Validation benchmark.
  *
- * A POST route with a TypeBox `body` schema. We measure two variants:
+ * A POST route with a `body` schema. We measure two variants:
  *  - valid body: the happy path; validation passes and the handler runs.
  *  - invalid body: validation fails and an error response is produced.
  *

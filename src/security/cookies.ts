@@ -10,7 +10,7 @@ export interface CookieSetOptions {
 }
 
 /**
- * Sets a cookie on Elysia's cookie jar with secure-by-default attributes.
+ * Sets a cookie on the request cookie jar (`ctx.cookie`) with secure-by-default attributes.
  *
  * Defaults:
  * - `httpOnly: true`

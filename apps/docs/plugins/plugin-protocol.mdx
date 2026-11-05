@@ -6,7 +6,7 @@ description: "definePlugin and PluginContext: provide/resolve, onReady, onShutdo
 Plugins are the sanctioned extension point. A plugin is a named, optionally
 dependency-ordered unit with a single `setup()` function that receives a
 `PluginContext` — the only surface allowed to mutate framework state, register
-DI tokens, hook into lifecycle, or reach the raw Elysia instance.
+DI tokens, hook into lifecycle, or reach the underlying HTTP `App`.
 
 ```ts
 import { definePlugin } from "@kaonashi-dev/techne/core";
@@ -49,7 +49,7 @@ await app.register(MetricsPlugin, { prefix: "myapp_" });
   HTTP server starts listening.
 - `ctx.onShutdown(handler)` fires in LIFO order during graceful shutdown,
   before the MQ registry closes and before `onModuleDestroy`.
-- `ctx.http()` returns the raw Elysia instance for low-level integrations.
+- `ctx.http()` returns the underlying Techne `App` for low-level integrations.
 
 ## Registration semantics
 

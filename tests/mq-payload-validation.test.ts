@@ -7,13 +7,13 @@
  * - validate: "consume" — bad payload dispatches fine, worker triggers @OnFailure
  * - validate: "both" — fails at dispatch AND at consume
  * - No validate option — back-compat passthrough (no validation)
- * - Raw TypeBox TSchema validation
+ * - Raw TSchema validation
  * - Schemas key not in jobs → TypeError at defineQueue time
  * - Schema for one job validates only that job; others are unvalidated
  */
 import "../src/reflect-setup";
 import { afterEach, describe, expect, test } from "bun:test";
-import * as Type from "typebox/type";
+import * as Type from "../src/schema/core";
 import { TechneFactory } from "../src/factory/techne-factory";
 import {
   Dispatchable,
@@ -145,9 +145,9 @@ describe("Queue payload validation", () => {
     expect(caught!.message).toContain("pv-dispatch-errmsg/initiate-task");
   });
 
-  // ── Raw TypeBox TSchema ────────────────────────────────────────────────────
+  // ── Raw TSchema ─────────────────────────────────────────────────────────────
 
-  test("validate: 'dispatch' with raw TypeBox TSchema", () => {
+  test("validate: 'dispatch' with raw TSchema", () => {
     const rawSchema = Type.Object({
       taskId: Type.String({ minLength: 1 }),
     });

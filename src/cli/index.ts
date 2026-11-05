@@ -14,6 +14,7 @@ import {
   generateCommand,
   createProject,
 } from "./generators";
+import { runLint } from "./lint";
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -159,8 +160,7 @@ async function doctor() {
   const tsconfigPath = path.join(process.cwd(), "tsconfig.json");
   if (await exists(tsconfigPath)) {
     const tsconfig = (await readJsonIfExists(tsconfigPath)) as
-      | { compilerOptions?: { strict?: boolean } }
-      | undefined;
+      { compilerOptions?: { strict?: boolean } } | undefined;
     if (!tsconfig) {
       warn(`tsconfig.json present but could not be parsed`);
     } else {
@@ -222,12 +222,13 @@ Usage:
   techne build|b [entry] --target <bun|node|browser> [--out <file>] [--minify] [--precompile]  (JS bundle)
   techne deploy --target docker [--out Dockerfile] [--port N] [--bun-version V] [--dry-run] [--force]
   techne doctor
+  techne lint [bun lint flags]                                                (native bun lint; needs Bun canary)
   techne run <command> [args...]
   techne list
   techne generate|g <type> <name>
 
 Available generators:
-  feature         (native Elysia plugin factory)
+  feature         (native app plugin factory)
   routes          (typed HTTP boundary)
   service
   resource
@@ -247,7 +248,7 @@ Build modes:
   --target=browser JS bundle for the browser.
 
 Build flags:
-  --precompile  Legacy decorator route manifest. Native apps compile through Elysia.
+  --precompile  Legacy decorator route manifest. Native apps compile their routes at startup.
 
 Deploy targets:
   docker   Multi-stage Bun Dockerfile (only target supported for now)
@@ -397,6 +398,8 @@ async function main() {
     await runTests(pattern, watch, coverage);
   } else if (command === "doctor") {
     await doctor();
+  } else if (command === "lint") {
+    process.exit(await runLint(args.slice(1)));
   } else if (command === "deploy") {
     await runDeploy();
   } else if (command === "run") {

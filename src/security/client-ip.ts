@@ -20,7 +20,7 @@ export interface TrustProxyOptions {
 }
 
 /**
- * Resolves the client IP for an Elysia request context.
+ * Resolves the client IP for a request context.
  *
  * With `trustProxy` falsy (the default), returns the socket peer address.
  * With `trustProxy: true` (or options), reads the forwarding header using

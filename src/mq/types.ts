@@ -100,13 +100,7 @@ export interface RegisterQueueOptions extends QueueOptions {
 export type JobState = "waiting" | "active" | "completed" | "failed" | "delayed" | "paused";
 
 export type QueueEventName =
-  | "waiting"
-  | "active"
-  | "completed"
-  | "failed"
-  | "progress"
-  | "stalled"
-  | "drained";
+  "waiting" | "active" | "completed" | "failed" | "progress" | "stalled" | "drained";
 
 export interface JobJson<T = unknown, R = unknown> {
   id: string;

@@ -4,7 +4,7 @@ description: "Opt-in distributed tracing and metrics via the telemetry() plugin,
 ---
 
 The `telemetry()` plugin adds OpenTelemetry tracing and metrics. It is built on
-the OpenTelemetry SDK directly (not `@elysiajs/opentelemetry`) so spans reuse the
+the OpenTelemetry SDK directly so spans reuse the
 same W3C trace context Techne already parses for logs — your logs and traces
 share one correlation id — and the framework's fused request hooks stay on the
 fast path.
@@ -170,9 +170,3 @@ OpenTelemetry's API uses process-global providers. Techne therefore allows one
 active `telemetry()` plugin per process and fails fast if a second application
 tries to start another SDK. A new application can start telemetry after the
 first one has closed.
-
-<Note>
-  Prefer the native plugin above. If you specifically want the `@elysiajs/opentelemetry` package
-  instead, you can still register it as an [Elysia plugin](/plugins/using-elysia-plugins) — but it
-  sets up a separate trace context, so its span ids won't match the ones in Techne's logs.
-</Note>
