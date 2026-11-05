@@ -24,7 +24,10 @@ function formatLiteral(value: unknown): string {
  * is surfaced by the parent {@link emitObject} call — this function only
  * cares about the value shape.
  */
-export function typeboxToTypeScript(schema: unknown): string {
+/** @deprecated Renamed to {@link schemaToTypeScript}; Techne no longer uses TypeBox. */
+export const typeboxToTypeScript = (schema: unknown): string => schemaToTypeScript(schema);
+
+export function schemaToTypeScript(schema: unknown): string {
   if (!schema || typeof schema !== "object") return "unknown";
   const node = schema as AnySchema;
   const kind = kindOf(node);
@@ -50,32 +53,32 @@ export function typeboxToTypeScript(schema: unknown): string {
       return values.length === 0 ? "never" : values.map(formatLiteral).join(" | ");
     }
     case "Array": {
-      const inner = typeboxToTypeScript(node.items);
+      const inner = schemaToTypeScript(node.items);
       // Wrap unions so `(a | b)[]` parses correctly.
       return inner.includes("|") || inner.includes("&") ? `(${inner})[]` : `${inner}[]`;
     }
     case "Object":
       return emitObject(node);
     case "Union": {
-      const members = unionMembers(node).map(typeboxToTypeScript);
+      const members = unionMembers(node).map(schemaToTypeScript);
       if (members.length === 0) return "never";
       return members.join(" | ");
     }
     case "Intersect": {
-      const members = ((node.allOf ?? []) as unknown[]).map(typeboxToTypeScript);
+      const members = ((node.allOf ?? []) as unknown[]).map(schemaToTypeScript);
       if (members.length === 0) return "unknown";
       return members.map((m) => (m.includes("|") ? `(${m})` : m)).join(" & ");
     }
     case "Tuple": {
       const items = tupleMembers(node);
       if (items.length === 0) return "[]";
-      return `[${items.map(typeboxToTypeScript).join(", ")}]`;
+      return `[${items.map(schemaToTypeScript).join(", ")}]`;
     }
     case "Record": {
       // `Record(K, V)` lowers to `{ patternProperties: { "...": V } }`.
       const pattern = node.patternProperties as Record<string, unknown> | undefined;
       const valueSchema = pattern ? Object.values(pattern)[0] : undefined;
-      const valueType = valueSchema ? typeboxToTypeScript(valueSchema) : "unknown";
+      const valueType = valueSchema ? schemaToTypeScript(valueSchema) : "unknown";
       return `Record<string, ${valueType}>`;
     }
   }
@@ -95,7 +98,7 @@ function emitObject(node: AnySchema): string {
     const value = props[key];
     const optionalMark = required.has(key) ? "" : "?";
     const safeKey = /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key) ? key : JSON.stringify(key);
-    lines.push(`${safeKey}${optionalMark}: ${typeboxToTypeScript(value)}`);
+    lines.push(`${safeKey}${optionalMark}: ${schemaToTypeScript(value)}`);
   }
   return `{ ${lines.join("; ")} }`;
 }
@@ -120,7 +123,7 @@ function extractPathParamNames(path: string): string[] {
  * users can still call `params: { id: "42" }` with type safety.
  */
 function paramsTypeFor(path: string, schema: unknown): string {
-  if (schema) return typeboxToTypeScript(schema);
+  if (schema) return schemaToTypeScript(schema);
   const names = extractPathParamNames(path);
   if (names.length === 0) return "undefined";
   return `{ ${names.map((n) => `${n}: string`).join("; ")} }`;
@@ -128,7 +131,7 @@ function paramsTypeFor(path: string, schema: unknown): string {
 
 function slotTypeFor(schema: unknown): string {
   if (schema === undefined || schema === null) return "undefined";
-  return typeboxToTypeScript(schema);
+  return schemaToTypeScript(schema);
 }
 
 // ─── Public emitter ──────────────────────────────────────────────────────────

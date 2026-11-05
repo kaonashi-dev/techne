@@ -47,12 +47,13 @@ function compileCheck(schema: TSchema): CheckFn {
     let counter = 0;
     const next = (prefix: string): string => `${prefix}${counter++}`;
     const expression = buildExpression(schema, "value", addHelper, next);
+    // Bind the helpers once: the returned function takes only `value`, so a
+    // check never spreads the helper list.
     const factory = new Function(
       ...helpers.map((_, index) => `h${index}`),
-      "value",
-      `return ${expression};`,
-    ) as (...args: unknown[]) => boolean;
-    return (value) => factory(...helpers, value);
+      `return function check(value){return ${expression};};`,
+    ) as (...args: Helper[]) => CheckFn;
+    return factory(...helpers);
   } catch {
     return (value) => checkSchema(schema, value);
   }

@@ -6,7 +6,7 @@ import { TechneFactory, __resetTechneConfigCache } from "../src/factory/techne-f
 import { RedisQueueDriver as QueueRedisDriver } from "../src/queue/drivers/redis";
 import { RedisQueueDriver as MqRedisDriver } from "../src/mq/drivers/redis";
 import { Logger, BufferSink } from "../src/services/logger.service";
-import { emitOpenApiDocument, typeboxToOpenApi } from "../src/swagger";
+import { emitOpenApiDocument, schemaToOpenApi } from "../src/swagger";
 describe("Techne migration regressions", () => {
   test("Redis-backed defaults use Techne key prefixes", () => {
     const queueDriver = new QueueRedisDriver({ client: {} } as any) as any;
@@ -35,7 +35,7 @@ describe("Techne migration regressions", () => {
     const app = await TechneFactory.create({ logger: false });
     const doc = emitOpenApiDocument(app);
     expect(doc.info.title).toBe("Techne API");
-    const unknown = typeboxToOpenApi({
+    const unknown = schemaToOpenApi({
       "~kind": "CustomKind",
       custom: true,
     });

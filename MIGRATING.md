@@ -13,7 +13,7 @@ Breaking changes:
 
 | Before | After |
 | --- | --- |
-| `import { Compile } from "@kaonashi-dev/techne/typebox/compile"` | Removed; use route schemas or `Compile` from `src/schema/core` inside Techne |
+| `import { Compile } from "@kaonashi-dev/techne/typebox/compile"` | `import { Compile } from "@kaonashi-dev/techne/server"` (`Check`, `Errors`, `Convert`) |
 | `import * as Type from "@kaonashi-dev/techne/typebox/type"` | `import { t } from "@kaonashi-dev/techne"` |
 | `import type { Static, TSchema } from "@kaonashi-dev/techne/typebox"` | `import type { Static, TSchema } from "@kaonashi-dev/techne"` |
 | `/typebox/value`, `/typebox/schema`, `/typebox/guard`, `/typebox/format`, `/typebox/system`, `/typebox/error` | Removed; schemas are ordinary JSON Schema |

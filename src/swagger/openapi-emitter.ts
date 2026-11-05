@@ -124,7 +124,10 @@ function pickKeys<T extends Record<string, unknown>>(
  * Walks the schema structurally so `Union`, `Literal`, `Optional` and the other
  * builder shapes map to the OpenAPI 3.1 equivalents.
  */
-export function typeboxToOpenApi(schema: unknown): OpenApiSchema {
+/** @deprecated Renamed to {@link schemaToOpenApi}; Techne no longer uses TypeBox. */
+export const typeboxToOpenApi = (schema: unknown): OpenApiSchema => schemaToOpenApi(schema);
+
+export function schemaToOpenApi(schema: unknown): OpenApiSchema {
   if (!schema || typeof schema !== "object") return {};
   const node = schema as AnySchema;
   const kind = kindOf(node);
@@ -155,7 +158,7 @@ export function typeboxToOpenApi(schema: unknown): OpenApiSchema {
       const items = node.items;
       return {
         type: "array",
-        items: typeboxToOpenApi(items),
+        items: schemaToOpenApi(items),
         ...pickKeys(node, ARRAY_OPT_KEYS),
       };
     }
@@ -168,7 +171,7 @@ export function typeboxToOpenApi(schema: unknown): OpenApiSchema {
       const declaredRequired = requiredKeys(node);
       const required: string[] = [];
       for (const key of Object.keys(props)) {
-        properties[key] = typeboxToOpenApi(props[key]);
+        properties[key] = schemaToOpenApi(props[key]);
         if (declaredRequired.has(key)) required.push(key);
       }
       const out: OpenApiSchema = { type: "object", properties };
@@ -176,13 +179,13 @@ export function typeboxToOpenApi(schema: unknown): OpenApiSchema {
       if (node.additionalProperties !== undefined) {
         out.additionalProperties =
           typeof node.additionalProperties === "object"
-            ? typeboxToOpenApi(node.additionalProperties)
+            ? schemaToOpenApi(node.additionalProperties)
             : (node.additionalProperties as boolean);
       }
       return out;
     }
     case "Union": {
-      return { oneOf: unionMembers(node).map(typeboxToOpenApi) };
+      return { oneOf: unionMembers(node).map(schemaToOpenApi) };
     }
     case "Enum": {
       return { enum: node.enum as unknown[] };
@@ -192,7 +195,7 @@ export function typeboxToOpenApi(schema: unknown): OpenApiSchema {
     }
     case "Intersect": {
       const members = (node.allOf ?? []) as unknown[];
-      return { allOf: members.map(typeboxToOpenApi) };
+      return { allOf: members.map(schemaToOpenApi) };
     }
     case "Record": {
       // `Record(K, V)` lowers to `{ type: "object", patternProperties }`.
@@ -207,7 +210,7 @@ export function typeboxToOpenApi(schema: unknown): OpenApiSchema {
       const items = tupleMembers(node);
       return {
         type: "array",
-        prefixItems: items.map(typeboxToOpenApi),
+        prefixItems: items.map(schemaToOpenApi),
         minItems: items.length,
         maxItems: items.length,
       };
@@ -251,7 +254,7 @@ function paramsFromObjectSchema(schema: unknown, location: "path" | "query"): Op
       name,
       in: location,
       required: isReq,
-      schema: typeboxToOpenApi(value),
+      schema: schemaToOpenApi(value),
     });
   }
   return out;
@@ -290,7 +293,7 @@ const PROBLEM_SCHEMA: OpenApiSchema = {
  * Walk the application's registered routes and produce an OpenAPI 3.1 document.
  *
  * Each `CompiledRouteDefinition` contributes one operation; its
- * `schema.{params,query,body,response}` are converted via `typeboxToOpenApi`.
+ * `schema.{params,query,body,response}` are converted via `schemaToOpenApi`.
  * Top-level metadata (title/version/description/servers/tags) comes from the
  * optional `DocumentBuilder`. Manually-added paths on the builder take
  * precedence over auto-discovered ones — this lets escape-hatch users override
@@ -319,7 +322,7 @@ export function emitOpenApiDocument(
     if (route.schema?.response) {
       responses["200"] = {
         description: "Successful response",
-        content: { "application/json": { schema: typeboxToOpenApi(route.schema.response) } },
+        content: { "application/json": { schema: schemaToOpenApi(route.schema.response) } },
       };
     } else {
       responses["200"] = { description: "OK" };
@@ -336,7 +339,7 @@ export function emitOpenApiDocument(
     if (route.schema?.body) {
       operation.requestBody = {
         required: true,
-        content: { "application/json": { schema: typeboxToOpenApi(route.schema.body) } },
+        content: { "application/json": { schema: schemaToOpenApi(route.schema.body) } },
       };
     }
 

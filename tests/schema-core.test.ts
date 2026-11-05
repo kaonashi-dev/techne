@@ -205,3 +205,14 @@ describe("schema coercion", () => {
     expect(compile(schema).Convert("12")).toBe(12);
   });
 });
+
+describe("deprecated TypeBox-named aliases", () => {
+  test("typeboxToOpenApi and typeboxToTypeScript still delegate", async () => {
+    const { schemaToOpenApi, typeboxToOpenApi } = await import("../src/swagger");
+    const { schemaToTypeScript, typeboxToTypeScript } = await import("../src/contract");
+    const { t } = await import("../src");
+    const schema = t.Object({ a: t.String() });
+    expect(typeboxToOpenApi(schema)).toEqual(schemaToOpenApi(schema));
+    expect(typeboxToTypeScript(schema)).toBe(schemaToTypeScript(schema));
+  });
+});

@@ -1,4 +1,6 @@
 export { App, RequestContext, toResponse } from "./app";
+export { Compile } from "../schema/core/compile";
+export type { Validator } from "../schema/core/types";
 export {
   HttpError,
   InvalidCookieSignatureError,

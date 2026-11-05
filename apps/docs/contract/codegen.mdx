@@ -15,12 +15,12 @@ Under the hood the generator uses two helpers from
 
 - `generateRoutesType(app)` — walks the running application and returns a
   TypeScript source string declaring the `Routes` route map.
-- `typeboxToTypeScript(schema)` — converts a single Techne schema into its
+- `schemaToTypeScript(schema)` — converts a single Techne schema into its
   TypeScript equivalent. Useful when you want to emit additional types
   (shared DTOs, enum unions) into the same generated file.
 
 ```ts
-import { generateRoutesType, typeboxToTypeScript } from "@kaonashi-dev/techne/contract";
+import { generateRoutesType, schemaToTypeScript } from "@kaonashi-dev/techne/contract";
 
 const routes = await generateRoutesType(app);
 await Bun.write("./src/generated-routes.ts", routes);

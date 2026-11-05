@@ -7,7 +7,7 @@ import {
   ClientError,
   createClient,
   generateRoutesType,
-  typeboxToTypeScript,
+  schemaToTypeScript,
   type RouteHandler,
 } from "../src/contract";
 interface MockCall {
@@ -181,7 +181,7 @@ describe("contract / createClient", () => {
 });
 describe("contract / schema type codegen", () => {
   test("emits object types with optional markers", () => {
-    const out = typeboxToTypeScript(
+    const out = schemaToTypeScript(
       Schema.Object({
         id: Schema.String(),
         nickname: Schema.Optional(Schema.String()),
@@ -193,13 +193,13 @@ describe("contract / schema type codegen", () => {
     expect(out).toContain("count: number");
   });
   test("emits unions, literals, and arrays", () => {
-    expect(typeboxToTypeScript(Schema.Union([Schema.String(), Schema.Number()]))).toBe(
+    expect(schemaToTypeScript(Schema.Union([Schema.String(), Schema.Number()]))).toBe(
       "string | number",
     );
-    expect(typeboxToTypeScript(Schema.Literal("draft"))).toBe(`"draft"`);
-    expect(typeboxToTypeScript(Schema.Array(Schema.String()))).toBe("string[]");
-    expect(typeboxToTypeScript(Schema.Any())).toBe("unknown");
-    expect(typeboxToTypeScript(Schema.Boolean())).toBe("boolean");
+    expect(schemaToTypeScript(Schema.Literal("draft"))).toBe(`"draft"`);
+    expect(schemaToTypeScript(Schema.Array(Schema.String()))).toBe("string[]");
+    expect(schemaToTypeScript(Schema.Any())).toBe("unknown");
+    expect(schemaToTypeScript(Schema.Boolean())).toBe("boolean");
   });
 });
 describe("contract / generateRoutesType", () => {
