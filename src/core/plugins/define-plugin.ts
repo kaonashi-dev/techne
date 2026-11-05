@@ -4,7 +4,7 @@ import type { Logger } from "../../services/logger.service";
 /**
  * Context handed to a plugin's `setup()`. The context is the only sanctioned
  * surface for plugins to mutate framework state, register DI tokens, subscribe
- * to lifecycle events, or hook into the raw Elysia instance.
+ * to lifecycle events, or hook into the underlying HTTP app.
  */
 export interface PluginContext {
   /** The hosting application. Prefer the helpers below over reaching in. */
@@ -30,8 +30,8 @@ export interface PluginContext {
    * mq registry closes and BEFORE `onModuleDestroy` runs.
    */
   onShutdown(handler: () => void | Promise<void>): void;
-  /** Access the raw Elysia instance for low-level work (routes, hooks, etc.). */
-  http(): import("../../vendor/elysia/index").Elysia;
+  /** Access the underlying HTTP app for low-level work (routes, hooks, etc.). */
+  http(): import("../../server/app").App<any, any, any, any, any>;
   /** Logger pre-scoped to the plugin's name. */
   logger: Logger;
 }

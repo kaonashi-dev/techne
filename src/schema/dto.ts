@@ -134,7 +134,7 @@ export function getOrCreateDtoSchema(target: Function): TSchema | undefined {
  * - `additionalProperties` is forced to `true` — HTTP headers always carry
  *   standard fields like `host`, `accept`, `user-agent`, etc. that are not
  *   part of the DTO, so rejecting unknown properties would break every request.
- * - All property keys are lowercased because Elysia (and the HTTP/1.1 spec)
+ * - All property keys are lowercased because the HTTP app (and the HTTP/1.1 spec)
  *   normalises header names to lowercase before placing them on `ctx.headers`.
  *
  * The result is cached in a separate registry so the strict body validator
@@ -170,7 +170,7 @@ export function buildHeaderSchemaFromClass(target: Function): TSchema {
 /**
  * Returns a lenient TypeBox schema derived from the DTO class with
  * `additionalProperties: true` (open object). Used by the strip-unknown
- * feature: Elysia validates the known properties but does not reject requests
+ * feature: validation checks the known properties but does not reject requests
  * that carry extra fields. The actual stripping happens in a per-route
  * `beforeHandle` step (see `router-execution-context.ts`).
  *
@@ -570,7 +570,7 @@ function getObjectOptions(klass: ClassConstructor): Record<string, unknown> {
  * Collapse a raw validator error list into Techne's property-keyed
  * `ValidationError[]`.
  *
- * TypeBox 1.x (via Elysia 2) reports errors in the AJV/JSON-Schema idiom:
+ * TypeBox 1.x reports errors in the AJV/JSON-Schema idiom:
  * `instancePath` for the JSON Pointer, `keyword` for the failing constraint,
  * and no `value` field at all. TypeBox 0.34 used `path`, a numeric `type`, and
  * carried `value`. Both spellings are accepted so a caller passing 0.34-shaped

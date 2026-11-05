@@ -39,10 +39,13 @@ jobs:
       - name: Test
         run: bun test tests/*.test.ts
 
+      - name: Typecheck (TypeScript 7)
+        run: bun run typecheck
+
       - name: Native API type contracts (without decorators)
         run: bun run test:types
 
-      - name: Native Elysia comparison smoke
+      - name: Native benchmark smoke
         run: bun run bench:native --quick
 
       - name: Bench smoke (quick matrix)

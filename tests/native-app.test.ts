@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { createApp, Elysia, problem, status, t } from "../src";
+import { App, createApp, problem, status, t } from "../src";
 
-describe("Elysia-native composition", () => {
+describe("native composition", () => {
   test("keeps legacy and optional subsystems out of the root dependency graph", async () => {
     const build = await Bun.build({
       entrypoints: [new URL("../src/index.ts", import.meta.url).pathname],
@@ -16,15 +16,10 @@ describe("Elysia-native composition", () => {
     expect(inputs.filter((input) => legacy.test(input))).toEqual([]);
   });
 
-  test("returns an actual Elysia instance with native options", () => {
-    const app = createApp({ prefix: "/api", strictPath: true, precompile: false });
-    expect(Object.getPrototypeOf(app)).toBe(Elysia.prototype);
-    expect(app["~config"]).toMatchObject({
-      prefix: "/api",
-      strictPath: true,
-      precompile: false,
-    });
-    expect(createApp()["~config"]?.precompile).toBe(true);
+  test("returns a Techne App with its options", () => {
+    const app = createApp({ prefix: "/api", strictPath: true });
+    expect(app).toBeInstanceOf(App);
+    expect(app.config).toMatchObject({ prefix: "/api", strictPath: true });
   });
 
   test("composes typed routes with explicit dependencies and native validation", async () => {
@@ -92,7 +87,7 @@ describe("Elysia-native composition", () => {
     expect(await publicResponse.text()).toBe("public");
   });
 
-  test("supports listening, fetching and stopping using Elysia lifecycle", async () => {
+  test("supports listening, fetching and stopping", async () => {
     let stopped = false;
     const app = createApp()
       .get("/", () => "native")

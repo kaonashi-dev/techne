@@ -97,7 +97,7 @@ export interface OpenApiDocument {
 
 // ─── Schema detection ────────────────────────────────────────────────────────
 // Node kinds are derived structurally from the JSON Schema itself. TypeBox 1.x
-// (the version Elysia 2 uses) no longer stamps `Symbol.for("TypeBox.Kind")` on
+// no longer stamps `Symbol.for("TypeBox.Kind")` on
 // its output, so the tag we used to read simply isn't there any more. See
 // `src/schema/json-schema-kind.ts` for the full rationale.
 type AnyTypeBox = { [key: string]: unknown };

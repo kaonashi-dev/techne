@@ -248,7 +248,7 @@ function createExtractor(
       const cookieName = name;
       return (ctx: any) => {
         if (!cookieName) return undefined;
-        // Try Elysia's structured cookie jar first
+        // Try the structured cookie jar first
         const jar = ctx.cookie;
         if (jar && typeof jar === "object") {
           const entry = jar[cookieName];
@@ -623,9 +623,9 @@ export class RouterExecutionContext {
     this.routeCaches.push(cache);
     cache.recompile();
 
-    // Outer Elysia-registered wrapper indirects through `cache.handler` so that
+    // Outer registered wrapper indirects through `cache.handler` so that
     // a post-boot `refreshRouteCache` recompile (e.g. global filters change)
-    // can swap the closure without re-registering with Elysia.
+    // can swap the closure without re-registering the route.
     const handler = (context: RequestHandlerContext) => cache.handler(context);
 
     return {

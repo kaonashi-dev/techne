@@ -16,11 +16,21 @@
         "groups": [
           {
             "group": "Get started",
-            "pages": ["introduction", "installation", "quickstart", "project-structure"]
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart",
+              "project-structure"
+            ]
           },
           {
             "group": "Native architecture",
-            "pages": ["native-composition", "native-performance", "native-migration"]
+            "pages": [
+              "native-composition",
+              "plugins/native-plugins",
+              "native-performance",
+              "native-migration"
+            ]
           }
         ]
       },
@@ -60,8 +70,7 @@
           {
             "group": "Plugins",
             "pages": [
-              "plugins/plugin-protocol",
-              "plugins/using-elysia-plugins"
+              "plugins/plugin-protocol"
             ]
           },
           {
@@ -235,5 +244,11 @@
     "socials": {
       "github": "https://github.com/kaonashi-dev/techne"
     }
-  }
+  },
+  "redirects": [
+    {
+      "source": "/plugins/using-elysia-plugins",
+      "destination": "/plugins/native-plugins"
+    }
+  ]
 }

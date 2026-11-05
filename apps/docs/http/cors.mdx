@@ -1,10 +1,10 @@
 ---
 title: "CORS"
-description: "Enable CORS declaratively in techne.config.ts or attach the Elysia plugin directly."
+description: "Enable CORS declaratively in techne.config.ts."
 ---
 
-The simplest path is to set `cors` in `techne.config.ts`. The options object
-is forwarded straight to the underlying Elysia CORS plugin:
+Set `cors` in `techne.config.ts`. Techne's HTTP adapter handles preflight
+requests and adds the CORS headers itself:
 
 ```ts
 // techne.config.ts
@@ -23,17 +23,16 @@ export default defineTechneConfig({
   rejected at boot — that pairing would let any site read authenticated cross-origin responses.
 </Warning>
 
-## Plugin form
+## Options
 
-If you need fine-grained control (multiple instances, dynamic origin
-resolution, conditional attach), attach the Elysia CORS plugin directly:
+| Option           | Type                            | Description                                   |
+| ---------------- | ------------------------------- | --------------------------------------------- |
+| `origin`         | `string \| string[] \| boolean` | Allowed origin(s); `true` reflects the origin |
+| `methods`        | `string[]`                      | `Access-Control-Allow-Methods`                |
+| `allowedHeaders` | `string[]`                      | `Access-Control-Allow-Headers`                |
+| `exposedHeaders` | `string[]`                      | `Access-Control-Expose-Headers`               |
+| `credentials`    | `boolean`                       | `Access-Control-Allow-Credentials`            |
+| `maxAge`         | `number`                        | `Access-Control-Max-Age` in seconds           |
 
-```ts
-import { cors } from "@elysiajs/cors";
-
-app.use(cors());
-```
-
-`app.use()` accepts any native Elysia plugin and is the same path Techne
-plugins use under the hood. See [Using Elysia plugins](/plugins/using-elysia-plugins)
-for interop notes.
+Native apps built with `createApp()` add CORS as a
+[native plugin](/plugins/native-plugins).

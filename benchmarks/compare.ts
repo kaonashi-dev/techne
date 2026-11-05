@@ -13,7 +13,7 @@
  *   bun run benchmarks/compare.ts /tmp/before.json /tmp/after.json
  *
  * Flags:
- *   --labels "Elysia 1.4,Elysia 2.0"   column headers (default: file basenames)
+ *   --labels "before,after"   column headers (default: file basenames)
  *   --threshold 0.05                   below this, a delta renders as "≈"
  *   --json                             machine-readable output
  *

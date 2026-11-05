@@ -5,7 +5,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
  * A minimal `AsyncLocalStorage`-backed OTel context manager.
  *
  * We roll our own (instead of `@opentelemetry/context-async-hooks`) for one
- * reason: {@link enterWith}. Elysia's lifecycle phases aren't a single callback
+ * reason: {@link enterWith}. The HTTP lifecycle phases aren't a single callback
  * we can wrap in `context.with(...)`, so we set the active span in `onRequest`
  * via `enterWith` and let it propagate to the handler and terminal hooks — the
  * exact pattern the framework already uses for its `requestContext` ALS.

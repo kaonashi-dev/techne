@@ -107,7 +107,7 @@ const createBuiltinParamDecorator = (type: ParamType) => {
  * - `@Body()`           — whole body, no automatic schema injection
  * - `@Body('field')`    — `body.field`
  * - `@Body(CreateDto)`  — whole body + auto-injects the DTO's TypeBox schema
- *                         into Elysia's validation for this route
+ *                         into the route's validation
  */
 export function Body(nameOrDto?: string | Function): ParameterDecorator {
   return (target: object, propertyKey: string | symbol | undefined, parameterIndex: number) => {
@@ -136,7 +136,7 @@ export const Query = createBuiltinParamDecorator("query");
  * - `@Headers('x-api-key')` — single header value
  * - `@Headers(AuthHeaders)` — whole headers object + auto-injects the DTO's
  *                             TypeBox schema (additionalProperties: true,
- *                             lowercased keys) into Elysia's header validation
+ *                             lowercased keys) into the route's header validation
  */
 export function Headers(nameOrDto?: string | Function): ParameterDecorator {
   return (target: object, propertyKey: string | symbol | undefined, parameterIndex: number) => {

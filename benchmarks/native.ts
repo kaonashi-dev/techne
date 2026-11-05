@@ -1,14 +1,15 @@
 /**
- * Same route builder, dependencies and native hooks for both constructors.
+ * The same four routes as a Techne native app and as a hand-written `fetch`
+ * handler (the floor: routing, validation and serialization done by hand).
  * Measures in-process Request/Response dispatch, not socket throughput.
  */
-import { Elysia, t } from "../src/vendor/elysia/index";
-import { createApp } from "../src";
+import { createApp, t } from "../src";
 import { emitResults, getDefaults, isQuick, runScenario, type ScenarioResult } from "./scenarios";
 
-function routes(app: Elysia) {
-  const users = { find: (id: string) => ({ id, name: "Ada" }) };
-  return app
+const users = { find: (id: string) => ({ id, name: "Ada" }) };
+
+function nativeApp() {
+  return createApp()
     .get("/static", { message: "hello" })
     .get("/users/:id", ({ params }) => users.find(params.id))
     .post(
@@ -20,7 +21,7 @@ function routes(app: Elysia) {
       ({ body }) => ({ name: body.name }),
     )
     .use(
-      new Elysia({ prefix: "/guarded" })
+      createApp({ prefix: "/guarded" })
         .beforeHandle(({ headers, status }) => {
           if (headers.authorization !== "Bearer bench") return status(401);
         })
@@ -28,10 +29,37 @@ function routes(app: Elysia) {
     );
 }
 
+const json = (value: unknown, status = 200) =>
+  new Response(JSON.stringify(value), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+
+const rawApp = {
+  async handle(request: Request): Promise<Response> {
+    const url = request.url;
+    const path = url.slice(url.indexOf("/", url.indexOf("://") + 3));
+    if (request.method === "GET" && path === "/static") return json({ message: "hello" });
+    if (request.method === "GET" && path.startsWith("/users/")) {
+      return json(users.find(decodeURIComponent(path.slice(7))));
+    }
+    if (request.method === "POST" && path === "/users") {
+      const body = (await request.json()) as { name?: unknown };
+      if (typeof body?.name !== "string" || body.name.length < 1) return json({}, 422);
+      return json({ name: body.name });
+    }
+    if (request.method === "GET" && path === "/guarded") {
+      if (request.headers.get("authorization") !== "Bearer bench") return json({}, 401);
+      return json({ ok: true });
+    }
+    return json({}, 404);
+  },
+};
+
 export async function runNativeBench(): Promise<ScenarioResult[]> {
   const apps = [
-    { name: "Elysia native", app: routes(new Elysia({ precompile: true })) },
-    { name: "Techne native", app: routes(createApp()) },
+    { name: "Raw fetch handler", app: rawApp },
+    { name: "Techne native", app: nativeApp() },
   ];
   const requests = [
     { label: "static JSON", make: () => new Request("http://localhost/static") },

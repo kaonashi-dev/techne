@@ -3,7 +3,7 @@ import { kindOf, requiredKeys, tupleMembers, unionMembers } from "../schema/json
 
 // ─── Schema introspection ────────────────────────────────────────────────────
 // Mirrors the pattern in `src/swagger/openapi-emitter.ts`: node kinds are
-// derived structurally from the JSON Schema. TypeBox 1.x (used by Elysia 2)
+// derived structurally from the JSON Schema. TypeBox 1.x
 // dropped the `Symbol.for("TypeBox.Kind")` tags this module used to read.
 
 type AnyTypeBox = { [key: string]: unknown };

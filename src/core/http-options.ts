@@ -22,7 +22,7 @@ export interface CorsOptions {
 }
 
 /**
- * Native server limits, forwarded to `Bun.serve` via Elysia's object-form
+ * Native server limits, forwarded to `Bun.serve` via the object-form
  * `listen()`. Enforced by the runtime before any framework code runs, so
  * they only apply to real sockets — `app.handle()` (tests, embedded use)
  * bypasses `Bun.serve` entirely.
@@ -73,8 +73,8 @@ export interface RouteRegistrationOptions {
 }
 
 /**
- * Cookie signing configuration passed to the Elysia constructor.
- * Elysia's built-in cookie jar handles signing for cookies listed in `sign`.
+ * Cookie signing configuration for the HTTP app.
+ * Its cookie jar (`ctx.cookie`) signs and verifies the cookies listed in `sign`.
  */
 export interface CookieOptions {
   /** One or more secrets used to sign cookies (rotated: first is active). */

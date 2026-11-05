@@ -41,7 +41,7 @@ export function getDeferredBuffer(): PendingDispatch[] | undefined {
  * buffer on the current async resource so all continuations in this request's
  * promise chain inherit it. Call this from the HTTP adapter's `onRequest` hook.
  *
- * Prefer this over `runWithDeferredBuffer` in Elysia hooks because hooks are
+ * Prefer this over `runWithDeferredBuffer` in HTTP hooks because hooks are
  * sequential continuations of the same promise chain; `enterWith` is sufficient
  * and avoids having to wrap the entire request in a `run()` callback.
  */

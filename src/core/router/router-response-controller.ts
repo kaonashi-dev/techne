@@ -62,7 +62,7 @@ export function isProductionEnv(): boolean {
  * Optional observer invoked once per mapped exception, BEFORE the problem
  * document is built. The telemetry plugin registers one to record the thrown
  * error on the active OpenTelemetry span — handler exceptions are caught by the
- * route wrapper and turned into responses here, so they never reach Elysia's
+ * route wrapper and turned into responses here, so they never reach the HTTP app's
  * `onError`, making `mapException` the single choke point. Core stays unaware of
  * OTel; the observer is a plain callback and failures inside it never affect
  * error mapping.
@@ -159,7 +159,7 @@ export class RouterResponseController {
 
     // Compatibility branch for callers that throw raw ValidationError[] from
     // custom pipes or filters. Route DTO validation itself is handled by
-    // Elysia before handlers run.
+    // the HTTP app before handlers run.
     if (Array.isArray(error) && this.isValidationErrorArray(error)) {
       const body = this.buildProblem({
         status: 422,

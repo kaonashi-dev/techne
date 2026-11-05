@@ -159,14 +159,14 @@ describe("telemetry plugin — tracing", () => {
     }
   });
 
-  test("resolves an Elysia status keyword to its numeric code", async () => {
+  test("resolves a status name to its numeric code", async () => {
     const exporter = new InMemorySpanExporter();
     const app = await TechneFactory.create({
       controllers: [UsersController],
       logger: false,
       plugins: [telemetry({ enabled: true, metrics: false, spanExporter: exporter })],
     });
-    // A raw Elysia route can set `set.status` to a keyword the framework's
+    // A raw route can set `set.status` to a keyword the framework's
     // router never produces.
     (app.getHttpAdapter() as any).get("/keyword-status", ({ set }: any) => {
       set.status = "Created";

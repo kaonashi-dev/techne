@@ -9,7 +9,7 @@
  *
  * Validation strategy:
  *  - "with response schema": Techne stringifies via the compiled stringifier.
- *  - "no response schema":   Techne stringifies via Elysia's default path
+ *  - "no response schema":   Techne stringifies via the default JSON path
  *                            (which delegates to `JSON.stringify`).
  *
  * The first should be ≥ the second.

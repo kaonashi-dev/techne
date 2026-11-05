@@ -40,10 +40,10 @@ ViewedProfile.dispatch({ userId: id }).delay(5_000).tries(2).afterResponse(); //
 
 ## How it works
 
-- The `mq()` plugin registers two Elysia hooks:
-  - **`onRequest`** — calls `enterDeferredBuffer()` which sets up a fresh
+- The `mq()` plugin registers two HTTP hooks:
+  - **`request`** — calls `enterDeferredBuffer()` which sets up a fresh
     `AsyncLocalStorage`-scoped buffer for the current request.
-  - **`onAfterResponse`** — calls `flushDeferred()` which drains the
+  - **`afterResponse`** — calls `flushDeferred()` which drains the
     buffer and `await`s each `PendingDispatch` in declaration order.
 - `dispatchAfterResponse` / `.afterResponse()` push the builder onto the
   current request's ALS buffer.

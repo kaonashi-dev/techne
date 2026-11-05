@@ -32,7 +32,8 @@ describe("public API", () => {
   test("keeps the root export minimal", async () => {
     const root = await import("@kaonashi-dev/techne");
     expect(Object.keys(root).sort()).toEqual([
-      "Elysia",
+      "App",
+      "ValidationError",
       "createApp",
       "createResources",
       "problem",

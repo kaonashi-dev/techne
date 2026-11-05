@@ -1,3 +1,4 @@
+
 import { Controller, Get, Injectable } from "../src/common";
 import { defineFeature, TechneFactory } from "../src/core";
 
@@ -7,18 +8,14 @@ const N = Number(process.argv.find((a) => a.startsWith("--n="))?.slice(4) ?? "1"
 
 @Injectable()
 class S {
-  ping() {
-    return "pong";
-  }
+  ping() { return "pong"; }
 }
 
 @Controller("ping")
 class C {
   constructor(private s: S) {}
   @Get("/")
-  ping() {
-    return this.s.ping();
-  }
+  ping() { return this.s.ping(); }
 }
 
 const features: any[] = [];

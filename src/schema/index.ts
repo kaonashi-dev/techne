@@ -1,5 +1,5 @@
 import "../reflect-setup";
-import { t } from "../vendor/elysia/index";
+import { t } from "../server/t";
 import { enumType } from "./enum";
 import {
   setPropertyMetadata,

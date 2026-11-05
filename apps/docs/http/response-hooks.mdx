@@ -5,7 +5,7 @@ description: "@OnResponse + ResponseHook let you transform handler return values
 
 `@OnResponse(...hooks)` attaches a `ResponseHook` to a controller (or
 single route). Each hook receives the handler's return value and the
-Elysia context and may patch headers, swap the body, or short-circuit.
+request context and may patch headers, swap the body, or short-circuit.
 
 ```ts
 import { Controller, Get, OnResponse } from "@kaonashi-dev/techne/common";

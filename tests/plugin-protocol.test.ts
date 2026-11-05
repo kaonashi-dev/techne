@@ -1,5 +1,5 @@
 import { test, expect, describe } from "bun:test";
-import { Elysia } from "../src/vendor/elysia/index";
+import { createApp } from "../src";
 import { TechneFactory } from "../src/factory/techne-factory";
 import { definePlugin } from "../src/core/plugins/define-plugin";
 import type { PluginDefinition } from "../src/core/plugins/define-plugin";
@@ -171,7 +171,7 @@ describe("Plugin protocol", () => {
     expect(calls).toBe(1);
     await app.close();
   });
-  test("app.use() composes a native Elysia plugin and its routes are handled", async () => {
+  test("app.use() composes a native app plugin and its routes are handled", async () => {
     @Controller("/")
     class RootController {
       @Get("/root")
@@ -183,8 +183,8 @@ describe("Plugin protocol", () => {
       controllers: [RootController],
       logger: false,
     });
-    const elysiaPlugin = new Elysia().get("/plugin-route", () => ({ from: "plugin" }));
-    expect(() => app.use(elysiaPlugin)).not.toThrow();
+    const nativePlugin = createApp().get("/plugin-route", () => ({ from: "plugin" }));
+    expect(() => app.use(nativePlugin)).not.toThrow();
     const res = await app.handle(new Request("http://localhost/plugin-route"));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ from: "plugin" });

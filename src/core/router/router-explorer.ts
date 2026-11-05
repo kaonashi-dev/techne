@@ -246,7 +246,7 @@ export class RouterExplorer {
       if (param.type === "body" && param.dtoClass) {
         const dtoClass = param.dtoClass;
         // Use the lenient schema when strip-unknown is enabled for this DTO so
-        // Elysia won't reject extra properties (stripping happens in beforeHandle).
+        // Validation won't reject extra properties (stripping happens in beforeHandle).
         const bodySchema = isDtoStripUnknown(dtoClass, this.stripUnknownDefault)
           ? (getOrCreateLenientDtoSchema(dtoClass) ?? getOrCreateDtoSchema(dtoClass))
           : getOrCreateDtoSchema(dtoClass);

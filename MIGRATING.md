@@ -1,24 +1,54 @@
 # Migrating
 
-## Zero dependencies
+## Own HTTP core (no Elysia)
 
-Techne no longer installs `elysia`, `typebox` or `exact-mirror`; their TypeScript
-sources ship inside the package. Point direct imports at the Techne subpaths:
+Techne no longer builds on Elysia. `createApp()` returns Techne's own `App`
+(`src/server/`), and the package has no runtime `dependencies`; only TypeBox is
+still bundled as source, for schemas.
+
+Most native code keeps working unchanged: `createApp`, `.get()`/`.post()` with
+`(path, options, handler)`, `t` schemas, `.use()`, `.decorate()`, `.derive()`,
+`.request()`, `.beforeHandle()`, `.afterHandle()`, `.mapResponse()`,
+`.error()`, `.afterResponse()`, `.cleanup()`, `.handle()`, `.listen()`,
+`.stop()`, `status()` and `problem()`.
+
+Breaking changes:
 
 | Before | After |
 | --- | --- |
-| `elysia` | `@kaonashi-dev/techne/elysia` (or the root `@kaonashi-dev/techne`) |
-| `elysia/types`, `elysia/error`, `elysia/cookies`, `elysia/type` | `@kaonashi-dev/techne/elysia/types`, `…/elysia/error`, `…/elysia/cookies`, `…/elysia/type` |
-| `elysia/trace`, `elysia/websocket`, `elysia/ws`, `elysia/auto-head` | `@kaonashi-dev/techne/elysia/trace`, `…/elysia/websocket`, `…/elysia/ws`, `…/elysia/auto-head` |
-| `typebox` | `@kaonashi-dev/techne/typebox` |
-| `typebox/compile`, `typebox/type`, `typebox/value`, … | `@kaonashi-dev/techne/typebox/compile`, `…/typebox/type`, `…/typebox/value`, … |
-| `exact-mirror` | `@kaonashi-dev/techne/exact-mirror` |
+| `import { Elysia } from "@kaonashi-dev/techne"` | `import { App, createApp } from "@kaonashi-dev/techne"` |
+| `@kaonashi-dev/techne/elysia`, `/elysia/*` | Removed. Status helpers and errors are in `@kaonashi-dev/techne/server` |
+| `@kaonashi-dev/techne/exact-mirror` | Removed |
+| `ValidationError` from `…/elysia` | `ValidationError` from `@kaonashi-dev/techne` |
+| `AnyElysia`, `ElysiaConfig` types | `AnyApp`, `AppOptions` |
+| `app["~Routes"]` (nested by segment) | `app["~routes"]`, flat: `{ "/users/:id": { get: { body, params, query, headers, response } } }` |
+| `createApp({ precompile })`, `aot`, `normalize`, `adapter` | Removed; routes compile on `listen()` or the first request |
+| `@elysiajs/*` plugins, Eden treaty | Not supported; write a native plugin (`createApp({ name, as })`) |
+| `t.File`, `t.Numeric`, `t.Cookie` and other Elysia `t` extensions | Use TypeBox builders (`t.String`, `t.Number`, ...) |
+| `.guard()`, `.group()`, `.macro()`, `.resolve()`, `.state()`, `.model()`, `.ws()`, `.mount()`, `.trace()` | Use `createApp({ prefix })` + `.use()`, `.derive()`, `.decorate()`. WebSockets are not supported yet |
 
-Third-party Elysia plugins (for example `@elysiajs/cors`) still import `elysia`,
-and an instance from a second copy of Elysia cannot be mounted (`.use()` throws
-`Cannot access invalid private field`). Alias `elysia` and `typebox` to Techne's
-copy with `compilerOptions.paths` in `tsconfig.json`, which Bun also applies at
-runtime; see [Using Elysia plugins](./apps/docs/plugins/using-elysia-plugins.mdx).
+Behaviour changes:
+
+- **Hooks apply regardless of registration order.** A hook covers every route
+  of its app and of the apps it mounts, including routes registered before it.
+- `as: "scoped"` lifts a hook one level into the parent; `as: "global"` lifts it
+  to the root. Decorations always propagate to the parent.
+- Response schemas type the route but are not validated at runtime.
+- JSON responses use `content-type: application/json;charset=utf-8`.
+- Unknown routes, validation failures (422) and unhandled errors (500) are RFC
+  9457 `application/problem+json` documents.
+
+The legacy decorator runtime is unaffected; its adapter is now `HttpAdapter`
+(`src/platform/http-adapter.ts`), and `ctx.http()` / `app.getHttpAdapter()`
+return the Techne `App`. See [Native plugins](./apps/docs/plugins/native-plugins.mdx).
+
+## Toolchain
+
+Techne type-checks with **TypeScript 7** (`typescript@^7`, the native compiler)
+and `verbatimModuleSyntax`; the peer dependency is now `typescript >= 7`.
+Generated projects pin `typescript@^7.0.2`. TypeScript 7 removes options that
+TypeScript 6 deprecated (for example `baseUrl`, `moduleResolution: "node"` and
+`target: "es5"`), so update your own `tsconfig.json` if it still uses them.
 
 Lint and format with Bun's built-in tools: replace `oxlint` with `bun lint` and
 `oxfmt` with `bun fmt`, and move rule and formatter options from `oxlint.json`
@@ -31,7 +61,7 @@ linter and exits with an explanation when the Bun version doesn't have one.
 
 ## Native composition
 
-The package root now exposes the Elysia-native API. This is a breaking change to
+The package root now exposes the native composition API. This is a breaking change to
 root imports. The decorator runtime is explicitly available at
 `@kaonashi-dev/techne/legacy`; `/core` remains a compatibility alias.
 
@@ -48,7 +78,7 @@ import { createApp, t } from "@kaonashi-dev/techne";
 | Previous architecture | Native composition |
 | --- | --- |
 | `TechneFactory.create()` + config discovery | `buildApp(dependencies)` + `createApp()` |
-| `defineFeature({ controllers, providers })` | Function returning an Elysia plugin |
+| `defineFeature({ controllers, providers })` | Function returning a native app (`createApp()`) |
 | `@Controller` / `@Get` / `@Body` | `.get()` / `.post()` with typed native context |
 | `@Injectable`, tokens, `Container` | Plain functions/classes with explicit arguments |
 | Request-scoped providers | Native `derive` and explicit request data |
@@ -84,15 +114,15 @@ Then listen explicitly from `main.ts`. Remove `experimentalDecorators` and
 `emitDecoratorMetadata` once the application no longer imports decorated code.
 Generated projects now follow this structure and do not load `techne.config.ts`.
 
-Native apps use Elysia 2's `(path, options, handler)` route order, and hook methods
+Native apps use the `(path, options, handler)` route order, and hook methods
 without the `on` prefix. Register shutdown work with `cleanup`; `stop` executes
 server shutdown. Keep the fluent return type inferred to retain route contracts.
 
 The legacy `config()`, `jwt()`, `mq()`, Prisma, telemetry, Swagger and other DI
 integration factories still target the legacy plugin protocol. Native apps must
-construct clients explicitly or use compatible Elysia plugins. `/http` is an
+construct clients explicitly or use native plugins. `/http` is an
 independent client and can be used directly. HTTP error defaults now come from
-Elysia; preserve any old request ID or error-envelope contract explicitly in a
+the native core; preserve any old request ID or error-envelope contract explicitly in a
 native plugin if your clients rely on it. Health and security policies are
 registered explicitly by the application.
 
@@ -117,7 +147,10 @@ For the full, dated list of changes see the [CHANGELOG](./CHANGELOG.md).
 
 ## Elysia 2
 
-Techne now builds on `elysia@2.0.0-beta.1` and `typebox@1.x`, replacing
+> **Superseded** by [Own HTTP core](#own-http-core-no-elysia). This section
+> applies only to releases that still ran on Elysia.
+
+Techne built on `elysia@2.0.0-beta.1` and `typebox@1.x`, replacing
 `elysia@1.4` and `@sinclair/typebox@0.34`.
 
 > **`elysia@2` is a beta**, published under npm's `next` tag — `latest` is

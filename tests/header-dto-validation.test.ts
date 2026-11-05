@@ -124,7 +124,7 @@ describe("@Headers(DtoClass) — header DTO validation", () => {
       logger: false,
     });
 
-    // HTTP headers are case-insensitive; Elysia normalises to lowercase.
+    // HTTP headers are case-insensitive; the server normalises to lowercase.
     // Sending "X-Api-Key" should map to "x-api-key" in the DTO.
     const res = await app.handle(
       new Request("http://localhost/hdr-case", {

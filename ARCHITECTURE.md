@@ -2,34 +2,36 @@
 
 ## Decision
 
-Techne's public root is an Elysia-native composition layer. Elysia owns HTTP
-registration, context, validation, response serialization and the server.
-Techne owns application conventions, project generation and resource cleanup.
+Techne's public root is a composition layer over its own HTTP core in
+`src/server/`. The core owns HTTP registration, context, validation, response
+serialization and the server. The root adds application conventions, project
+generation and resource cleanup.
 
 The request path is:
 
 ```text
-Bun → Elysia compiled route/hooks → handler → service → repository
+Bun → compiled Techne route/hooks → handler → service → repository
 ```
 
 Dependencies are resolved by normal function calls during composition. There is
-no Techne route dispatcher, request container, parameter binder, metadata scan,
-response serializer or mandatory global hook on this path.
+no request container, parameter binder, metadata scan or mandatory global hook
+on this path.
 
 ## Core API and implementation boundaries
 
 | Surface | Responsibility | Implementation |
 | --- | --- | --- |
-| `createApp(options?)` | Construct native Elysia, default `precompile: true` | `src/runtime/create-app.ts` |
+| `createApp(options?)` | Construct a native `App` | `src/runtime/create-app.ts` |
 | `createResources(setup)` | Acquire and dispose app-owned resources | `src/runtime/create-resources.ts` |
-| `Elysia`, `t`, `status`, `problem` | Native HTTP primitives, re-exported unchanged | Elysia |
-| Feature factory | Receive dependencies and return an Elysia chain | Application code |
+| `App`, `t`, `status`, `problem`, `ValidationError` | Native HTTP primitives | `src/server/` |
+| Feature factory | Receive dependencies and return an `App` chain | Application code |
 | Service factory or plain class | Business rules, with explicit dependencies | Application code |
 
-`src/index.ts` must only import Elysia and `src/runtime/`. Runtime code must not
+`src/index.ts` must only import `src/server/`, `src/runtime/` and the vendored
+TypeBox. Runtime code must not
 import the container, decorators, scanner, router adapter, CLI or optional
 integrations. Existing legacy code lives behind `/legacy` and historical
-subpaths. Legacy integration factories are not Elysia plugins.
+subpaths. Legacy integration factories are not native plugins.
 
 ## Application layout
 
@@ -65,8 +67,8 @@ transactions are passed explicitly to the operations that require them.
 
 ### Type inference
 
-Return the Elysia method chain directly. Annotating a feature's return type as
-`Elysia` or `AnyElysia` erases its route contract. Avoid mutating an untyped array
+Return the `App` method chain directly. Annotating a feature's return type as
+`App` or `AnyApp` erases its route contract. Avoid mutating an untyped array
 of plugins in a loop when an explicit `.use(featureA()).use(featureB())` chain
 can retain the complete API type.
 
@@ -78,36 +80,38 @@ export function buildApp(dependencies: Dependencies) {
 export type App = ReturnType<typeof buildApp>;
 ```
 
-Native Elysia clients can consume `App` using a client version compatible with
-the pinned Elysia version. Techne does not generate a second route type system.
+The route types live on the `App` type itself. Techne does not generate a
+second route type system.
 
 ## HTTP and cross-cutting concerns
 
-This repository pins **Elysia 2.0.0-beta.1**. Its options-first route API is
+The options-first route API is
 `.post(path, { body, response, beforeHandle }, handler)`. Lifecycle methods use
-`request`, `beforeHandle`, `afterHandle`, `afterResponse`, `error`, `setup` and
-`cleanup`. `stop()` stops a listening server; `cleanup()` registers shutdown work.
+`request`, `derive`, `beforeHandle`, `afterHandle`, `mapResponse`, `error`,
+`afterResponse` and `cleanup`. `stop()` stops a listening server; `cleanup()` registers shutdown work.
 
 - **Validation:** use native `t` schemas at the HTTP boundary. Preserve domain
   invariants in the service so non-HTTP callers obey them too.
-- **Authorization:** apply native `beforeHandle` or `guard` within the feature
-  or group it protects. Request-specific identity belongs in `derive`, never
-  in a shared service or Elysia's application-wide store.
+- **Authorization:** apply native `beforeHandle` within the feature it
+  protects. Request-specific identity belongs in `derive`, never in a shared
+  service or the application-wide `store`.
 - **Errors:** return native `status`/`problem` or map domain errors using
   `.error(DomainError, handler)`. Native problem documents use RFC 9457. The
   old mandatory RFC 7807 extensions/request IDs are not installed automatically.
-- **Plugins:** use Elysia plugins directly. Scope hooks deliberately; use a
-  global hook only for a genuinely app-wide policy. Register policy plugins
-  before routes. Named plugins deduplicate in Elysia: use distinct names/seeds
-  when mounting differently configured instances.
+- **Plugins:** a native plugin is a function returning a named `createApp(...)`
+  chain, mounted with `.use()`; `.use()` accepts only Techne apps. Scope hooks
+  deliberately; use a global hook only for a genuinely app-wide policy. Hooks
+  apply to every route in their scope regardless of registration order. Named
+  plugins deduplicate: use distinct names/seeds when mounting differently
+  configured instances.
 - **Configuration:** parse environment once in `main.ts`, validate it explicitly,
   and pass values to factories. Importing a feature should not start a server or
   read a config file from the current working directory.
 - **Database/queues:** acquire the real client/worker at startup, pass its narrow
   capabilities to services, and register its cleanup. Worker entrypoints compose
   the same services without creating an HTTP application.
-- **Observability, CORS, security, OpenAPI:** opt-in native plugins compatible
-  with the pinned Elysia version. No universal request interceptor is installed.
+- **Observability, CORS, security, OpenAPI:** opt-in plugins. No universal
+  request interceptor is installed.
 - **Health:** register liveness explicitly; readiness should check the specific
   dependencies required by that application.
 - **Tests:** instantiate services with fakes, and use `app.handle(Request)` for
@@ -153,7 +157,7 @@ The lifecycle contract is:
   preserves both failures and sets the setup failure as `cause`.
 - `await using resources = await createResources(...)` supports scoped tests and
   jobs. A long-running server owns resources until shutdown, not until boot returns.
-- Elysia drains requests on `stop()` before `cleanup` handlers. For handle-only
+- `stop()` stops a listening server before running `cleanup` handlers. For handle-only
   tests or a listen failure, explicitly close resources: there is no running
   server to stop. Cleanup callbacks should not call their own resource scope's
   `close()` recursively.
@@ -163,14 +167,13 @@ No library import installs signal handlers or changes global logging state.
 
 ## Performance contract
 
-`createApp` is a constructor-time function. It returns native Elysia and does not
-wrap handlers, `fetch`, `handle`, `listen` or serialization. `createResources`
-runs during setup/shutdown only. `precompile: true` asks Elysia to compile before
-listening, trading startup work for less first-request compilation; users can
-override it.
+`createApp` is a constructor-time function that returns a native `App`. The app
+compiles its routes, hooks and validators once, at `listen()` or on the first
+request, and recompiles only after it changes. `createResources` runs during
+setup/shutdown only.
 
-`benchmarks/native.ts` compares raw Elysia and Techne with identical route
-builders, options, dependencies and hooks. It checks response parity before
+`benchmarks/native.ts` compares a Techne native app with a hand-written `fetch`
+handler serving the same routes. It checks response parity before
 timing, warms up both implementations, alternates order between scenarios, and
 reports static JSON, parameter/service, validated-body and guard cases. These
 are in-process measurements; socket throughput, cold import cost and deployment
@@ -193,7 +196,7 @@ plugin protocols are distinct; do not pass a `PluginDefinition` to `.use()`.
 
 1. Begin at `app.ts` to understand the dependency graph; follow a feature's routes
    to its service and then the supplied infrastructure adapter.
-2. Prefer a native Elysia capability over a new framework abstraction.
+2. Prefer an existing native `App` capability over a new framework abstraction.
 3. Keep the public root independent of legacy code and optional integrations.
 4. Never erase inferred route types with broad annotations or `any` in new APIs.
 5. Create app-specific mutable state inside factories; pass request state as data.

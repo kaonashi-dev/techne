@@ -1,5 +1,5 @@
 import type { Scanner } from "../scanner";
-import type { ElysiaAdapter } from "../../platform/elysia-adapter";
+import type { HttpAdapter } from "../../platform/http-adapter";
 import type { RouteRegistrationOptions } from "../http-options";
 import { RouterExecutionContext } from "./router-execution-context";
 import { RouterExplorer, type DiscoveredRouteDefinition } from "./router-explorer";
@@ -29,7 +29,7 @@ export class RoutesResolver {
     this.executionContext.setStripUnknownDefault(value);
   }
 
-  public resolve(adapter: ElysiaAdapter, options: RouteRegistrationOptions = {}) {
+  public resolve(adapter: HttpAdapter, options: RouteRegistrationOptions = {}) {
     const container = this.scanner.getContainer();
     const routes = [];
     this.executionContext.resetRoutes();

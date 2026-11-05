@@ -6,11 +6,11 @@
  * walk it. They used to answer it by reading `Symbol.for("TypeBox.Kind")`,
  * which TypeBox 0.34 stamped on every node it produced.
  *
- * TypeBox 1.x — the version Elysia 2 builds on — removed those symbol tags.
+ * TypeBox 1.x removed those symbol tags.
  * Its output is now plain, spec-clean JSON Schema, so `t.String()` is exactly
  * `{ type: "string" }` with nothing hidden on it. Classifying by structure
  * instead of by vendor tag is both the required fix and the better contract:
- * it works for schemas produced by `t` (Elysia), `Type` (TypeBox), and for
+ * it works for schemas produced by `t` / `Type` (TypeBox), and for
  * hand-written JSON Schema that never went through a builder at all.
  *
  * One consequence is worth stating plainly: **optionality is no longer a

@@ -228,7 +228,7 @@ Usage:
   techne generate|g <type> <name>
 
 Available generators:
-  feature         (native Elysia plugin factory)
+  feature         (native app plugin factory)
   routes          (typed HTTP boundary)
   service
   resource
@@ -248,7 +248,7 @@ Build modes:
   --target=browser JS bundle for the browser.
 
 Build flags:
-  --precompile  Legacy decorator route manifest. Native apps compile through Elysia.
+  --precompile  Legacy decorator route manifest. Native apps compile their routes at startup.
 
 Deploy targets:
   docker   Multi-stage Bun Dockerfile (only target supported for now)

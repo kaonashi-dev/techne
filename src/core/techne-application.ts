@@ -13,7 +13,7 @@ import type {
   TechneServerOptions,
   VersioningOptions,
 } from "./http-options";
-import type { ElysiaAdapter } from "../platform/elysia-adapter";
+import type { HttpAdapter } from "../platform/http-adapter";
 import type { RoutesResolver } from "./router/routes-resolver";
 import type { CompiledRouteDefinition } from "./router/router-execution-context";
 import type { PluginContext, PluginDefinition } from "./plugins/define-plugin";
@@ -45,7 +45,7 @@ interface TechneApplicationInternalOptions {
   shutdown?: Partial<ShutdownOptions>;
   health?: Partial<HealthOptions>;
   mode?: TechneMode;
-  /** Native Bun.serve limits forwarded through Elysia's object-form `listen()`. */
+  /** Native Bun.serve limits forwarded through the object-form `listen()`. */
   server?: TechneServerOptions;
   /**
    * Raw user-supplied options (cors, prefix, etc.). Made available to plugins
@@ -115,7 +115,7 @@ export class TechneApplication {
   private beforeListenPlugins: Array<{ def: PluginDefinition<any>; options: any }> = [];
 
   constructor(
-    private readonly adapter: ElysiaAdapter,
+    private readonly adapter: HttpAdapter,
     private readonly scanner: Scanner,
     private readonly container: Container,
     private readonly routesResolver: RoutesResolver,
@@ -208,7 +208,7 @@ export class TechneApplication {
       return this;
     }
     if (this.serverOptions) {
-      // Object-form listen: Elysia forwards extra fields to `Bun.serve`, so
+      // Object-form listen: extra fields pass through to `Bun.serve`, so
       // maxRequestBodySize/idleTimeout are enforced natively at the socket.
       this.adapter.getInstance().listen({ port: resolvedPort, ...this.serverOptions }, callback);
     } else {
@@ -374,7 +374,7 @@ export class TechneApplication {
   /**
    * Register a first-class Techne plugin. Plugins are the preferred extension
    * mechanism — they compose with flat app config, can read DI, hook into
-   * lifecycle, and reach the raw Elysia instance.
+   * lifecycle, and reach the underlying HTTP app.
    *
    * Throws when a named dependency hasn't been registered yet, when a
    * different plugin with the same `name` is already registered, and lets
@@ -553,17 +553,15 @@ export class TechneApplication {
   }
 
   /**
-   * Shorthand for registering a native Elysia plugin against the underlying
-   * Elysia instance. Returns `this` for chaining. Prefer `register()` for
-   * Techne-native plugins; this is a passthrough for ecosystem plugins.
+   * Mounts a native app (`createApp()`) onto the underlying HTTP app.
+   * Returns `this` for chaining. Prefer `register()` for Techne plugins that
+   * need DI or lifecycle hooks.
    *
-   * Note: Elysia composes plugins onto the current app, so any routes the
-   * plugin adds become available immediately. The plugin sees Techne-mapped
-   * routes as already registered — this matches Elysia's documented
-   * "register plugins before routes that depend on them" guidance.
+   * The plugin's routes become available immediately, and its hooks apply
+   * to every route regardless of registration order.
    */
-  use(elysiaPlugin: any): this {
-    this.adapter.getInstance().use(elysiaPlugin);
+  use(plugin: any): this {
+    this.adapter.getInstance().use(plugin);
     return this;
   }
 
@@ -599,12 +597,12 @@ export class TechneApplication {
 
   private registerHealthEndpoints() {
     if (!this.healthOptions.enabled) return;
-    const elysia = this.adapter.getInstance() as any;
-    if (typeof elysia?.get !== "function") return;
+    const http = this.adapter.getInstance() as any;
+    if (typeof http?.get !== "function") return;
 
-    elysia.get(this.healthOptions.livenessPath, () => ({ status: "ok" }));
+    http.get(this.healthOptions.livenessPath, () => ({ status: "ok" }));
 
-    elysia.get(this.healthOptions.readinessPath, async ({ set }: any) => {
+    http.get(this.healthOptions.readinessPath, async ({ set }: any) => {
       const report = await this.getReadiness();
       if (!report.ready) {
         set.status = 503;

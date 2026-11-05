@@ -62,7 +62,7 @@ describe("compileCsrfOptions()", () => {
 // ---------------------------------------------------------------------------
 
 // Shared controllers declared at module scope so each test
-// can reuse a fresh app instance (Elysia re-registers routes on each .create).
+// can reuse a fresh app instance (routes are re-registered on each .create).
 
 @Controller("api")
 class ApiController {
@@ -153,7 +153,7 @@ describe("CSRF middleware — integration", () => {
     const setCookie = res.headers.get("set-cookie");
     if (setCookie) {
       // If a set-cookie header is present it must either not be the csrf cookie
-      // or it must carry the same token (Elysia's cookie jar may echo it)
+      // or it must carry the same token (the cookie jar may echo it)
     }
     // The key test: the response should not fail
     expect(res.status).toBe(200);

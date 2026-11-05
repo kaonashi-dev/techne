@@ -1,17 +1,18 @@
 ---
 title: "Introduction"
-description: "Explicit application composition on native Elysia, built for Bun."
+description: "Explicit application composition with a native HTTP core, built for Bun."
 ---
 
-Techne is a small wrapper around Elysia with feature-oriented project conventions
+Techne is a small HTTP framework for Bun with feature-oriented project conventions
 and application-owned resources. Its default API uses ordinary TypeScript
-functions and native Elysia plugins.
+functions and native plugins.
 
 ## One HTTP execution model
 
-`createApp()` returns an actual Elysia instance, with `precompile: true` by default.
-Routing, schemas, hooks, errors and serialization are handled by Elysia. Techne
-does not introduce a second HTTP dispatcher or request-time dependency container.
+`createApp()` returns a Techne `App`. Routing, schemas, hooks, errors and
+serialization are handled by Techne's own HTTP core, compiled once before the
+first request or at `listen()`. There is no second HTTP dispatcher or
+request-time dependency container.
 
 ```ts
 import { createApp } from "@kaonashi-dev/techne";
@@ -24,10 +25,10 @@ createApp()
 ## Explicit architecture
 
 - **Composition root:** `app.ts` visibly wires dependencies and mounts features.
-- **Feature factories:** take services as arguments and return Elysia plugins.
+- **Feature factories:** take services as arguments and return native plugins.
 - **Plain services:** business logic works independently of HTTP or the framework.
 - **Resource ownership:** `createResources` handles setup rollback and shutdown.
-- **Native types:** route contracts are inferred from the actual Elysia chain.
+- **Native types:** route contracts are inferred from the actual `App` chain.
 - **Local reasoning:** developers and agents can follow imports and function
   arguments without scanning metadata, registries or decorators.
 
@@ -36,8 +37,8 @@ The executable reference is in `apps/native/` in the repository.
 
 ## Version and legacy boundary
 
-Techne is experimental and pins `elysia@2.0.0-beta.1`. Examples use that version's
-options-first routes and lifecycle names. Pin the Techne revision you depend on.
+Techne is experimental. Routes take options before the handler, and lifecycle
+hooks have no `on` prefix. Pin the Techne revision you depend on.
 
 Existing decorator applications use `@kaonashi-dev/techne/legacy` or the historical
 `/core` alias. The **Legacy reference** section documents their APIs and integration

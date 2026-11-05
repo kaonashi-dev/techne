@@ -1,11 +1,11 @@
 # Techne
 
-**Explicit application composition on native Elysia, built for Bun.**
+**Explicit application composition, built for Bun.**
 
 Techne provides a small application wrapper, resource ownership and feature-oriented
-scaffolding. Routes are Elysia routes, dependencies are TypeScript arguments, and
-business logic is ordinary code. The project is experimental and currently pins
-`elysia@2.0.0-beta.1`.
+scaffolding on its own small HTTP core. Dependencies are TypeScript arguments,
+business logic is ordinary code, and there are no runtime dependencies. The
+project is experimental.
 
 ## Quick start
 
@@ -25,10 +25,11 @@ const app = createApp()
   .listen(3000);
 ```
 
-`createApp()` returns an actual Elysia instance. It enables `precompile: true`
-before listening and accepts Elysia's native configuration. Native plugins,
-schema inference, cookies, streaming, hooks and typed route contracts remain
-available. **Elysia 2 takes `(path, options, handler)` when using route options.**
+`createApp()` returns a Techne `App`: routes with `(path, options, handler)`,
+TypeBox schemas for `body`, `query`, `params` and `headers`, typed context,
+lifecycle hooks (`request`, `derive`, `beforeHandle`, `afterHandle`,
+`mapResponse`, `error`, `afterResponse`), composition with `.use()`, cookies and
+RFC 9457 problem responses. Synchronous routes never allocate an async frame.
 
 ## Architecture
 
@@ -115,18 +116,17 @@ Mount generated features explicitly in `app.ts`. See the runnable reference in
 
 | Import | Purpose |
 | --- | --- |
-| `@kaonashi-dev/techne` | `createApp`, `createResources`, native `Elysia`, `t`, `status`, `problem` |
-| `@kaonashi-dev/techne/elysia`, `/elysia/*` | Bundled Elysia 2 (`/types`, `/error`, `/cookies`, `/type`, `/trace`, `/websocket`, `/ws`, `/auto-head`) |
+| `@kaonashi-dev/techne` | `createApp`, `App`, `createResources`, `t`, `status`, `problem`, `ValidationError` |
+| `@kaonashi-dev/techne/server` | HTTP core internals: `StatusMap`, `HttpError`, `NotFoundError`, `ParseError`, `problemResponse`, … |
 | `@kaonashi-dev/techne/typebox`, `/typebox/*` | Bundled TypeBox 1.x (`/compile`, `/type`, `/value`, `/schema`, `/guard`, `/format`, `/system`, `/error`) |
-| `@kaonashi-dev/techne/exact-mirror` | Bundled exact-mirror |
 | `@kaonashi-dev/techne/http` | Independent outgoing HTTP client |
 | `@kaonashi-dev/techne/legacy` | Decorator runtime: `TechneFactory`, container and legacy bootstrap |
 | `@kaonashi-dev/techne/core` | Compatibility alias for the legacy runtime |
 
 Existing decorator-oriented integration subpaths remain available for legacy
 applications. Their plugin protocol requires the legacy runtime; native apps use
-Elysia plugins or explicitly constructed clients. The root imports only Elysia and
-the resource utility. See [migration details](./MIGRATING.md#native-composition).
+native plugins or explicitly constructed clients. The root imports only the HTTP
+core and the resource utility. See [migration details](./MIGRATING.md#native-composition).
 
 ## Documentation and verification
 
@@ -142,7 +142,7 @@ bun run build
 bun run test:types
 bun test tests/*.test.ts
 bun run check
-bun run bench:native           # in-process comparison with raw Elysia
+bun run bench:native           # in-process comparison with a hand-written fetch handler
 bun run apps/native/src/main.ts
 ```
 

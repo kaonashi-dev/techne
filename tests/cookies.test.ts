@@ -13,7 +13,7 @@ import { __setIsProduction } from "../src/core/router/router-response-controller
 describe("setCookie() defaults", () => {
   test("sets httpOnly, sameSite=lax, path=/ by default", () => {
     const jar: Record<string, any> = {};
-    // Simulate Elysia's cookie jar entry with a .set() method
+    // Simulate a cookie jar entry with a .set() method
     jar["session"] = {
       _value: "",
       _opts: {} as Record<string, unknown>,

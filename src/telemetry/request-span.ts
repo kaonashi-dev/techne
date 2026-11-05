@@ -1,11 +1,11 @@
-import { StatusMap } from "../vendor/elysia/index";
+import { StatusMap } from "../server/status";
 import { requestContext } from "../services/logger.service";
 import type { RuntimeHolder, TelemetryRuntime } from "./types";
 
 /**
  * Per-request OpenTelemetry hooks. `mapResponse` is the primary terminal phase:
- * it runs after handlers and error mapping, but before Elysia returns the final
- * Response. `onAfterResponse` is a last-resort fallback for response paths that
+ * it runs after handlers and error mapping, but before the HTTP app returns the
+ * final Response. `onAfterResponse` is a last-resort fallback for response paths that
  * bypass mapping.
  */
 
@@ -35,11 +35,11 @@ const headersGetter = {
 };
 
 export function installRequestSpanHooks(
-  elysia: any,
+  http: any,
   holder: RuntimeHolder,
   enabled: { traces: boolean; metrics: boolean },
 ): void {
-  elysia.request((ctx: any) => {
+  http.request((ctx: any) => {
     const rt = holder.runtime;
     if (!rt) return;
 
@@ -95,15 +95,15 @@ export function installRequestSpanHooks(
     return undefined;
   });
 
-  elysia.mapResponse((ctx: any) => {
+  http.mapResponse((ctx: any) => {
     finishRequest(holder.runtime, ctx);
   });
 
-  elysia.error((ctx: any) => {
+  http.error((ctx: any) => {
     finishRequest(holder.runtime, ctx);
   });
 
-  elysia.afterResponse((ctx: any) => {
+  http.afterResponse((ctx: any) => {
     finishRequest(holder.runtime, ctx);
   });
 }
@@ -119,12 +119,12 @@ function finishRequest(rt: TelemetryRuntime | undefined, ctx: any): void {
   ctx[OTEL_ENDED] = true;
   // Balance the counter even when the runtime is torn down mid-request — an
   // unbalanced UpDownCounter drifts forever. Requests aborted before any
-  // terminal hook fires still leak; Elysia exposes no abort hook to catch them.
+  // terminal hook fires still leak; there is no abort hook to catch them.
   endActiveRequest?.();
   if (!rt) return;
 
   const status = responseStatus(ctx);
-  const route = resolveRoute(ctx, status);
+  const route = resolveRoute(ctx);
 
   try {
     if (span) {
@@ -154,7 +154,7 @@ function finishRequest(rt: TelemetryRuntime | undefined, ctx: any): void {
       rt.recordMetrics(durationSec, attributes);
     }
   } finally {
-    // `enterWith` is necessary to bridge Elysia's separate lifecycle callbacks,
+    // `enterWith` is necessary to bridge the separate lifecycle callbacks,
     // but must be balanced or caller work inherits an ended request span.
     if (span) rt.contextManager.enterWith(rt.api.ROOT_CONTEXT);
   }
@@ -163,22 +163,14 @@ function finishRequest(rt: TelemetryRuntime | undefined, ctx: any): void {
 /**
  * Resolve the low-cardinality route template for `http.route`.
  *
- * Elysia 2 only populates `ctx.route` for parameterized routes. Static routes
- * leave it `undefined` and carry the literal path in `ctx.path` — which, for a
- * static route, *is* the template, so it is safe to use.
- *
- * The 404 guard is what makes that safe in general. `http.route` must stay
- * low-cardinality because it is a metric dimension; falling back to `ctx.path`
- * on an unmatched request would mint a fresh time series for every URL a
- * scanner probes. When nothing matched there is no template to report, so we
- * report none.
+ * `ctx.route` is the matched template (`/users/:id`) and is empty when nothing
+ * matched (404s, or a `request` hook that answered before routing). The raw
+ * path is never used: `http.route` is a metric dimension, and a path would
+ * mint a fresh time series for every URL a scanner probes.
  */
-function resolveRoute(ctx: any, status: number): string | undefined {
+function resolveRoute(ctx: any): string | undefined {
   const route = ctx.route;
-  if (typeof route === "string" && route) return route;
-  if (status === 404) return undefined;
-  const path = ctx.path;
-  return typeof path === "string" && path ? path : undefined;
+  return typeof route === "string" && route ? route : undefined;
 }
 
 function responseStatus(ctx: any): number {
@@ -192,11 +184,8 @@ function responseStatus(ctx: any): number {
     }
   }
   if (err && typeof err.status === "number") return err.status;
-  // Elysia 2 removed the string `ctx.code` discriminator in favour of error
-  // classes, and every built-in error class now carries its own numeric
-  // `status` — which the check above already consumed. This name-based switch
-  // remains only for errors that reach us without one (a user class thrown
-  // from a handler that mimics Elysia's naming).
+  // Built-in error classes carry a numeric `status`, consumed above. This
+  // name-based switch covers errors that reach us without one.
   switch (err?.name) {
     case "NotFound":
       return 404;
@@ -212,8 +201,8 @@ function responseStatus(ctx: any): number {
   }
   const setStatus = ctx.set?.status;
   if (typeof setStatus === "number") return setStatus;
-  // Elysia accepts status keywords (`set.status = "Created"`); resolve them
-  // the same way it does when building the final Response.
+  // `set.status` also accepts status names (`set.status = "Created"`);
+  // resolve them the same way the final Response does.
   if (typeof setStatus === "string" && setStatus in StatusMap) {
     return StatusMap[setStatus as keyof typeof StatusMap];
   }

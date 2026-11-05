@@ -2,10 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { Controller } from "../src/decorators/controller.decorator";
 import { Get } from "../src/decorators/routes.decorator";
 import { TechneFactory } from "../src/factory/techne-factory";
-import { ElysiaAdapter } from "../src/platform/elysia-adapter";
+import { HttpAdapter } from "../src/platform/http-adapter";
 describe("Graceful shutdown", () => {
   test("zero grace period skips in-flight request counting", async () => {
-    const adapter = new ElysiaAdapter({
+    const adapter = new HttpAdapter({
       logger: false,
       shutdown: { gracePeriod: 0 },
     });

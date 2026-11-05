@@ -6,22 +6,38 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-### Zero dependencies
+### Own HTTP core
 
-- **Breaking:** Techne has no runtime `dependencies`. Elysia 2.0.0-beta.1,
-  TypeBox 1.3.10 and exact-mirror 1.2.2 (plus Elysia's memoirist, deuri and
-  openapi-types) ship as TypeScript source under `src/vendor`. Import them from
-  `@kaonashi-dev/techne/elysia`, `@kaonashi-dev/techne/typebox`,
-  `@kaonashi-dev/techne/typebox/<compile|type|value|…>` and
-  `@kaonashi-dev/techne/exact-mirror` instead of `elysia`, `typebox` and
-  `exact-mirror`. See [MIGRATING.md](./MIGRATING.md#zero-dependencies).
+- **Breaking:** Techne no longer builds on Elysia. `createApp()` returns
+  Techne's own `App` (`src/server/`): router, schema validation, lifecycle
+  hooks, composition, cookies (with HMAC signing) and RFC 9457 errors in about
+  2k lines, replacing ~36k vendored lines of Elysia plus exact-mirror,
+  memoirist, deuri and openapi-types. Techne has no runtime `dependencies`;
+  TypeBox 1.3.10 stays bundled under `src/vendor/typebox` for schemas.
+- **Breaking:** the `Elysia` root export, the `@kaonashi-dev/techne/elysia*`
+  and `/exact-mirror` subpaths, `@elysiajs/*` plugin support and Eden are
+  removed. The root adds `App` and `ValidationError`; status helpers and error
+  classes are in the new `@kaonashi-dev/techne/server` subpath. The route
+  type map is now flat (`app["~routes"]["/users/:id"].get`).
+- **Breaking:** hooks apply to every route of their app and its mounted apps
+  regardless of registration order.
+- The decorator runtime's adapter is renamed `ElysiaAdapter` → `HttpAdapter`.
+- Native benchmarks compare against a hand-written `fetch` handler; on the
+  in-process suite the new core matches or beats the previous Elysia-based
+  numbers for static JSON and guarded routes.
+- Type checking uses TypeScript 7 with `verbatimModuleSyntax`; the
+  `typescript` peer dependency is `>= 7`. A new `typecheck` script (also in CI)
+  covers `src/` and `apps/demo`. The legacy `Reflect` metadata typings now load
+  from the import graph, so consumers type-checking the package see them.
+- TypeBox `Code()` emits imports from `@kaonashi-dev/techne/typebox/*`, so
+  generated validators resolve in consumer projects.
+
+### Toolchain
+
 - Formatting and linting use Bun's built-in `bun fmt` and `bun lint`; `oxfmt`
   and `oxlint` are removed, and generated projects follow suit. `bun lint`
   needs Bun canary. Scripts call `techne lint`, which fails with a clear error
   on stable Bun instead of recursing through `bun run lint`.
-- Fixed: TypeBox `Code()` emitted relative imports (`../system/index`) that
-  only resolved inside the vendored tree. It now imports from
-  `@kaonashi-dev/techne/typebox/*`.
 
 ### Native architecture
 

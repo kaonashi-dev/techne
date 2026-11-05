@@ -186,7 +186,7 @@ describe("RoutesResolver — duplicate route handling", () => {
     // The resolver doesn't proactively detect duplicates; it hands every
     // expanded route to the adapter in declaration order. Verify boot
     // succeeds and the route is resolvable — the documented contract here is
-    // "no crash"; Elysia decides the winner.
+    // "no crash"; the router decides the winner.
     @Controller("dup")
     class First {
       @Get("/")

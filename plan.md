@@ -327,7 +327,7 @@ Documentation table._
 
 ## Verification
 
-1. `bun install --frozen-lockfile` first (avoids the known `Cannot find package 'elysia'` link breakage).
+1. `bun install --frozen-lockfile` first.
 2. `bun test tests/http-client*.test.ts` — new suites green.
 3. `bun run test` — **full** suite stays green (no regressions in `contract`, since it is untouched).
 4. `bun run check` — `bun lint` + `bun fmt --check` clean.

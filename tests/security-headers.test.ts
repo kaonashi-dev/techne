@@ -123,7 +123,7 @@ describe("securityHeaders option — response stamping", () => {
     );
   });
 
-  test("headers on an unknown-route 404 (Elysia onError path)", async () => {
+  test("headers on an unknown-route 404 (error hook path)", async () => {
     const app = await TechneFactory.create({
       controllers: [WidgetsController],
       logger: false,
