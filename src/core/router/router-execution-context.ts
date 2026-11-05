@@ -1,4 +1,4 @@
-import { Compile } from "../../vendor/typebox/compile/index";
+import { Compile } from "../../schema/core/compile";
 import { CATCH_METADATA } from "../../common/constants";
 import { ForbiddenException, HttpException, TooManyRequestsException } from "../../exceptions";
 import type { ExceptionFilter } from "../../interfaces/exception-filter.interface";
@@ -179,7 +179,7 @@ function createExtractor(
         if (file == null) {
           if (required) {
             throw new HttpException(
-              // `path` matches the TypeBox ValidationError shape used by the
+              // `path` matches the validator error shape used by the
               // DTO 422 contract (`/property` JSON-pointer style).
               { errors: [{ path: `/${fieldName}`, message: `File "${fieldName}" is required` }] },
               422,

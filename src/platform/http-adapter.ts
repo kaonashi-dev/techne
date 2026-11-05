@@ -29,7 +29,7 @@ interface HttpAdapterOptions {
      * When true, the validation error response includes every error
      * reported by the schema (the legacy behavior). When false/undefined
      * (default), only the first error is returned. Materializing every
-     * error forces TypeBox to walk the whole iterator on every invalid
+     * error forces the validator to walk the whole error list on every invalid
      * request and dominates the invalid-body throughput.
      */
     exhaustive?: boolean;

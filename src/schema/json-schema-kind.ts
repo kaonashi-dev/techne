@@ -3,15 +3,10 @@
  *
  * Techne's schema consumers (OpenAPI emitter, contract codegen, fast
  * stringifier) all need to answer "what kind of node is this?" before they can
- * walk it. They used to answer it by reading `Symbol.for("TypeBox.Kind")`,
- * which TypeBox 0.34 stamped on every node it produced.
- *
- * TypeBox 1.x removed those symbol tags.
- * Its output is now plain, spec-clean JSON Schema, so `t.String()` is exactly
- * `{ type: "string" }` with nothing hidden on it. Classifying by structure
- * instead of by vendor tag is both the required fix and the better contract:
- * it works for schemas produced by `t` / `Type` (TypeBox), and for
- * hand-written JSON Schema that never went through a builder at all.
+ * walk it. They answer it structurally: `t.String()` is exactly
+ * `{ type: "string" }`, and classification by structure works for schemas
+ * produced by `t` and for hand-written JSON Schema that never went through a
+ * builder at all.
  *
  * One consequence is worth stating plainly: **optionality is no longer a
  * property of the node.** In JSON Schema it lives in the parent object's
@@ -19,6 +14,8 @@
  * whether it was declared optional. Callers must consult the parent — see
  * {@link requiredKeys}.
  */
+
+import { isOptionalSchema } from "./core/builder";
 
 export type SchemaKind =
   | "Object"
@@ -40,29 +37,20 @@ export type SchemaKind =
 
 type Node = Record<string, unknown>;
 
-/** TypeBox 0.34's node tag. Still read so 0.34-shaped schemas keep working. */
-const LEGACY_KIND = Symbol.for("TypeBox.Kind");
-/** TypeBox 0.34's per-property optional tag. */
-const LEGACY_OPTIONAL = Symbol.for("TypeBox.Optional");
-
 /**
  * Read an explicit kind tag, if the schema carries one.
  *
- * Two vendored TypeBox variants tag their nodes: 0.34 with the
- * `Symbol.for("TypeBox.Kind")` symbol, and some 1.x builds with a `~kind`
- * string property. Neither is guaranteed to be present — stock `typebox@1.3`
- * emits untagged JSON Schema — so this is an accelerator and a disambiguator,
- * not the primary mechanism. When a tag is there it is authoritative, because
- * it distinguishes cases structure cannot (a `Record` whose `patternProperties`
- * were erased, say).
+ * A schema may carry an explicit `~kind` string. It is not guaranteed to be
+ * present — Techne's builder emits untagged JSON Schema — so this is an
+ * accelerator and a disambiguator, not the primary mechanism. When a tag is
+ * there it is authoritative, because it distinguishes cases structure cannot
+ * (a `Record` whose `patternProperties` were erased, say).
  */
 export function explicitKind(schema: unknown): string | undefined {
   if (!schema || typeof schema !== "object") return undefined;
   const node = schema as Node;
   const tilde = node["~kind"];
-  if (typeof tilde === "string") return tilde;
-  const legacy = (node as Record<symbol, unknown>)[LEGACY_KIND];
-  return typeof legacy === "string" ? legacy : undefined;
+  return typeof tilde === "string" ? tilde : undefined;
 }
 
 /** Kind tags we model; anything else is reported as unclassified. */
@@ -127,8 +115,8 @@ export function kindOf(schema: unknown): SchemaKind | undefined {
         ? "Record"
         : "Object";
     case "array":
-      // Draft 2020-12 spells tuples `prefixItems`; TypeBox 1.x still emits the
-      // older array-valued `items`. Accept both.
+      // Draft 2020-12 spells tuples `prefixItems`; Techne emits the older
+      // array-valued `items`. Accept both.
       return Array.isArray(node.items) || Array.isArray(node.prefixItems) ? "Tuple" : "Array";
     case "string":
       return "String";
@@ -153,9 +141,9 @@ export function kindOf(schema: unknown): SchemaKind | undefined {
 /**
  * The parent's `required` list as a Set, for optionality lookups.
  *
- * Property nodes that carry a legacy `Symbol.for("TypeBox.Optional")` tag or a
- * `~optional` marker are subtracted, so a 0.34-shaped schema whose `required`
- * array over-reports still yields the right answer.
+ * Property nodes that carry Techne's non-enumerable optional marker or a
+ * `~optional` marker are subtracted, so a schema whose `required` array
+ * over-reports still yields the right answer.
  */
 export function requiredKeys(schema: unknown): Set<string> {
   if (!schema || typeof schema !== "object") return new Set();
@@ -175,15 +163,15 @@ export function requiredKeys(schema: unknown): Set<string> {
 
 function isTaggedOptional(node: unknown): boolean {
   if (!node || typeof node !== "object") return false;
-  const record = node as Node;
-  if (record["~optional"] === true) return true;
-  return (record as Record<symbol, unknown>)[LEGACY_OPTIONAL] === "Optional";
+  if ((node as Node)["~optional"] === true) return true;
+  return isOptionalSchema(node);
 }
 
 /**
  * Tuple members, normalized across the two spellings.
  *
- * TypeBox 1.x emits `items: [...]`; JSON Schema 2020-12 uses `prefixItems`.
+ * Techne emits `items: [...]` for tuples; JSON Schema 2020-12 uses
+ * `prefixItems`. Both are accepted.
  */
 export function tupleMembers(schema: unknown): unknown[] {
   if (!schema || typeof schema !== "object") return [];

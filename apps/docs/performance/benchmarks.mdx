@@ -7,7 +7,7 @@ A benchmark matrix lives under [`benchmarks/`](https://github.com/kaonashi-dev/t
 covering the code paths that actually matter — the native app vs the decorator runtime, the
 arity-specialized **fast path** for routes with no enhancers, the cost-tagged
 **slow path** for routes with guards and filters, schema validation (valid +
-invalid bodies), response schemas (exercising the compiled TypeBox
+invalid bodies), response schemas (exercising the compiled schema
 stringifier), container resolution, and cold start with `Bun.spawn`.
 
 ```bash

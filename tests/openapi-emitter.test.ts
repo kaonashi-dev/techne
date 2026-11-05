@@ -101,7 +101,7 @@ describe("openapi auto-emitter", () => {
       minItems: 1,
     });
   });
-  test("typeboxToOpenApi covers union, literal, and any", () => {
+  test("schema conversion covers union, literal, and any", () => {
     expect(typeboxToOpenApi(Schema.Union([Schema.String(), Schema.Number()]))).toEqual({
       oneOf: [{ type: "string" }, { type: "number" }],
     });

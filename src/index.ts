@@ -15,4 +15,4 @@ export type {
 } from "./server/types";
 export type { Cookie, CookieConfig } from "./server/cookie";
 export type { Problem } from "./server/status";
-export type { Static, TSchema } from "./vendor/typebox/index";
+export type { Static, TSchema } from "./schema/core/types";

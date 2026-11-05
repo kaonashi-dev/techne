@@ -3,9 +3,8 @@ title: "Validation & DTOs"
 description: "Schema helper, Dto class decorators, and how Techne compiles schemas into route validators."
 ---
 
-Techne exposes a `Schema` helper built on [TypeBox](https://github.com/sinclairzx81/typebox) —
-the `typebox` 1.x package Techne bundles and validates against, not the older
-`@sinclair/typebox` 0.34. Schemas are plain JSON Schema, so optionality lives in
+Techne exposes a `Schema` helper built on its own small schema builder. There is
+no vendored validator dependency; `t` and `Schema` produce plain JSON Schema, so optionality lives in
 the parent object's `required` array rather than on the property node.
 
 ```ts
@@ -30,7 +29,7 @@ class UsersController {
 Decorator-style DTO metadata is also available through exports such as
 `Dto`, `IsString`, `IsNumber`, `IsInteger`, `IsBoolean`, and `IsEnum`. DTO
 schemas are passed to the HTTP core directly, so request validation is a single
-compiled TypeBox pass. DTOs reject unknown properties by default; use
+compiled schema pass. DTOs reject unknown properties by default; use
 `@Dto({ allowAdditional: true })` to opt out.
 
 ## Class-style DTOs

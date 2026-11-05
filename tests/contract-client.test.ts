@@ -179,7 +179,7 @@ describe("contract / createClient", () => {
     expect(calls[0]!.url).toBe("http://localhost:3000/things/thing-1");
   });
 });
-describe("contract / typeboxToTypeScript", () => {
+describe("contract / schema type codegen", () => {
   test("emits object types with optional markers", () => {
     const out = typeboxToTypeScript(
       Schema.Object({
@@ -234,7 +234,7 @@ describe("contract / generateRoutesType", () => {
     // Both routes are present, keyed by their full path.
     expect(source).toContain(`"/users/:id"`);
     expect(source).toContain(`"/users"`);
-    // GET picked up the response shape from TypeBox.
+    // GET picked up the response shape from the schema.
     expect(source).toMatch(
       /get: RouteHandler<undefined, undefined, \{ id: string \}, \{ id: string; name: string \}>/,
     );

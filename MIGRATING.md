@@ -1,10 +1,40 @@
 # Migrating
 
+## Own schema library (no vendored TypeBox)
+
+`src/vendor/typebox/` is gone. `t`, `Static` and `TSchema` stay on the package
+root, produce and consume plain JSON Schema, and cover the builders Techne
+actually uses: `Object`, `Array`, `Tuple`, `Record`, `Union`, `Intersect`,
+`String`, `Number`, `Integer`, `Boolean`, `Literal`, `Null`, `Any`, `Unknown`,
+`Never`, `Optional`, `Readonly`, `Partial`, `Required`, `Pick` and `Omit`.
+Supported formats are `email`, `uuid`, `date-time`, `date` and `uri`.
+
+Breaking changes:
+
+| Before | After |
+| --- | --- |
+| `import { Compile } from "@kaonashi-dev/techne/typebox/compile"` | Removed; use route schemas or `Compile` from `src/schema/core` inside Techne |
+| `import * as Type from "@kaonashi-dev/techne/typebox/type"` | `import { t } from "@kaonashi-dev/techne"` |
+| `import type { Static, TSchema } from "@kaonashi-dev/techne/typebox"` | `import type { Static, TSchema } from "@kaonashi-dev/techne"` |
+| `/typebox/value`, `/typebox/schema`, `/typebox/guard`, `/typebox/format`, `/typebox/system`, `/typebox/error` | Removed; schemas are ordinary JSON Schema |
+| TypeBox `Code()` | Removed |
+| TypeBox builders outside the list above (`t.File`, `t.Numeric`, numeric enums, …) | Keep app-specific schemas as plain JSON Schema or extend `t` locally |
+
+Schemas no longer carry `~kind` or TypeBox symbols. Optional properties are
+marked with a non-enumerable symbol while the parent object is built, and
+serialize as plain `{ "type": "string" }` with the key omitted from `required`.
+`Intersect` of object schemas merges into one object at build time.
+
+Validation issues keep the AJV/JSON-Schema field names (`instancePath`,
+`keyword`, `schemaPath`, `params`), so error consumers do not change.
+`Convert()` still coerces strings to numbers, integers and booleans, and wraps
+a scalar into a one-item array when the schema expects an array.
+
 ## Own HTTP core (no Elysia)
 
 Techne no longer builds on Elysia. `createApp()` returns Techne's own `App`
-(`src/server/`), and the package has no runtime `dependencies`; only TypeBox is
-still bundled as source, for schemas.
+(`src/server/`), and the package has no runtime `dependencies` and no vendored
+code. Schemas are handled by Techne's own small builder and compiler.
 
 Most native code keeps working unchanged: `createApp`, `.get()`/`.post()` with
 `(path, options, handler)`, `t` schemas, `.use()`, `.decorate()`, `.derive()`,
@@ -24,7 +54,7 @@ Breaking changes:
 | `app["~Routes"]` (nested by segment) | `app["~routes"]`, flat: `{ "/users/:id": { get: { body, params, query, headers, response } } }` |
 | `createApp({ precompile })`, `aot`, `normalize`, `adapter` | Removed; routes compile on `listen()` or the first request |
 | `@elysiajs/*` plugins, Eden treaty | Not supported; write a native plugin (`createApp({ name, as })`) |
-| `t.File`, `t.Numeric`, `t.Cookie` and other Elysia `t` extensions | Use TypeBox builders (`t.String`, `t.Number`, ...) |
+| `t.File`, `t.Numeric`, `t.Cookie` and other Elysia `t` extensions | Use Techne builders (`t.String`, `t.Number`, ...) |
 | `.guard()`, `.group()`, `.macro()`, `.resolve()`, `.state()`, `.model()`, `.ws()`, `.mount()`, `.trace()` | Use `createApp({ prefix })` + `.use()`, `.derive()`, `.decorate()`. WebSockets are not supported yet |
 
 Behaviour changes:
@@ -147,8 +177,9 @@ For the full, dated list of changes see the [CHANGELOG](./CHANGELOG.md).
 
 ## Elysia 2
 
-> **Superseded** by [Own HTTP core](#own-http-core-no-elysia). This section
-> applies only to releases that still ran on Elysia.
+> **Superseded** by [Own schema library](#own-schema-library-no-vendored-typebox)
+> and [Own HTTP core](#own-http-core-no-elysia). This section applies only to
+> releases that still ran on Elysia; its `/typebox/*` imports no longer exist.
 
 Techne built on `elysia@2.0.0-beta.1` and `typebox@1.x`, replacing
 `elysia@1.4` and `@sinclair/typebox@0.34`.

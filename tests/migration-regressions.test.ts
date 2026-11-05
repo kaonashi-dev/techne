@@ -36,7 +36,7 @@ describe("Techne migration regressions", () => {
     const doc = emitOpenApiDocument(app);
     expect(doc.info.title).toBe("Techne API");
     const unknown = typeboxToOpenApi({
-      [Symbol.for("TypeBox.Kind")]: "CustomKind",
+      "~kind": "CustomKind",
       custom: true,
     });
     expect(unknown["x-techne-unknown-kind"]).toBe("CustomKind");

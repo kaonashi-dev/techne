@@ -2,7 +2,7 @@ import { appConfig, defineConfig, t } from "../../../../src/config/index.ts";
 
 /**
  * Typed, validated configuration. Values are read from the environment and
- * checked against the TypeBox schema at boot; a bad value throws
+ * checked against the Techne schema at boot; a bad value throws
  * `ConfigValidationError` before the HTTP server starts.
  *
  * Fields are optional so the demo boots with zero environment setup; handlers

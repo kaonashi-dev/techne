@@ -101,7 +101,7 @@ curl http://localhost:3000/api-docs
 - **Relative framework imports / run-from-root.** Because this app sits inside
   the framework repo with no published package or workspace install, it imports
   Techne from `../../src/<area>` and every script runs from the repo root so the
-  framework's own dependencies (such as the vendored TypeBox) resolve. A standalone consumer
+  framework's own dependencies resolve. A standalone consumer
   would instead `bun add github:kaonashi-dev/techne` and import
   `@kaonashi-dev/techne/<area>`.
 - **CQRS buses via `ModuleRef`.** The framework registers the command/query/event

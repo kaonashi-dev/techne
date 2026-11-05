@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import { fileURLToPath } from "node:url";
 import { App, createApp, problem, status, t } from "../src";
 
 describe("native composition", () => {
   test("keeps legacy and optional subsystems out of the root dependency graph", async () => {
     const build = await Bun.build({
-      entrypoints: [new URL("../src/index.ts", import.meta.url).pathname],
+      entrypoints: [fileURLToPath(new URL("../src/index.ts", import.meta.url))],
       target: "bun",
       metafile: true,
     });
@@ -105,7 +106,7 @@ describe("native composition", () => {
   });
 
   test("root import does not initialize the decorator metadata runtime", async () => {
-    const entry = new URL("../src/index.ts", import.meta.url).pathname;
+    const entry = fileURLToPath(new URL("../src/index.ts", import.meta.url));
     const child = Bun.spawn(
       [
         process.execPath,

@@ -27,8 +27,8 @@ on this path.
 | Feature factory | Receive dependencies and return an `App` chain | Application code |
 | Service factory or plain class | Business rules, with explicit dependencies | Application code |
 
-`src/index.ts` must only import `src/server/`, `src/runtime/` and the vendored
-TypeBox. Runtime code must not
+`src/index.ts` must only import `src/server/`, `src/runtime/` and the schema
+core. Runtime code must not
 import the container, decorators, scanner, router adapter, CLI or optional
 integrations. Existing legacy code lives behind `/legacy` and historical
 subpaths. Legacy integration factories are not native plugins.

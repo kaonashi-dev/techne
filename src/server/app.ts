@@ -1,5 +1,5 @@
-import { Compile } from "../vendor/typebox/compile/index";
-import type { TSchema } from "../vendor/typebox/index";
+import { Compile } from "../schema/core/compile";
+import type { TSchema } from "../schema/core/types";
 import { RequestCookies, type CookieConfig } from "./cookie";
 import { Router, parseQuery } from "./router";
 import {

@@ -158,7 +158,7 @@ export interface TechneApplicationOptions {
    *
    * By default, a validation failure returns a single-entry `errors` array
    * containing the first reported error. Set `exhaustive: true` to return
-   * every error TypeBox reports (this materializes the full TypeBox iterator
+   * every error the validator reports (this materializes the full error list
    * on every invalid request and is significantly slower; opt in only when
    * clients need all errors at once).
    */

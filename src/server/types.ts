@@ -1,4 +1,4 @@
-import type { Static, TSchema } from "../vendor/typebox/index";
+import type { Static, TSchema } from "../schema/core/types";
 import type { CookieConfig, CookieJar } from "./cookie";
 import type { StatusResult, status } from "./status";
 

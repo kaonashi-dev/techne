@@ -101,51 +101,6 @@
       "bun": "./src/telemetry/index.ts",
       "import": "./src/telemetry/index.ts",
       "types": "./dist/types/telemetry/index.d.ts"
-    },
-    "./typebox": {
-      "bun": "./src/vendor/typebox/index.ts",
-      "import": "./src/vendor/typebox/index.ts",
-      "types": "./dist/types/vendor/typebox/index.d.ts"
-    },
-    "./typebox/compile": {
-      "bun": "./src/vendor/typebox/compile/index.ts",
-      "import": "./src/vendor/typebox/compile/index.ts",
-      "types": "./dist/types/vendor/typebox/compile/index.d.ts"
-    },
-    "./typebox/error": {
-      "bun": "./src/vendor/typebox/error/index.ts",
-      "import": "./src/vendor/typebox/error/index.ts",
-      "types": "./dist/types/vendor/typebox/error/index.d.ts"
-    },
-    "./typebox/format": {
-      "bun": "./src/vendor/typebox/format/index.ts",
-      "import": "./src/vendor/typebox/format/index.ts",
-      "types": "./dist/types/vendor/typebox/format/index.d.ts"
-    },
-    "./typebox/guard": {
-      "bun": "./src/vendor/typebox/guard/index.ts",
-      "import": "./src/vendor/typebox/guard/index.ts",
-      "types": "./dist/types/vendor/typebox/guard/index.d.ts"
-    },
-    "./typebox/schema": {
-      "bun": "./src/vendor/typebox/schema/index.ts",
-      "import": "./src/vendor/typebox/schema/index.ts",
-      "types": "./dist/types/vendor/typebox/schema/index.d.ts"
-    },
-    "./typebox/system": {
-      "bun": "./src/vendor/typebox/system/index.ts",
-      "import": "./src/vendor/typebox/system/index.ts",
-      "types": "./dist/types/vendor/typebox/system/index.d.ts"
-    },
-    "./typebox/type": {
-      "bun": "./src/vendor/typebox/type/index.ts",
-      "import": "./src/vendor/typebox/type/index.ts",
-      "types": "./dist/types/vendor/typebox/type/index.d.ts"
-    },
-    "./typebox/value": {
-      "bun": "./src/vendor/typebox/value/index.ts",
-      "import": "./src/vendor/typebox/value/index.ts",
-      "types": "./dist/types/vendor/typebox/value/index.d.ts"
     }
   },
   "bin": {

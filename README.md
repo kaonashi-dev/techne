@@ -26,7 +26,7 @@ const app = createApp()
 ```
 
 `createApp()` returns a Techne `App`: routes with `(path, options, handler)`,
-TypeBox schemas for `body`, `query`, `params` and `headers`, typed context,
+`t` schemas for `body`, `query`, `params` and `headers`, typed context,
 lifecycle hooks (`request`, `derive`, `beforeHandle`, `afterHandle`,
 `mapResponse`, `error`, `afterResponse`), composition with `.use()`, cookies and
 RFC 9457 problem responses. Synchronous routes never allocate an async frame.
@@ -118,10 +118,12 @@ Mount generated features explicitly in `app.ts`. See the runnable reference in
 | --- | --- |
 | `@kaonashi-dev/techne` | `createApp`, `App`, `createResources`, `t`, `status`, `problem`, `ValidationError` |
 | `@kaonashi-dev/techne/server` | HTTP core internals: `StatusMap`, `HttpError`, `NotFoundError`, `ParseError`, `problemResponse`, … |
-| `@kaonashi-dev/techne/typebox`, `/typebox/*` | Bundled TypeBox 1.x (`/compile`, `/type`, `/value`, `/schema`, `/guard`, `/format`, `/system`, `/error`) |
 | `@kaonashi-dev/techne/http` | Independent outgoing HTTP client |
 | `@kaonashi-dev/techne/legacy` | Decorator runtime: `TechneFactory`, container and legacy bootstrap |
 | `@kaonashi-dev/techne/core` | Compatibility alias for the legacy runtime |
+
+`t` is Techne's own small JSON Schema builder in `src/schema/core/`; schemas are
+plain objects and can be inspected or reused as ordinary JSON Schema.
 
 Existing decorator-oriented integration subpaths remain available for legacy
 applications. Their plugin protocol requires the legacy runtime; native apps use

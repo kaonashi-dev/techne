@@ -3,10 +3,10 @@ import { kindOf, requiredKeys, tupleMembers, unionMembers } from "../schema/json
 
 // ─── Schema introspection ────────────────────────────────────────────────────
 // Mirrors the pattern in `src/swagger/openapi-emitter.ts`: node kinds are
-// derived structurally from the JSON Schema. TypeBox 1.x
-// dropped the `Symbol.for("TypeBox.Kind")` tags this module used to read.
+// derived structurally from the JSON Schema, independent of the builder that
+// produced it.
 
-type AnyTypeBox = { [key: string]: unknown };
+type AnySchema = { [key: string]: unknown };
 
 /** Format a literal value as a TypeScript source-level expression. */
 function formatLiteral(value: unknown): string {
@@ -17,7 +17,7 @@ function formatLiteral(value: unknown): string {
 }
 
 /**
- * Convert a TypeBox schema node to a TypeScript type literal source string.
+ * Convert a Techne schema node to a TypeScript type literal source string.
  *
  * Returns the inline representation (e.g. `{ id: string; name?: string }`),
  * NOT a wrapped `type Foo = ...` declaration. Optionality of object properties
@@ -26,7 +26,7 @@ function formatLiteral(value: unknown): string {
  */
 export function typeboxToTypeScript(schema: unknown): string {
   if (!schema || typeof schema !== "object") return "unknown";
-  const node = schema as AnyTypeBox;
+  const node = schema as AnySchema;
   const kind = kindOf(node);
 
   switch (kind) {
@@ -72,7 +72,7 @@ export function typeboxToTypeScript(schema: unknown): string {
       return `[${items.map(typeboxToTypeScript).join(", ")}]`;
     }
     case "Record": {
-      // TypeBox `Record(K, V)` lowers to `{ patternProperties: { "...": V } }`.
+      // `Record(K, V)` lowers to `{ patternProperties: { "...": V } }`.
       const pattern = node.patternProperties as Record<string, unknown> | undefined;
       const valueSchema = pattern ? Object.values(pattern)[0] : undefined;
       const valueType = valueSchema ? typeboxToTypeScript(valueSchema) : "unknown";
@@ -83,7 +83,7 @@ export function typeboxToTypeScript(schema: unknown): string {
   return "unknown";
 }
 
-function emitObject(node: AnyTypeBox): string {
+function emitObject(node: AnySchema): string {
   const props = (node.properties ?? {}) as Record<string, unknown>;
   const keys = Object.keys(props);
   if (keys.length === 0) return "Record<string, unknown>";

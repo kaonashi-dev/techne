@@ -1,7 +1,7 @@
 import "../reflect-setup";
-import * as Type from "../vendor/typebox/type/index";
-import type { TSchema } from "../vendor/typebox/index";
-import { Compile } from "../vendor/typebox/compile/index";
+import * as Type from "./core/builder";
+import type { TSchema } from "./core/types";
+import { Compile } from "./core/compile";
 import type { TypeCheck } from "./validator-types";
 import { enumType } from "./enum";
 
@@ -35,7 +35,7 @@ type ValidationConstraint =
   | { type: "minItems"; value: number }
   | { type: "maxItems"; value: number };
 
-/** Module-level registry: DTO class → TypeBox schema and compiled validator. */
+/** Module-level registry: DTO class → Techne schema and compiled validator. */
 const dtoRegistry = new Map<Function, TSchema>();
 const dtoValidatorRegistry = new Map<Function, TypeCheck<TSchema>>();
 const dtoOptionsRegistry = new WeakMap<Function, DtoOptions>();
@@ -128,7 +128,7 @@ export function getOrCreateDtoSchema(target: Function): TSchema | undefined {
 }
 
 /**
- * Builds a header-safe TypeBox schema from a DTO class.
+ * Builds a header-safe Techne schema from a DTO class.
  *
  * Differences from the body schema:
  * - `additionalProperties` is forced to `true` — HTTP headers always carry
@@ -168,7 +168,7 @@ export function buildHeaderSchemaFromClass(target: Function): TSchema {
 }
 
 /**
- * Returns a lenient TypeBox schema derived from the DTO class with
+ * Returns a lenient Techne schema derived from the DTO class with
  * `additionalProperties: true` (open object). Used by the strip-unknown
  * feature: validation checks the known properties but does not reject requests
  * that carry extra fields. The actual stripping happens in a per-route
@@ -191,12 +191,12 @@ export function getOrCreateLenientDtoSchema(target: Function): TSchema | undefin
   const strict = getOrCreateDtoSchema(target);
   if (!strict) return undefined;
 
-  // Extract the property sub-schemas from the strict TypeBox Object schema.
-  // TypeBox stores them under the plain `properties` key.
+  // Extract the property sub-schemas from the strict object schema. They live
+  // under the plain `properties` key.
   const properties = (strict as any).properties as Record<string, TSchema> | undefined;
 
-  // Rebuild via Type.Object so the result is a proper TypeBox schema with the
-  // [Kind] symbol and all TypeBox identity markers intact.
+  // Rebuild via Type.Object so the result is a proper object schema and the
+  // strict schema is never mutated.
   const lenient = Type.Object(properties ?? {}, { additionalProperties: true });
 
   // Carry over the `required` array from the strict schema so required
@@ -305,7 +305,7 @@ export function isValidDto(value: unknown, metatype: Function): boolean {
 }
 
 /**
- * Materialize just the first validation error. The TypeBox `Errors` iterator
+ * Materialize just the first validation error. The validator `Errors` list
  * stops as soon as we pull one entry, so this avoids walking the entire
  * schema when we only need to surface the first failure (the rest can be
  * computed on-demand via {@link computeAllValidationErrors}).
@@ -570,11 +570,11 @@ function getObjectOptions(klass: ClassConstructor): Record<string, unknown> {
  * Collapse a raw validator error list into Techne's property-keyed
  * `ValidationError[]`.
  *
- * TypeBox 1.x reports errors in the AJV/JSON-Schema idiom:
+ * The validator reports errors in the AJV/JSON-Schema idiom:
  * `instancePath` for the JSON Pointer, `keyword` for the failing constraint,
- * and no `value` field at all. TypeBox 0.34 used `path`, a numeric `type`, and
- * carried `value`. Both spellings are accepted so a caller passing 0.34-shaped
- * errors still normalizes correctly.
+ * and no `value` field at all. Older validators used `path`, a numeric `type`,
+ * and carried `value`; both spellings are accepted so legacy-shaped errors
+ * still normalize correctly.
  *
  * `root` is the value that was validated. It exists solely to repopulate
  * `ValidationError.value`, which is part of Techne's public error shape but no
@@ -590,9 +590,9 @@ function normalizeValidationErrors(
     const pointer = error.instancePath ?? error.path;
     const path = normalizeErrorPath(pointer);
 
-    // TypeBox 1.x reports every missing required property as a SINGLE error
+    // The validator reports every missing required property as a SINGLE error
     // anchored at the containing object (`instancePath: ""`, `keyword:
-    // "required"`, `params.requiredProperties: [...]`). TypeBox 0.34 instead
+    // "required"`, `params.requiredProperties: [...]`). Older validators instead
     // reported one error per property, anchored at that property's own path.
     // Fan the v1 form back out so each missing property gets its own entry —
     // without this the error lands on an empty path and is dropped entirely,
@@ -706,9 +706,9 @@ function addChildError(
 /**
  * Key under which a failure is recorded in `constraints`.
  *
- * TypeBox 1.x supplies a descriptive string `keyword` (`"minLength"`,
- * `"type"`), which is what a consumer actually wants to branch on. TypeBox
- * 0.34 supplied a numeric `type` enum. The positional `rule_N` fallback keeps
+ * The validator supplies a descriptive string `keyword` (`"minLength"`,
+ * `"type"`), which is what a consumer actually wants to branch on. Older
+ * validators supplied a numeric `type` enum. The positional `rule_N` fallback keeps
  * distinct failures on one property from overwriting each other when neither
  * field is present.
  */

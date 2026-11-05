@@ -14,7 +14,7 @@ import type { AppConfigType } from "../config/app.config";
 import { ApiKeyGuard } from "../common/api-key.guard";
 import { DomainRuleError, DomainRuleFilter } from "../common/http-exception.filter";
 
-/** Inline TypeBox schema authored with the `Schema` helper. */
+/** Inline Techne schema authored with the `Schema` helper. */
 const EchoSchema = Schema.Object({
   message: Schema.String({ minLength: 1 }),
 });

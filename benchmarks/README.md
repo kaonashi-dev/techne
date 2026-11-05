@@ -9,8 +9,8 @@ A small, deterministic-as-possible suite for tracking framework performance acro
 | `http.ts`            | Head-to-head: native app vs the legacy decorator runtime.                  |
 | `fast-path.ts`       | Arity-specialized compiled handler (no enhancers, arity ≤ 3) vs native.    |
 | `slow-path.ts`       | Cost-tagged enhancer path: static `@Injectable() CanActivate` guard.       |
-| `validation.ts`      | POST with TypeBox `body` schema, valid + invalid bodies.                   |
-| `response-schema.ts` | Routes with a `response` schema (exercises the fast TypeBox stringifier).  |
+| `validation.ts`      | POST with a `body` schema, valid + invalid bodies.                         |
+| `response-schema.ts` | Routes with a `response` schema (exercises the fast schema stringifier).   |
 | `di.ts`              | Container resolution throughput, cold (1st call) vs warm (100k calls).     |
 | `cold-start.ts`      | Time-to-first-request via a `Bun.spawn` child, N = 1, 10, 50 modules.      |
 | `socket.ts`          | The same routes over **real loopback TCP**, through `Bun.serve`.           |
