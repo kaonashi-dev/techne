@@ -4,16 +4,17 @@
     "module": "Preserve",
     "moduleResolution": "Bundler",
     "strict": true,
+    "verbatimModuleSyntax": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "allowSyntheticDefaultImports": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "outDir": "./dist",
     "rootDir": "./src",
     "types": [
-      "bun-types"
+      "bun"
     ]
   },
-  "include": ["src/**/*"]
+  "include": [
+    "src/**/*"
+  ]
 }

@@ -1,3 +1,4 @@
+/// <reference path="../global.d.ts" />
 /**
  * Lightweight metadata store — replaces the `reflect-metadata` package.
  *
