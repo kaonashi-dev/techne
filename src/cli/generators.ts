@@ -1,6 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { generateDockerfile } from "./deployment";
+import { DEFAULT_BUN_VERSION } from "./bun-version";
 
 export { generateDockerfile } from "./deployment";
 export { generateCommand } from "./legacy-generators";
@@ -198,12 +199,18 @@ export async function createProject(name: string) {
     version: "0.1.0",
     private: true,
     type: "module",
+    engines: { bun: `>=${DEFAULT_BUN_VERSION}` },
+    packageManager: `bun@${DEFAULT_BUN_VERSION}`,
     scripts: {
       dev: "techne dev",
       start: "techne start",
       build: "techne build",
+      "build:aot": "techne build --aot --trim",
       "build:bundle": "techne build --target=bun --minify",
+      "build:linux": "techne build --compile --target=bun-linux-x64",
+      "build:linux:arm64": "techne build --compile --target=bun-linux-arm64",
       "deploy:docker": "techne deploy --target docker",
+      "deploy:docker:aot": "techne deploy --target docker --mode aot",
       test: "bun test",
       typecheck: "tsc --noEmit",
       lint: "techne lint",
@@ -213,10 +220,11 @@ export async function createProject(name: string) {
     },
     dependencies: { "@kaonashi-dev/techne": "github:kaonashi-dev/techne" },
     devDependencies: {
-      "@types/bun": "^1.3.11",
+      "@types/bun": "^1.4.4",
       typescript: "^7.0.2",
     },
   });
+  await write(path.join(dir, ".bun-version"), `${DEFAULT_BUN_VERSION}\n`);
   await json(path.join(dir, "tsconfig.json"), {
     compilerOptions: {
       target: "ESNext",
@@ -282,6 +290,14 @@ export type App = ReturnType<typeof buildApp>;
     path.join(dir, "src", "main.ts"),
     `import { buildApp } from "./app";
 
+if (process.argv.includes("--healthcheck")) {
+  const port = Number(Bun.env.PORT ?? 3000);
+  const healthy = await fetch(\`http://127.0.0.1:\${port}/healthz\`)
+    .then((response) => response.ok)
+    .catch(() => false);
+  process.exit(healthy ? 0 : 1);
+}
+
 const app = buildApp().listen({
   port: Number(Bun.env.PORT ?? 3000),
   hostname: Bun.env.HOST ?? "0.0.0.0",
@@ -319,7 +335,13 @@ Run \`bun install\`, then \`bun run dev\`. Verify with \`bun test\` and \`bun ru
 - Return the app chain from route factories to preserve inferred API types.
 
 Generate a feature with \`bunx techne g resource users\`, then import and mount it
-explicitly in \`src/app.ts\`. Build with \`bun run build\` or \`bun run build:bundle\`.
+explicitly in \`src/app.ts\`.
+
+- \`bun run build\` produces a standalone binary at \`dist/app\` (no Bun required on the server).
+- \`bun run build:linux\` cross-compiles a Linux x64 binary.
+- \`bun run build:aot\` is the experimental machine-code build (Bun 1.5+/canary; no cross-compile).
+  Run it with the pinned canary Bun on PATH.
+- \`bun run build:bundle\` produces \`dist/app.bun\`, a JS bundle that runs with Bun.
 `,
   );
   await generateDockerfile({ outDir: dir });

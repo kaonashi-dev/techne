@@ -1,6 +1,6 @@
 import { Compile } from "../schema/core/compile";
 import type { TSchema } from "../schema/core/types";
-import { RequestCookies, type CookieConfig } from "./cookie";
+import { RequestCookies, type CookieConfig, type CookieJar } from "./cookie";
 import { Router, parseQuery } from "./router";
 import {
   internalServerErrorResponse,
@@ -23,6 +23,7 @@ import type {
   HookScope,
   JoinPath,
   ListenOptions,
+  ParamRecord,
   MaybePromise,
   PreContext,
   PrefixRoutes,
@@ -34,7 +35,27 @@ import type {
   SetContext,
 } from "./types";
 
-type Fn = (ctx: any) => unknown;
+/** The public shape every route handler and hook receives at runtime. */
+export interface RuntimeContext {
+  request: Request;
+  path: string;
+  route: string;
+  params: ParamRecord;
+  query: Record<string, unknown>;
+  headers: Record<string, string>;
+  body: unknown;
+  cookie: CookieJar;
+  set: SetContext;
+  store: Record<string, unknown>;
+  server: Server | null;
+  status: typeof status;
+  response: unknown;
+  error: unknown;
+  responseValue: unknown;
+  redirect(url: string, code?: 301 | 302 | 303 | 307 | 308): StatusResult;
+}
+
+type Fn = (ctx: RuntimeContext) => unknown;
 type HookKind =
   | "request"
   | "transform"
@@ -581,11 +602,11 @@ export function joinPath(prefix: string, path: string): string {
 // ─── Per-request context ─────────────────────────────────────────────────────
 
 /** The object every hook and handler of one request receives. */
-export class RequestContext {
+export class RequestContext implements RuntimeContext {
   request: Request;
   path: string;
   route: string;
-  params: Record<string, string>;
+  params: ParamRecord;
   set: SetContext;
   store: Record<string, unknown>;
   server: Server | null;
@@ -639,7 +660,7 @@ export class RequestContext {
     this._route = undefined;
   }
 
-  get query(): Record<string, any> {
+  get query(): Record<string, unknown> {
     return (this._query ??= this._qi === -1 ? {} : parseQuery(this.request.url.slice(this._qi)));
   }
   set query(value: Record<string, unknown>) {
@@ -647,7 +668,14 @@ export class RequestContext {
   }
 
   get headers(): Record<string, string> {
-    return (this._headers ??= Object.fromEntries(this.request.headers as any));
+    const cached = this._headers;
+    if (cached !== undefined) return cached;
+    const headers: Record<string, string> = {};
+    this.request.headers.forEach((value, key) => {
+      headers[key] = value;
+    });
+    this._headers = headers;
+    return headers;
   }
   set headers(value: Record<string, string>) {
     this._headers = value;
@@ -697,10 +725,11 @@ interface CompiledRoute {
 class Prebuilt {
   /** Cloned for plain 200 responses, which is cheaper than building one. */
   readonly response: Response;
-  constructor(
-    readonly body: string,
-    readonly type: string,
-  ) {
+  readonly body: string;
+  readonly type: string;
+  constructor(body: string, type: string) {
+    this.body = body;
+    this.type = type;
     this.response = new Response(body, { headers: { "content-type": type } });
   }
 }
@@ -743,6 +772,7 @@ function compileRoute(def: RouteDef, path: string, inherited: Hook[]): CompiledR
   const local = (kind: HookKind, value: unknown) => {
     if (value === undefined) return;
     for (const fn of Array.isArray(value) ? value : [value]) {
+      if (typeof fn !== "function") continue;
       hooks[kind].push({ kind, fn: fn as Fn, scope: "local" });
     }
   };

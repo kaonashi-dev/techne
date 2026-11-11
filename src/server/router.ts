@@ -161,8 +161,8 @@ export function parseQuery(search: string): Record<string, string | string[]> {
     const value = eq === -1 ? "" : decodeQuery(pair.slice(eq + 1));
     const prev = out[key];
     if (prev === undefined) out[key] = value;
-    else if (Array.isArray(prev)) prev.push(value);
-    else out[key] = [prev, value];
+    else if (typeof prev === "string") out[key] = [prev, value];
+    else prev.push(value);
   }
   return out;
 }

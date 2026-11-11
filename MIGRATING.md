@@ -317,10 +317,12 @@ Found while migrating; none block the upgrade, but they are worth knowing:
 - **`exact-mirror` must be `>= 1.2.2`.** An older copy left over from Elysia 1.4
   silently disables the compiled response serializer for `Union` response
   schemas (it warns once per route on boot). Techne now depends on it directly.
-- **The AOT build plugin is not wired in.** `elysia/plugin/aot/bun` requires the
-  build entry to `export default` an Elysia instance, which a Techne
-  `src/main.ts` does not do, and the artifact it produced segfaulted Bun
-  1.3.14-canary in testing. Revisit when the beta stabilizes.
+- **Bun AOT is opt-in, not the Elysia plugin.** `techne build --aot` uses
+  `bun compile` and requires Bun 1.5+/canary. The old
+  `elysia/plugin/aot/bun` path is not used by the native core; it required a
+  default-exported Elysia instance and is not compatible with a Techne
+  `src/main.ts`. Legacy apps that load `techne.config.ts` with `await import()`
+  need `--aot-allow-code-from-disk` or a JIT binary.
 
 ### Performance
 

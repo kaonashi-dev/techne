@@ -68,6 +68,10 @@ type Part<S, K extends keyof RouteSchema, Fallback> = S extends {
   ? Static<T>
   : Fallback;
 
+export type QueryRecord = Record<string, string | string[] | undefined>;
+export type HeaderRecord = Record<string, string | undefined>;
+export type ParamRecord = Record<string, string>;
+
 export interface SetContext {
   status: number | keyof import("./status").StatusMap;
   headers: Record<string, string | number>;
@@ -85,8 +89,8 @@ export type Context<
   /** Matched route template, e.g. `/users/:id`. */
   route: string;
   params: Part<S, "params", Prettify<ParamsOf<Path>>>;
-  query: Part<S, "query", Record<string, string | string[] | undefined>>;
-  headers: Part<S, "headers", Record<string, string | undefined>>;
+  query: Part<S, "query", QueryRecord>;
+  headers: Part<S, "headers", HeaderRecord>;
   body: Part<S, "body", unknown>;
   cookie: CookieJar;
   set: SetContext;

@@ -8,11 +8,13 @@
   "type": "module",
   "exports": {
     ".": {
+      "aot": "./src/index.ts",
       "types": "./dist/types/index.d.ts",
       "bun": "./src/index.ts",
       "import": "./src/index.ts"
     },
     "./server": {
+      "aot": "./src/server/index.ts",
       "bun": "./src/server/index.ts",
       "import": "./src/server/index.ts",
       "types": "./dist/types/server/index.d.ts"
@@ -23,6 +25,7 @@
       "import": "./src/core/index.ts"
     },
     "./common": {
+      "aot": "./src/common/index.ts",
       "bun": "./src/common/index.ts",
       "import": "./src/common/index.ts",
       "types": "./dist/types/common/index.d.ts"
@@ -33,71 +36,85 @@
       "types": "./dist/types/core/index.d.ts"
     },
     "./config": {
+      "aot": "./src/config/index.ts",
       "bun": "./src/config/index.ts",
       "import": "./src/config/index.ts",
       "types": "./dist/types/config/index.d.ts"
     },
     "./jwt": {
+      "aot": "./src/jwt/index.ts",
       "bun": "./src/jwt/index.ts",
       "import": "./src/jwt/index.ts",
       "types": "./dist/types/jwt/index.d.ts"
     },
     "./swagger": {
+      "aot": "./src/swagger/index.ts",
       "bun": "./src/swagger/index.ts",
       "import": "./src/swagger/index.ts",
       "types": "./dist/types/swagger/index.d.ts"
     },
     "./health": {
+      "aot": "./src/health/index.ts",
       "bun": "./src/health/index.ts",
       "import": "./src/health/index.ts",
       "types": "./dist/types/health/index.d.ts"
     },
     "./testing": {
+      "aot": "./src/testing/index.ts",
       "bun": "./src/testing/index.ts",
       "import": "./src/testing/index.ts",
       "types": "./dist/types/testing/index.d.ts"
     },
     "./cqrs": {
+      "aot": "./src/cqrs/index.ts",
       "bun": "./src/cqrs/index.ts",
       "import": "./src/cqrs/index.ts",
       "types": "./dist/types/cqrs/index.d.ts"
     },
     "./queue": {
+      "aot": "./src/queue/index.ts",
       "bun": "./src/queue/index.ts",
       "import": "./src/queue/index.ts",
       "types": "./dist/types/queue/index.d.ts"
     },
     "./mq": {
+      "aot": "./src/mq/index.ts",
       "bun": "./src/mq/index.ts",
       "import": "./src/mq/index.ts",
       "types": "./dist/types/mq/index.d.ts"
     },
     "./prisma": {
+      "aot": "./src/prisma/index.ts",
       "bun": "./src/prisma/index.ts",
       "import": "./src/prisma/index.ts",
       "types": "./dist/types/prisma/index.d.ts"
     },
     "./contract": {
+      "aot": "./src/contract/index.ts",
       "bun": "./src/contract/index.ts",
       "import": "./src/contract/index.ts",
       "types": "./dist/types/contract/index.d.ts"
     },
     "./http": {
+      "aot": "./src/http/index.ts",
       "bun": "./src/http/index.ts",
       "import": "./src/http/index.ts",
       "types": "./dist/types/http/index.d.ts"
     },
     "./console": {
+      "aot": "./src/console/index.ts",
       "bun": "./src/console/index.ts",
       "import": "./src/console/index.ts",
       "types": "./dist/types/console/index.d.ts"
     },
     "./security": {
+      "aot": "./src/security/index.ts",
       "bun": "./src/security/index.ts",
       "import": "./src/security/index.ts",
       "types": "./dist/types/security/index.d.ts"
     },
     "./telemetry": {
+      "aot": "./src/telemetry/index.ts",
       "bun": "./src/telemetry/index.ts",
       "import": "./src/telemetry/index.ts",
       "types": "./dist/types/telemetry/index.d.ts"
@@ -110,6 +127,7 @@
     "src",
     "dist/types",
     "README.md",
+    "BOM.md",
     "LICENSE"
   ],
   "scripts": {
@@ -147,7 +165,7 @@
     "@opentelemetry/sdk-trace-node": "2.8.0",
     "@opentelemetry/semantic-conventions": "1.41.1",
     "@prisma/client": "^5",
-    "@types/bun": "^1.3.11",
+    "@types/bun": "1.4.4",
     "prisma": "^5",
     "typescript": "^7.0.2"
   },
@@ -191,5 +209,9 @@
     "@prisma/client": {
       "optional": true
     }
-  }
+  },
+  "engines": {
+    "bun": ">=1.4.4"
+  },
+  "packageManager": "bun@1.4.4"
 }

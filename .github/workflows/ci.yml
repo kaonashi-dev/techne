@@ -29,7 +29,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version-file: .bun-version
 
       - run: bun install --frozen-lockfile
 
@@ -56,3 +56,119 @@ jobs:
 
       - name: Build
         run: bun run build
+
+  binary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - run: bun install --frozen-lockfile
+
+      - name: Build Linux x64 standalone binary
+        run: >-
+          bun src/cli/index.ts build apps/native/src/main.ts
+          --compile --target=bun-linux-x64
+          --out dist/app-linux-x64
+          --manifest dist/app-linux-x64.build.json
+
+      - name: Verify binary and BOM
+        run: |
+          file dist/app-linux-x64
+          test -x dist/app-linux-x64
+          bun -e 'const m = await Bun.file("dist/app-linux-x64.build.json").json(); console.log(m); if (m.kind !== "binary" || m.target !== "bun-linux-x64") process.exit(1)'
+
+      - name: Smoke test binary
+        shell: bash
+        run: |
+          PORT=3100 ./dist/app-linux-x64 &
+          pid=$!
+          trap 'kill $pid 2>/dev/null || true' EXIT
+          for i in $(seq 1 50); do
+            curl -sf http://127.0.0.1:3100/healthz && break
+            sleep 0.1
+          done
+          curl -sf http://127.0.0.1:3100/healthz | grep -q '"healthy":true'
+          status=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:3100/users -H 'content-type: application/json' -d '{"name":""}')
+          test "$status" = "422"
+          PORT=3100 ./dist/app-linux-x64 --healthcheck
+          kill $pid
+          wait $pid || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: techne-linux-x64
+          path: |
+            dist/app-linux-x64
+            dist/app-linux-x64.build.json
+
+  aot-preview:
+    runs-on: ubuntu-latest
+    # Experimental until Bun ships AOT in a stable release.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install pinned Bun canary with AOT
+        run: |
+          npm install -g bun@1.4.4-canary.20261109.1
+          which bun
+          bun --revision
+
+      - run: bun install --frozen-lockfile
+
+      - name: AOT typecheck
+        run: bun check --aot --no-script apps/native/src/main.ts
+
+      - name: Native tests compiled with AOT
+        run: >-
+          bun test --aot
+          tests/native-app.test.ts
+          tests/native-example.test.ts
+          tests/server-core.test.ts
+          tests/schema-core.test.ts
+
+      - name: AOT slow-path report
+        run: |
+          mkdir -p dist
+          bun check --aot --no-script --explain=json apps/native/src/main.ts 2>/dev/null | grep '^{' > dist/aot-explain.json || true
+
+      - name: Build AOT binary
+        run: |
+          mkdir -p dist
+          bun src/cli/index.ts build apps/native/src/main.ts \
+            --aot --trim \
+            --out dist/app-aot \
+            --manifest dist/app-aot.build.json
+
+      - name: Smoke test AOT binary
+        shell: bash
+        run: |
+          PORT=3101 ./dist/app-aot &
+          pid=$!
+          trap 'kill $pid 2>/dev/null || true' EXIT
+          for i in $(seq 1 50); do
+            curl -sf http://127.0.0.1:3101/healthz && break
+            sleep 0.1
+          done
+          curl -sf http://127.0.0.1:3101/healthz | grep -q '"healthy":true'
+          status=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:3101/users -H 'content-type: application/json' -d '{"name":""}')
+          test "$status" = "422"
+          PORT=3101 ./dist/app-aot --healthcheck
+          kill $pid
+          wait $pid || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: techne-linux-x64-aot-preview
+          path: |
+            dist/app-aot
+            dist/app-aot.build.json
+            dist/aot-explain.json

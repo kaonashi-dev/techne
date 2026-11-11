@@ -167,7 +167,7 @@ function serializeRoute(route: DiscoveredRouteDefinition): SerializedRoute {
 
 function serializeParam(param: ParamMetadata): SerializedParamMetadata {
   if (param.type === "custom") {
-    throw new Error("AOT route table does not support custom parameter decorators yet.");
+    throw new Error("Precompiled route manifest does not support custom parameter decorators yet.");
   }
   return {
     index: param.index,
@@ -188,7 +188,7 @@ function tokenName(token: any, label: string): string {
       : token && typeof token === "object" && token.constructor
         ? token.constructor.name
         : undefined;
-  if (!name) throw new Error(`AOT route table cannot serialize anonymous ${label}.`);
+  if (!name) throw new Error(`Precompiled route manifest cannot serialize anonymous ${label}.`);
   return name;
 }
 
@@ -354,7 +354,7 @@ function assertJsonSerializable(value: unknown, label: string): void {
     JSON.stringify(value);
   } catch (error) {
     throw new Error(
-      `AOT route table cannot serialize ${label}: ${error instanceof Error ? error.message : String(error)}`,
+      `Precompiled route manifest cannot serialize ${label}: ${error instanceof Error ? error.message : String(error)}`,
       { cause: error },
     );
   }

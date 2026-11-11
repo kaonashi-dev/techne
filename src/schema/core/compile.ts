@@ -1,4 +1,14 @@
 import type { Static, TSchema, ValidationIssue, Validator } from "./types";
+import {
+  isSchemaNode,
+  schemaArray,
+  schemaItem,
+  schemaPatterns,
+  schemaProperties,
+  schemaTuple,
+  type SchemaNode,
+  type SchemaValue,
+} from "./schema-node";
 
 /**
  * Techne's schema compiler.
@@ -16,14 +26,15 @@ export function Compile<S extends TSchema>(schema: S): Validator<S> {
   const key = schema as object;
   const cached = validators.get(key);
   if (cached) return cached;
+  const root = schema as unknown as SchemaNode;
   const validator: Validator<S> = {
-    Check: compileCheck(schema) as Validator<S>["Check"],
+    Check: compileCheck(root) as Validator<S>["Check"],
     Errors: (value) => {
       const issues: ValidationIssue[] = [];
-      collectErrors(schema, value, "", "#", issues);
+      collectErrors(root, value, "", "#", issues);
       return issues;
     },
-    Convert: (value) => convert(schema, value),
+    Convert: (value) => convert(root, value),
   };
   validators.set(key, validator);
   return validator;
@@ -36,7 +47,7 @@ export const compile = Compile;
 type Helper = (...args: any[]) => unknown;
 type CheckFn = (value: unknown) => boolean;
 
-function compileCheck(schema: TSchema): CheckFn {
+function compileCheck(schema: SchemaNode): CheckFn {
   try {
     const helpers: Helper[] = [];
     const addHelper = (fn: Helper): string => {
@@ -60,14 +71,14 @@ function compileCheck(schema: TSchema): CheckFn {
 }
 
 function buildExpression(
-  schema: unknown,
+  schema: SchemaValue,
   value: string,
   addHelper: (fn: Helper) => string,
   next: (prefix: string) => string,
 ): string {
   if (schema === false) return "false";
-  if (schema === true || schema === null || typeof schema !== "object") return "true";
-  const node = schema as Record<string, any>;
+  if (schema === true || schema === null || !isSchemaNode(schema)) return "true";
+  const node = schema;
   const parts: string[] = [];
 
   if (node.type !== undefined) {
@@ -79,7 +90,7 @@ function buildExpression(
   }
 
   if (Array.isArray(node.enum)) {
-    const values = node.enum as unknown[];
+    const values = node.enum;
     if (values.every(isPrimitive)) {
       parts.push(
         `(${values.map((entry) => `${value}===${JSON.stringify(entry)}`).join("||") || "false"})`,
@@ -91,21 +102,21 @@ function buildExpression(
   }
 
   if (Array.isArray(node.allOf)) {
-    const members = node.allOf as unknown[];
+    const members = node.allOf;
     parts.push(
       `(${members.map((member) => buildExpression(member, value, addHelper, next)).join("&&") || "true"})`,
     );
   }
 
   if (Array.isArray(node.anyOf)) {
-    const members = node.anyOf as unknown[];
+    const members = node.anyOf;
     parts.push(
       `(${members.map((member) => buildExpression(member, value, addHelper, next)).join("||") || "false"})`,
     );
   }
 
   if (Array.isArray(node.oneOf)) {
-    const members = node.oneOf as unknown[];
+    const members = node.oneOf;
     const counts = members.map(
       (member) => `(${buildExpression(member, value, addHelper, next)}?1:0)`,
     );
@@ -195,7 +206,7 @@ function buildExpression(
   return parts.length > 0 ? parts.join("&&") : "true";
 }
 
-function typeExpression(type: unknown, value: string): string {
+function typeExpression(type: SchemaNode["type"], value: string): string {
   if (Array.isArray(type)) {
     return `(${type.map((entry) => typeExpression(entry, value)).join("||") || "false"})`;
   }
@@ -245,7 +256,7 @@ function access(value: string, key: string): string {
 }
 
 function objectExpression(
-  node: Record<string, any>,
+  node: SchemaNode,
   value: string,
   addHelper: (fn: Helper) => string,
   next: (prefix: string) => string,
@@ -254,7 +265,7 @@ function objectExpression(
     node.type === "object"
       ? []
       : [`(${value}!==null&&typeof ${value}==="object"&&!Array.isArray(${value}))`];
-  const properties = (node.properties ?? {}) as Record<string, unknown>;
+  const properties = schemaProperties(node);
   const required = Array.isArray(node.required) ? (node.required as string[]) : [];
   for (const key of required) {
     parts.push(`(${access(value, key)}!==undefined)`);
@@ -270,7 +281,7 @@ function objectExpression(
     parts.push(`(Object.keys(${value}).length<=${Number(node.maxProperties)})`);
   }
 
-  const patterns = (node.patternProperties ?? undefined) as Record<string, unknown> | undefined;
+  const patterns = schemaPatterns(node);
   const additional = node.additionalProperties;
   const hasPatterns = patterns !== undefined && Object.keys(patterns).length > 0;
   if (hasPatterns || (additional !== undefined && additional !== true)) {
@@ -307,7 +318,7 @@ function objectExpression(
 }
 
 function arrayExpression(
-  node: Record<string, any>,
+  node: SchemaNode,
   value: string,
   addHelper: (fn: Helper) => string,
   next: (prefix: string) => string,
@@ -324,18 +335,14 @@ function arrayExpression(
     parts.push(`${unique}(${value})`);
   }
 
-  const tuple = Array.isArray(node.prefixItems)
-    ? (node.prefixItems as unknown[])
-    : Array.isArray(node.items)
-      ? (node.items as unknown[])
-      : undefined;
+  const tuple = schemaTuple(node);
   if (tuple !== undefined) {
     for (let index = 0; index < tuple.length; index++) {
       const child = buildExpression(tuple[index], `${value}[${index}]`, addHelper, next);
       parts.push(`(${value}.length<=${index}||(${child}))`);
     }
-    if (Array.isArray(node.prefixItems)) {
-      const items = node.items;
+    if (schemaArray(node.prefixItems) !== undefined) {
+      const items = schemaItem(node);
       if (items === false) {
         parts.push(`(${value}.length<=${tuple.length})`);
       } else if (items !== undefined && items !== true) {
@@ -362,7 +369,7 @@ function arrayExpression(
     } else {
       const item = next("i");
       const array = next("a");
-      const child = buildExpression(node.items, `${array}[${item}]`, addHelper, next);
+      const child = buildExpression(schemaItem(node), `${array}[${item}]`, addHelper, next);
       parts.push(
         `(function(${array}){for(var ${item}=0;${item}<${array}.length;${item}++){if(!(${child}))return false;}return true;})(${value})`,
       );
@@ -438,10 +445,10 @@ function checkFormat(name: string, value: unknown): boolean {
 
 // ─── Interpreter (errors + no-eval fallback) ────────────────────────────────
 
-function checkSchema(schema: unknown, value: unknown): boolean {
+function checkSchema(schema: SchemaValue, value: unknown): boolean {
   if (schema === false) return false;
-  if (schema === true || schema === null || typeof schema !== "object") return true;
-  const node = schema as Record<string, any>;
+  if (schema === true || schema === null || !isSchemaNode(schema)) return true;
+  const node = schema;
 
   if (node.type !== undefined && !matchesType(node.type, value)) return false;
   if (node.const !== undefined && !deepEqual(value, node.const)) return false;
@@ -452,7 +459,7 @@ function checkSchema(schema: unknown, value: unknown): boolean {
     for (const member of node.allOf) if (!checkSchema(member, value)) return false;
   }
   if (Array.isArray(node.anyOf)) {
-    if (!node.anyOf.some((member: unknown) => checkSchema(member, value))) return false;
+    if (!node.anyOf.some((member) => checkSchema(member, value))) return false;
   }
   if (Array.isArray(node.oneOf)) {
     let matches = 0;
@@ -487,7 +494,7 @@ function checkSchema(schema: unknown, value: unknown): boolean {
 
   if (typeof value === "object" && value !== null && !Array.isArray(value)) {
     const object = value as Record<string, unknown>;
-    const properties = (node.properties ?? {}) as Record<string, unknown>;
+    const properties = schemaProperties(node);
     if (Array.isArray(node.required)) {
       for (const key of node.required as string[]) {
         if (object[key] === undefined) return false;
@@ -500,7 +507,7 @@ function checkSchema(schema: unknown, value: unknown): boolean {
     for (const key of Object.keys(properties)) {
       if (object[key] !== undefined && !checkSchema(properties[key], object[key])) return false;
     }
-    const patterns = (node.patternProperties ?? {}) as Record<string, unknown>;
+    const patterns = schemaPatterns(node);
     const patternEntries = Object.entries(patterns);
     for (const key of Object.keys(object)) {
       let matched = false;
@@ -527,20 +534,16 @@ function checkSchema(schema: unknown, value: unknown): boolean {
     if (node.minItems !== undefined && value.length < Number(node.minItems)) return false;
     if (node.maxItems !== undefined && value.length > Number(node.maxItems)) return false;
     if (node.uniqueItems === true && !uniqueItems(value)) return false;
-    const prefix = Array.isArray(node.prefixItems)
-      ? (node.prefixItems as unknown[])
-      : Array.isArray(node.items)
-        ? (node.items as unknown[])
-        : undefined;
+    const prefix = schemaTuple(node);
     if (prefix !== undefined) {
       for (let index = 0; index < prefix.length && index < value.length; index++) {
         if (!checkSchema(prefix[index], value[index])) return false;
       }
-      if (Array.isArray(node.prefixItems)) {
+      if (schemaArray(node.prefixItems) !== undefined) {
         if (node.items === false && value.length > prefix.length) return false;
         if (node.items !== undefined && node.items !== true) {
           for (let index = prefix.length; index < value.length; index++) {
-            if (!checkSchema(node.items, value[index])) return false;
+            if (!checkSchema(schemaItem(node), value[index])) return false;
           }
         }
       } else if (node.additionalItems === false) {
@@ -553,7 +556,7 @@ function checkSchema(schema: unknown, value: unknown): boolean {
     } else if (node.items !== undefined && node.items !== true) {
       if (node.items === false && value.length > 0) return false;
       if (node.items !== false) {
-        for (const item of value) if (!checkSchema(node.items, item)) return false;
+        for (const item of value) if (!checkSchema(schemaItem(node), item)) return false;
       }
     }
   }
@@ -561,7 +564,7 @@ function checkSchema(schema: unknown, value: unknown): boolean {
   return true;
 }
 
-function matchesType(type: unknown, value: unknown): boolean {
+function matchesType(type: SchemaNode["type"], value: unknown): boolean {
   if (Array.isArray(type)) return type.some((entry) => matchesType(entry, value));
   switch (type) {
     case "string":
@@ -586,7 +589,7 @@ function matchesType(type: unknown, value: unknown): boolean {
 // ─── Error collection ───────────────────────────────────────────────────────
 
 function collectErrors(
-  schema: unknown,
+  schema: SchemaValue,
   value: unknown,
   instancePath: string,
   schemaPath: string,
@@ -604,7 +607,7 @@ function collectErrors(
     return;
   }
   if (schema === null || typeof schema !== "object") return;
-  const node = schema as Record<string, any>;
+  const node = schema;
 
   if (node.type !== undefined && !matchesType(node.type, value)) {
     issues.push({
@@ -643,7 +646,7 @@ function collectErrors(
   }
 
   if (Array.isArray(node.anyOf)) {
-    if (!node.anyOf.some((member: unknown) => checkSchema(member, value))) {
+    if (!node.anyOf.some((member) => checkSchema(member, value))) {
       for (let index = 0; index < node.anyOf.length; index++) {
         collectErrors(
           node.anyOf[index],
@@ -714,7 +717,7 @@ function collectErrors(
 }
 
 function collectStringErrors(
-  node: Record<string, any>,
+  node: SchemaNode,
   value: string,
   instancePath: string,
   schemaPath: string,
@@ -767,13 +770,13 @@ function collectStringErrors(
 }
 
 function collectNumberErrors(
-  node: Record<string, any>,
+  node: SchemaNode,
   value: number,
   instancePath: string,
   schemaPath: string,
   issues: ValidationIssue[],
 ): void {
-  const comparisons: Array<[string, boolean, string, number]> = [
+  const comparisons: Array<[string, boolean, string, number | undefined]> = [
     ["minimum", node.minimum !== undefined && value >= Number(node.minimum), ">=", node.minimum],
     ["maximum", node.maximum !== undefined && value <= Number(node.maximum), "<=", node.maximum],
     [
@@ -811,13 +814,13 @@ function collectNumberErrors(
 }
 
 function collectObjectErrors(
-  node: Record<string, any>,
+  node: SchemaNode,
   value: Record<string, unknown>,
   instancePath: string,
   schemaPath: string,
   issues: ValidationIssue[],
 ): void {
-  const properties = (node.properties ?? {}) as Record<string, unknown>;
+  const properties = schemaProperties(node);
   if (Array.isArray(node.required)) {
     const missing = (node.required as string[]).filter((key) => value[key] === undefined);
     if (missing.length > 0) {
@@ -861,7 +864,7 @@ function collectObjectErrors(
     );
   }
 
-  const patterns = (node.patternProperties ?? {}) as Record<string, unknown>;
+  const patterns = schemaPatterns(node);
   const patternEntries = Object.entries(patterns).map(
     ([pattern, child]) => [pattern, child, safeRegex(pattern)] as const,
   );
@@ -908,7 +911,7 @@ function collectObjectErrors(
 }
 
 function collectArrayErrors(
-  node: Record<string, any>,
+  node: SchemaNode,
   value: unknown[],
   instancePath: string,
   schemaPath: string,
@@ -945,13 +948,9 @@ function collectArrayErrors(
     }
   }
 
-  const prefix = Array.isArray(node.prefixItems)
-    ? (node.prefixItems as unknown[])
-    : Array.isArray(node.items)
-      ? (node.items as unknown[])
-      : undefined;
+  const prefix = schemaTuple(node);
   if (prefix !== undefined) {
-    const isPrefix = Array.isArray(node.prefixItems);
+    const isPrefix = schemaArray(node.prefixItems) !== undefined;
     for (let index = 0; index < prefix.length && index < value.length; index++) {
       collectErrors(
         prefix[index],
@@ -973,7 +972,7 @@ function collectArrayErrors(
       } else if (node.items !== undefined && node.items !== true) {
         for (let index = prefix.length; index < value.length; index++) {
           collectErrors(
-            node.items,
+            schemaItem(node),
             value[index],
             `${instancePath}/${index}`,
             `${schemaPath}/items`,
@@ -1016,7 +1015,7 @@ function collectArrayErrors(
     } else {
       for (let index = 0; index < value.length; index++) {
         collectErrors(
-          node.items,
+          schemaItem(node),
           value[index],
           `${instancePath}/${index}`,
           `${schemaPath}/items`,
@@ -1041,16 +1040,16 @@ function escapePointer(key: string): string {
 
 // ─── Conversion ─────────────────────────────────────────────────────────────
 
-function convert(schema: unknown, value: unknown): unknown {
-  if (schema === false || schema === null || typeof schema !== "object") return value;
-  const node = schema as Record<string, any>;
+function convert(schema: SchemaValue, value: unknown): unknown {
+  if (schema === false || schema === null || !isSchemaNode(schema)) return value;
+  const node = schema;
 
   if (node.const !== undefined) return value;
   if (Array.isArray(node.enum)) return value;
 
   if (Array.isArray(node.anyOf) || Array.isArray(node.oneOf)) {
     if (checkSchema(node, value)) return value;
-    for (const member of (node.anyOf ?? node.oneOf) as unknown[]) {
+    for (const member of node.anyOf ?? node.oneOf ?? []) {
       const candidate = convert(member, clone(value));
       if (checkSchema(node, candidate)) return candidate;
     }
@@ -1110,18 +1109,15 @@ function convertBoolean(value: unknown): unknown {
   return value;
 }
 
-function convertArray(node: Record<string, any>, value: unknown): unknown {
+function convertArray(node: SchemaNode, value: unknown): unknown {
   const array = Array.isArray(value) ? value : [value];
-  const prefix = Array.isArray(node.prefixItems)
-    ? (node.prefixItems as unknown[])
-    : Array.isArray(node.items)
-      ? (node.items as unknown[])
-      : undefined;
+  const prefix = schemaTuple(node);
   if (prefix !== undefined) {
     for (let index = 0; index < prefix.length && index < array.length; index++) {
       array[index] = convert(prefix[index], array[index]);
     }
-    const rest = Array.isArray(node.prefixItems) ? node.items : node.additionalItems;
+    const rest =
+      schemaArray(node.prefixItems) !== undefined ? schemaItem(node) : node.additionalItems;
     if (rest !== undefined && rest !== false && rest !== true) {
       for (let index = prefix.length; index < array.length; index++) {
         array[index] = convert(rest, array[index]);
@@ -1129,21 +1125,21 @@ function convertArray(node: Record<string, any>, value: unknown): unknown {
     }
   } else if (node.items !== undefined && node.items !== false) {
     for (let index = 0; index < array.length; index++) {
-      array[index] = convert(node.items, array[index]);
+      array[index] = convert(schemaItem(node), array[index]);
     }
   }
   return array;
 }
 
-function convertObject(node: Record<string, any>, value: unknown): unknown {
+function convertObject(node: SchemaNode, value: unknown): unknown {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return value;
   const object = value as Record<string, unknown>;
-  const properties = (node.properties ?? {}) as Record<string, unknown>;
+  const properties = schemaProperties(node);
   for (const key of Object.keys(properties)) {
     if (object[key] === undefined) continue;
     object[key] = convert(properties[key], object[key]);
   }
-  const patterns = (node.patternProperties ?? {}) as Record<string, unknown>;
+  const patterns = schemaPatterns(node);
   for (const key of Object.keys(object)) {
     if (properties[key] === undefined) {
       for (const [pattern, child] of Object.entries(patterns)) {
