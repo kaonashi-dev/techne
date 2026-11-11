@@ -38,7 +38,7 @@ export class InvalidCookieSignature extends HttpError {
 
 function parseCookieHeader(header: string | null): Map<string, string> {
   const out = new Map<string, string>();
-  if (!header) return out;
+  if (header === null || header === "") return out;
   for (const pair of header.split(";")) {
     const eq = pair.indexOf("=");
     if (eq < 0) continue;
@@ -110,7 +110,9 @@ interface CookieState {
   dirty: boolean;
 }
 
-const ATTRIBUTE_KEYS = new Set([
+type CookieAttributeKey = keyof CookieAttributes;
+
+const ATTRIBUTE_KEYS: ReadonlySet<CookieAttributeKey> = new Set([
   "domain",
   "path",
   "expires",
@@ -122,6 +124,46 @@ const ATTRIBUTE_KEYS = new Set([
   "priority",
 ]);
 
+function isCookieAttributeKey(key: string): key is CookieAttributeKey {
+  return ATTRIBUTE_KEYS.has(key as CookieAttributeKey);
+}
+
+function setCookieAttribute(
+  attrs: CookieAttributes,
+  key: CookieAttributeKey,
+  value: unknown,
+): void {
+  switch (key) {
+    case "domain":
+    case "path":
+      if (typeof value === "string") attrs[key] = value;
+      break;
+    case "expires":
+      if (value instanceof Date) attrs.expires = value;
+      break;
+    case "maxAge":
+      if (typeof value === "number") attrs.maxAge = value;
+      break;
+    case "httpOnly":
+    case "secure":
+    case "partitioned":
+      if (typeof value === "boolean") attrs[key] = value;
+      break;
+    case "sameSite":
+      if (typeof value === "string" || typeof value === "boolean") {
+        attrs.sameSite = value as CookieAttributes["sameSite"];
+      }
+      break;
+    case "priority":
+      if (value === "low" || value === "medium" || value === "high") attrs.priority = value;
+      break;
+  }
+}
+
+function getCookieAttribute(attrs: CookieAttributes, key: CookieAttributeKey): unknown {
+  return attrs[key];
+}
+
 /**
  * Lazy cookie jar for one request: the `Cookie` header is parsed on first
  * access, and only cookies that were written produce `Set-Cookie` headers.
@@ -130,11 +172,13 @@ export class RequestCookies {
   private parsed: Map<string, string> | undefined;
   private readonly states = new Map<string, CookieState>();
   private proxy: CookieJar | undefined;
+  private readonly header: string | null;
+  private readonly config: CookieConfig | undefined;
 
-  constructor(
-    private readonly header: string | null,
-    private readonly config: CookieConfig | undefined,
-  ) {}
+  constructor(header: string | null, config: CookieConfig | undefined) {
+    this.header = header;
+    this.config = config;
+  }
 
   private incoming(): Map<string, string> {
     return (this.parsed ??= parseCookieHeader(this.header));
@@ -142,7 +186,8 @@ export class RequestCookies {
 
   private secrets(): string[] {
     const s = this.config?.secrets;
-    return s === undefined ? [] : Array.isArray(s) ? s : [s as string];
+    if (s === undefined) return [];
+    return typeof s === "string" ? [s] : s.slice();
   }
 
   private isSigned(name: string): boolean {
@@ -178,9 +223,11 @@ export class RequestCookies {
       },
       set(options: CookieAttributes & { value?: string }) {
         const state = self.state(name);
-        for (const key in options) {
+        for (const key of Object.keys(options)) {
           if (key === "value") state.value = options.value;
-          else if (ATTRIBUTE_KEYS.has(key)) (state.attrs as any)[key] = (options as any)[key];
+          else if (isCookieAttributeKey(key)) {
+            setCookieAttribute(state.attrs, key, options[key]);
+          }
         }
         state.dirty = true;
         return entry as Cookie;
@@ -195,10 +242,10 @@ export class RequestCookies {
     for (const key of ATTRIBUTE_KEYS) {
       Object.defineProperty(entry, key, {
         enumerable: true,
-        get: () => (self.state(name).attrs as any)[key],
-        set: (v: unknown) => {
+        get: () => getCookieAttribute(self.state(name).attrs, key),
+        set: (value: unknown) => {
           const state = self.state(name);
-          (state.attrs as any)[key] = v;
+          setCookieAttribute(state.attrs, key, value);
           state.dirty = true;
         },
       });

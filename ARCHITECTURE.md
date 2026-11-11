@@ -165,6 +165,31 @@ The lifecycle contract is:
 Process signal policy and shutdown deadlines belong to the executable entrypoint.
 No library import installs signal handlers or changes global logging state.
 
+## Build and deployment contract
+
+`techne build` produces a standalone binary by default. The native root is
+designed to be AOT-friendly: it does not import the legacy runtime, read
+`techne.config.ts` at runtime, or use file discovery. Keep it that way.
+
+- **Stable channel:** `bun build --compile`, pinned by `.bun-version`. This
+  supports cross-compilation and is the production default.
+- **AOT preview:** `techne build --aot --trim` on Bun 1.5+/canary. AOT cannot
+  cross-compile; build on each target platform. Code generated with
+  `new Function` is interpreted, and dynamic imports/assets must be declared
+  (`--aot-allow-code-from-disk`, `--asset`).
+- **Legacy channel:** `src/core` and decorator apps may load configuration with
+  dynamic imports and generate handlers at runtime. Keep legacy apps on the JIT
+  binary unless each dynamic load is embedded or explicitly allowed.
+- **Native path only:** do not add runtime configuration loading, decorators,
+  reflection scanning or global registries to the native import graph.
+- **Known AOT limit:** schema validators are generated with `new Function`, so
+  AOT interprets them and `--trim` keeps the interpreter. Typed/static validator
+  generation is the next optimization; do not claim `--trim` will reach the
+  size of a minimal `Bun.serve` app yet.
+
+The build writes an optional JSON manifest/BOM (`--manifest`) recording the Bun
+version and revision, target, AOT flags, and artifact size. See `BOM.md`.
+
 ## Performance contract
 
 `createApp` is a constructor-time function that returns a native `App`. The app
@@ -202,5 +227,8 @@ plugin protocols are distinct; do not pass a `PluginDefinition` to `.use()`.
 5. Create app-specific mutable state inside factories; pass request state as data.
 6. Keep decorators, reflection, file discovery and global registries out of the
    native runtime and generated code.
-7. Verify route type contracts, real Request/Response behavior, resource failures,
+7. Walk schemas through `src/schema/core/schema-node.ts` and type request state
+   with `RuntimeContext`; do not reintroduce `Record<string, any>` on the hot
+   path.
+8. Verify route type contracts, real Request/Response behavior, resource failures,
    and generated-project compilation when changing those boundaries.

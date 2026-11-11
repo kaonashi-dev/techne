@@ -112,6 +112,63 @@ bunx techne g resource users
 Mount generated features explicitly in `app.ts`. See the runnable reference in
 [`apps/native/`](./apps/native/) and the [architecture guide](./ARCHITECTURE.md).
 
+## Build a single binary
+
+`techne build` produces a standalone binary by default; no Bun installation is
+needed on the server. In a generated project:
+
+```sh
+bun run build                          # dist/app for the current platform
+bun run build:linux                    # Linux x64 cross-compile
+bun run build:aot                      # experimental AOT binary (Bun 1.5+/canary)
+```
+
+In this repository, `bun run build` type-checks and emits declarations; use the
+CLI directly for the reference app:
+
+```sh
+bun src/cli/index.ts build apps/native/src/main.ts --out dist/app
+```
+
+The build is pinned by `.bun-version` (`1.4.4`). See [BOM.md](./BOM.md) for the
+version matrix and Linux artifact targets. The CLI passes a JSON build
+manifest with the Bun version/revision, target, flags and artifact size:
+
+```sh
+bunx techne build src/main.ts --compile --target=bun-linux-x64 \
+  --out dist/app-linux-x64 --manifest dist/app-linux-x64.build.json
+```
+
+### AOT preview
+
+Bun AOT (`bun compile`) is experimental and currently lives in canary; the
+latest stable Bun does not include it. This repository pins the preview to
+`1.4.4-canary.20261109.1` in CI. AOT:
+
+- cannot cross-compile, so build on each target platform (Linux x64/ARM64);
+- interprets code generated at runtime with `new Function`/`eval`;
+- needs assets embedded with `--asset` (files on disk are not inside the binary);
+- is opt-in with `--aot`; stable binaries remain the default.
+
+Use `--trim` for a smaller AOT binary, `--explain=json` for slow paths, and
+`--manifest` for the build BOM. For a clean machine-readable report that builds
+nothing, use `bun check --aot --explain=json <entry>`. The generated `main.ts`
+supports `--healthcheck`, which the binary Dockerfile uses without a shell or Bun
+in the runtime image.
+
+### Docker
+
+```sh
+bunx techne deploy --target docker --mode binary   # default
+bunx techne deploy --target docker --mode bundle   # JS bundle + Bun runtime
+bunx techne deploy --target docker --mode aot      # canary builder + binary runtime
+```
+
+`binary` and `aot` use a Debian slim runtime with the compiled artifact; `bundle`
+keeps the Bun runtime image. The binary Dockerfile runs `/app/app --healthcheck`,
+so the app entrypoint must implement that flag (new projects do; add it to an
+existing project or remove the Docker `HEALTHCHECK` line).
+
 ## Public surface
 
 | Import | Purpose |
@@ -133,6 +190,7 @@ core and the resource utility. See [migration details](./MIGRATING.md#native-com
 ## Documentation and verification
 
 - [Architecture and contribution rules](./ARCHITECTURE.md)
+- [Build BOM and Linux targets](./BOM.md)
 - [Quickstart](./apps/docs/quickstart.mdx)
 - [Migration](./MIGRATING.md)
 - [Native performance methodology](./apps/docs/native-performance.mdx)

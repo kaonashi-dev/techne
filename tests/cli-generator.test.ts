@@ -62,9 +62,14 @@ describe("CLI project generator", () => {
       await generate("example", path.join(projectDir, "src"));
     }
     const cli = path.join(originalCwd, "src/cli/index.ts");
-    expect((await Bun.file(path.join(projectDir, "package.json")).json()).scripts.lint).toBe(
-      "techne lint",
-    );
+    const pkg = await Bun.file(path.join(projectDir, "package.json")).json();
+    expect(pkg.scripts.lint).toBe("techne lint");
+    expect(pkg.scripts.build).toBe("techne build");
+    expect(pkg.scripts["build:aot"]).toContain("--aot");
+    expect(pkg.engines.bun).toContain("1.4.4");
+    expect(pkg.packageManager).toBe("bun@1.4.4");
+    expect(pkg.devDependencies["@types/bun"]).toBe("^1.4.4");
+    expect((await Bun.file(path.join(projectDir, ".bun-version")).text()).trim()).toBe("1.4.4");
     for (const command of [
       [process.execPath, path.join(originalCwd, "node_modules/typescript/bin/tsc"), "--noEmit"],
       [process.execPath, "test"],

@@ -15,6 +15,8 @@ import {
   createProject,
 } from "./generators";
 import { runLint } from "./lint";
+import { detectAotSupport, runBuild } from "./build";
+import { AOT_PREVIEW_DOCKER_TAG, DEFAULT_BUN_VERSION } from "./bun-version";
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -49,10 +51,56 @@ function flagValue(name: string): string | undefined {
   return args[i + 1];
 }
 
+/** Report names accepted by `--explain`. A bare `--explain` means the default report. */
+const EXPLAIN_REPORTS = new Set(["json", "guards", "guards-json", "trim", "allocations"]);
+
+/** Reads an optional value: `--explain`, `--explain=json`, or absent. */
+function optionalFlagValue(name: string): string | undefined {
+  const inline = args.find((arg) => arg.startsWith(`${name}=`));
+  if (inline) return inline.slice(name.length + 1);
+  const i = args.indexOf(name);
+  if (i === -1) return undefined;
+  const next = args[i + 1];
+  return next && EXPLAIN_REPORTS.has(next) ? next : "";
+}
+
+/** Reads every `--name value` and `--name=value` occurrence. */
+function flagValues(name: string): string[] {
+  const values: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === name) {
+      const next = args[i + 1];
+      if (next && !next.startsWith("--")) {
+        values.push(next);
+        i++;
+      }
+    } else if (arg.startsWith(`${name}=`)) {
+      values.push(arg.slice(name.length + 1));
+    }
+  }
+  return values;
+}
+
 function positionalArgAfterCommand(defaultValue: string): string {
-  const valueFlags = new Set(["--out", "--target", "--port", "--bun-version"]);
+  const valueFlags = new Set([
+    "--out",
+    "--target",
+    "--port",
+    "--bun-version",
+    "--manifest",
+    "--aot-harden",
+    "--asset",
+    "--define",
+    "--mode",
+  ]);
   for (let i = 1; i < args.length; i++) {
     const arg = args[i];
+    if (arg === "--explain") {
+      const next = args[i + 1];
+      if (next && EXPLAIN_REPORTS.has(next)) i++;
+      continue;
+    }
     if (valueFlags.has(arg)) {
       i++;
       continue;
@@ -61,36 +109,6 @@ function positionalArgAfterCommand(defaultValue: string): string {
     return arg;
   }
   return defaultValue;
-}
-
-async function buildApp(
-  entry: string,
-  options: { out?: string; target?: string; minify?: boolean; compile?: boolean },
-) {
-  const compile = options.compile ?? false;
-  const outFile = options.out ?? (compile ? "dist/app" : "dist/app.bun");
-  const minify = options.minify ?? false;
-
-  const bunArgs = ["bun", "build"];
-  if (compile) {
-    bunArgs.push("--compile");
-  } else {
-    bunArgs.push(`--target=${options.target ?? "bun"}`);
-  }
-  bunArgs.push(`--outfile=${outFile}`);
-  if (minify) bunArgs.push("--minify");
-  bunArgs.push(entry);
-
-  console.log(`Building ${entry}...`);
-  const proc = Bun.spawn(bunArgs, { stdout: "inherit", stderr: "inherit" });
-  const exitCode = await proc.exited;
-
-  if (exitCode === 0) {
-    ok(`Build complete: ${outFile}${compile ? " (standalone binary)" : ""}`);
-  } else {
-    fail(`Build failed with exit code ${exitCode}`);
-    process.exit(exitCode);
-  }
 }
 
 async function runEntry(opts: { hot: boolean; inspect: boolean; port?: string; entry?: string }) {
@@ -219,8 +237,9 @@ Usage:
   techne start [--port N]
   techne test [pattern] [--watch] [--coverage]
   techne build|b [entry] [--out <file>] [--minify] [--precompile]          (standalone binary, default)
-  techne build|b [entry] --target <bun|node|browser> [--out <file>] [--minify] [--precompile]  (JS bundle)
-  techne deploy --target docker [--out Dockerfile] [--port N] [--bun-version V] [--dry-run] [--force]
+  techne build|b [entry] --target <bun|node|browser> [--out <file>] [--minify]  (JS bundle)
+  techne build|b [entry] --aot [--trim] [--explain[=json]] [--out <file>]  (AOT binary; Bun 1.5/canary)
+  techne deploy --target docker [--mode binary|bundle|aot] [--out Dockerfile] [--port N] [--bun-version V] [--dry-run] [--force]
   techne doctor
   techne lint [bun lint flags]                                                (native bun lint; needs Bun canary)
   techne run <command> [args...]
@@ -238,7 +257,7 @@ Available generators:
   hook
   schema
   command         (legacy decorator-based console command)
-  docker          (writes Dockerfile + .dockerignore; supports --port, --bun-version, --out, --force, --dry-run)
+  docker          (writes Dockerfile + .dockerignore; supports --mode, --port, --bun-version, --out, --force, --dry-run)
   client          (legacy RPC codegen; native apps export their inferred App type)
 
 Build modes:
@@ -246,12 +265,26 @@ Build modes:
   --target=bun     JS bundle that runs with Bun. Output: dist/app.bun.
   --target=node    JS bundle (ESM) for Node.js.
   --target=browser JS bundle for the browser.
+  --aot            Machine-code binary via bun compile. Experimental; requires Bun 1.5+/canary.
+                   Cannot cross-compile: build on each target platform.
 
 Build flags:
-  --precompile  Legacy decorator route manifest. Native apps compile their routes at startup.
+  --minify / --no-minify       Minify output (default: on for binaries).
+  --sourcemap / --no-sourcemap Source map (default: on for JIT binaries; AOT reports sources already).
+  --compile                    Force a standalone binary; add --target to cross-compile.
+  --no-aot                     Build a JIT binary (the default).
+  --bytecode                   Embed bytecode (JIT binaries only; implies --format=esm).
+  --trim                       Remove unused Bun/Node APIs (requires --aot).
+  --explain[=json]             AOT slow-path report (requires --aot).
+  --aot-allow-code-from-disk   Allow dynamic code loading (requires --aot).
+  --aot-harden <checks>        AOT runtime hardening, e.g. proof-checks (requires --aot).
+  --asset <path>               Embed a file/directory (repeatable).
+  --define <key=value>         Build-time constant (repeatable).
+  --manifest <file>            Write a JSON build manifest/BOM.
+  --precompile                 Legacy decorator route manifest. Native apps compile their routes at startup.
 
 Deploy targets:
-  docker   Multi-stage Bun Dockerfile (only target supported for now)
+  docker   Multi-stage Bun Dockerfile (binary by default; bundle or AOT optional)
            Planned: fly, railway, cloudflare, bun-vm
   `);
 }
@@ -328,7 +361,15 @@ async function runDockerGenerate(_opts: { requireTarget: boolean }) {
     console.error(`techne: invalid --port value "${portRaw}"`);
     process.exit(1);
   }
-  const bunVersion = flagValue("--bun-version") ?? "1";
+  const bunVersion =
+    flagValue("--bun-version") ??
+    (flag("--aot") || flagValue("--mode") === "aot" ? AOT_PREVIEW_DOCKER_TAG : DEFAULT_BUN_VERSION);
+  const modeRaw = flag("--aot") ? "aot" : (flagValue("--mode") ?? "binary");
+  if (modeRaw !== "binary" && modeRaw !== "bundle" && modeRaw !== "aot") {
+    fail(`techne deploy: invalid --mode "${modeRaw}" (use binary, bundle or aot)`);
+    process.exit(1);
+  }
+  const mode = modeRaw;
   const dryRun = flag("--dry-run");
   const force = flag("--force");
 
@@ -337,6 +378,7 @@ async function runDockerGenerate(_opts: { requireTarget: boolean }) {
       outDir: process.cwd(),
       port,
       bunVersion,
+      mode,
       outName: out,
       force,
       dryRun,
@@ -493,16 +535,42 @@ async function main() {
     const entry = positionalArgAfterCommand("src/main.ts");
     const out = flagValue("--out");
     const target = flagValue("--target");
-    const minify = flag("--minify");
-    // --compile is the default when no --target is given
-    const compile = !target || flag("--compile");
+    const aot = flag("--aot");
+    const noAot = flag("--no-aot");
+    const explainRaw = optionalFlagValue("--explain");
+    const minify = flag("--minify") ? true : flag("--no-minify") ? false : undefined;
+    const sourcemap = flag("--sourcemap") ? true : flag("--no-sourcemap") ? false : undefined;
 
-    if (flag("--compile") && target) {
+    if (aot && noAot) {
+      fail("--aot and --no-aot cannot be used together.");
+      process.exit(1);
+    }
+    if (aot && target) {
+      fail(
+        "AOT cannot cross-compile. Build on the target platform, or omit --aot to cross-compile a JIT binary.",
+      );
+      process.exit(1);
+    }
+    if (aot && !detectAotSupport()) {
+      fail(
+        `Bun ${Bun.version} does not support AOT (no \`bun compile\`). Use Bun 1.5+ or a canary build; stable builds may accept --aot but silently ignore it.`,
+      );
+      process.exit(1);
+    }
+    if (aot && (await exists(path.join(process.cwd(), "techne.config.ts")))) {
       warn(
-        "--target is ignored when --compile is set (Bun standalone binaries are always bun-target)",
+        "AOT cannot load techne.config.ts at runtime. Use the native path (environment in main.ts) or build with --aot-allow-code-from-disk.",
+      );
+    }
+    if (aot && flag("--precompile")) {
+      warn(
+        "--precompile writes .techne/routes.json at runtime; AOT binaries do not embed it. Build with --no-aot or embed it with --asset .techne.",
       );
     }
 
+    // Binary is the default. A --target selects a JS bundle unless --compile
+    // is also passed, matching the previous CLI behavior.
+    const compile = aot || flag("--compile") || !target;
     const ext = path.extname(entry);
     const outDefault = compile
       ? "dist/app"
@@ -510,12 +578,28 @@ async function main() {
         ? "dist/app.bun"
         : entry.replace(ext, ".bun");
 
-    await buildApp(entry, {
-      out: out ?? outDefault,
-      target,
-      minify,
-      compile,
-    });
+    try {
+      await runBuild({
+        entry,
+        out: out ?? outDefault,
+        target,
+        compile,
+        aot,
+        trim: flag("--trim"),
+        explain: explainRaw === undefined ? undefined : explainRaw || true,
+        allowCodeFromDisk: flag("--aot-allow-code-from-disk"),
+        aotHarden: flagValue("--aot-harden"),
+        bytecode: flag("--bytecode"),
+        minify,
+        sourcemap,
+        assets: flagValues("--asset"),
+        defines: flagValues("--define"),
+        manifest: flagValue("--manifest"),
+      });
+    } catch (error) {
+      fail(error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    }
   } else {
     printHelp();
   }

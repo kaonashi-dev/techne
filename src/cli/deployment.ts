@@ -1,19 +1,100 @@
 import * as path from "node:path";
+import { AOT_PREVIEW_DOCKER_TAG, DEFAULT_BUN_VERSION } from "./bun-version";
+
+export type DockerMode = "binary" | "bundle" | "aot";
 
 export interface DockerfileOptions {
   outDir?: string;
   projectName?: string;
   port?: number;
   bunVersion?: string;
+  mode?: DockerMode;
   outName?: string;
   force?: boolean;
   dryRun?: boolean;
   writeDockerignore?: boolean;
 }
 
-function renderDockerfile(bunVersion: string, port: number): string {
+function renderBinaryDockerfile(bunVersion: string, port: number): string {
   return `# syntax=docker/dockerfile:1.7
-FROM oven/bun:${bunVersion} AS builder
+ARG BUN_VERSION=${bunVersion}
+FROM oven/bun:\${BUN_VERSION} AS builder
+WORKDIR /app
+
+COPY package.json bun.lock* ./
+RUN bun install --frozen-lockfile
+
+COPY . .
+# The generated project maps "build" to \`techne build\` (standalone binary).
+RUN bun run build
+
+FROM debian:bookworm-slim AS runtime
+WORKDIR /app
+
+RUN apt-get update \\
+ && apt-get install -y --no-install-recommends ca-certificates \\
+ && rm -rf /var/lib/apt/lists/* \\
+ && addgroup --system --gid 1001 techne \\
+ && adduser --system --uid 1001 --ingroup techne techne
+
+COPY --from=builder --chown=techne:techne /app/dist/app ./app
+
+USER techne
+ENV NODE_ENV=production
+ENV PORT=${port}
+
+EXPOSE ${port}
+
+# Requires the app to support \`--healthcheck\` (the generated main.ts does).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \\
+  CMD /app/app --healthcheck || exit 1
+
+ENTRYPOINT ["/app/app"]
+`;
+}
+
+function renderAotDockerfile(bunVersion: string, port: number): string {
+  return `# syntax=docker/dockerfile:1.7
+ARG BUN_VERSION=${bunVersion}
+FROM oven/bun:\${BUN_VERSION} AS builder
+WORKDIR /app
+
+COPY package.json bun.lock* ./
+RUN bun install --frozen-lockfile
+
+COPY . .
+# AOT cannot cross-compile: build this image on the target platform.
+# The generated project maps "build:aot" to \`techne build --aot --trim\`.
+RUN bun run build:aot
+
+FROM debian:bookworm-slim AS runtime
+WORKDIR /app
+
+RUN apt-get update \\
+ && apt-get install -y --no-install-recommends ca-certificates \\
+ && rm -rf /var/lib/apt/lists/* \\
+ && addgroup --system --gid 1001 techne \\
+ && adduser --system --uid 1001 --ingroup techne techne
+
+COPY --from=builder --chown=techne:techne /app/dist/app ./app
+
+USER techne
+ENV NODE_ENV=production
+ENV PORT=${port}
+
+EXPOSE ${port}
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \\
+  CMD /app/app --healthcheck || exit 1
+
+ENTRYPOINT ["/app/app"]
+`;
+}
+
+function renderBundleDockerfile(bunVersion: string, port: number): string {
+  return `# syntax=docker/dockerfile:1.7
+ARG BUN_VERSION=${bunVersion}
+FROM oven/bun:\${BUN_VERSION} AS builder
 WORKDIR /app
 
 COPY package.json bun.lock* ./
@@ -22,7 +103,7 @@ RUN bun install --frozen-lockfile
 COPY . .
 RUN bun build src/main.ts --target=bun --outfile=dist/app.bun --minify
 
-FROM oven/bun:${bunVersion}-slim AS runtime
+FROM oven/bun:\${BUN_VERSION}-slim AS runtime
 WORKDIR /app
 
 RUN addgroup --system --gid 1001 techne && \\
@@ -67,7 +148,19 @@ export async function generateDockerfile(
 ): Promise<{ dockerfile: string; dockerignore: string | null }> {
   const outDir = opts.outDir ?? process.cwd();
   const outName = opts.outName ?? "Dockerfile";
-  const dockerfile = renderDockerfile(opts.bunVersion ?? "1", opts.port ?? 3000);
+  const mode = opts.mode ?? "binary";
+  if (mode !== "binary" && mode !== "bundle" && mode !== "aot") {
+    throw new Error(`invalid Docker mode "${mode}" (use binary, bundle or aot)`);
+  }
+  const bunVersion =
+    opts.bunVersion ?? (mode === "aot" ? AOT_PREVIEW_DOCKER_TAG : DEFAULT_BUN_VERSION);
+  const port = opts.port ?? 3000;
+  const dockerfile =
+    mode === "aot"
+      ? renderAotDockerfile(bunVersion, port)
+      : mode === "bundle"
+        ? renderBundleDockerfile(bunVersion, port)
+        : renderBinaryDockerfile(bunVersion, port);
   const dockerignore = opts.writeDockerignore === false ? null : renderDockerignore();
   if (opts.dryRun) return { dockerfile, dockerignore };
 

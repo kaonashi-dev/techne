@@ -15,25 +15,47 @@ describe("CLI Dockerfile generator", () => {
     process.chdir(originalCwd);
     await fs.rm(tempRoot, { recursive: true, force: true });
   });
-  test("renders defaults (bun:1, port 3000, healthcheck) in dry-run", async () => {
+
+  test("defaults to a pinned binary build with a slim runtime", async () => {
     const result = await generateDockerfile({ dryRun: true });
-    expect(result.dockerfile).toContain("FROM oven/bun:1");
+    expect(result.dockerfile).toContain("ARG BUN_VERSION=1.4.4");
+    expect(result.dockerfile).toContain("FROM oven/bun:${BUN_VERSION} AS builder");
+    expect(result.dockerfile).toContain("RUN bun run build");
+    expect(result.dockerfile).toContain("FROM debian:bookworm-slim AS runtime");
+    expect(result.dockerfile).toContain("COPY --from=builder");
+    expect(result.dockerfile).toContain('ENTRYPOINT ["/app/app"]');
     expect(result.dockerfile).toContain("EXPOSE 3000");
     expect(result.dockerfile).toContain("HEALTHCHECK");
     expect(result.dockerignore).not.toBeNull();
     expect(result.dockerignore).toContain("node_modules");
   });
+
   test("honors custom port", async () => {
     const result = await generateDockerfile({ dryRun: true, port: 8080 });
     expect(result.dockerfile).toContain("EXPOSE 8080");
     expect(result.dockerfile).toContain("ENV PORT=8080");
-    expect(result.dockerfile).toContain("http://localhost:8080/healthz");
+    expect(result.dockerfile).toContain("CMD /app/app --healthcheck || exit 1");
   });
+
   test("honors custom bun version", async () => {
     const result = await generateDockerfile({ dryRun: true, bunVersion: "1.1.30" });
-    expect(result.dockerfile).toContain("FROM oven/bun:1.1.30 AS builder");
-    expect(result.dockerfile).toContain("FROM oven/bun:1.1.30-slim AS runtime");
+    expect(result.dockerfile).toContain("ARG BUN_VERSION=1.1.30");
   });
+
+  test("renders a bundle build with the Bun runtime", async () => {
+    const result = await generateDockerfile({ dryRun: true, mode: "bundle", bunVersion: "1.1.30" });
+    expect(result.dockerfile).toContain("RUN bun build src/main.ts");
+    expect(result.dockerfile).toContain("FROM oven/bun:${BUN_VERSION}-slim AS runtime");
+    expect(result.dockerfile).toContain('CMD ["./app.bun"]');
+  });
+
+  test("renders an AOT build with the canary tag by default", async () => {
+    const result = await generateDockerfile({ dryRun: true, mode: "aot" });
+    expect(result.dockerfile).toContain("ARG BUN_VERSION=canary");
+    expect(result.dockerfile).toContain("RUN bun run build:aot");
+    expect(result.dockerfile).toContain("FROM debian:bookworm-slim AS runtime");
+  });
+
   test("writes Dockerfile and .dockerignore and refuses to overwrite without --force", async () => {
     await generateDockerfile({ outDir: tempRoot });
     expect(await Bun.file(path.join(tempRoot, "Dockerfile")).exists()).toBe(true);
