@@ -1,0 +1,497 @@
+{
+  "mode": "full",
+  "sections": [
+    {
+      "title": "Fast path (no enhancers)",
+      "results": [
+        {
+          "name": "Native (fast)",
+          "request": "GET /users",
+          "total": 50000,
+          "rps": 1770569.389146381,
+          "avgUs": 29.21906889999992,
+          "minUs": 5.792,
+          "maxUs": 361.75,
+          "p50Us": 27.208333333333332,
+          "p95Us": 48.166666666666664,
+          "p99Us": 164.403
+        },
+        {
+          "name": "Native (fast)",
+          "request": "GET /users/:id",
+          "total": 50000,
+          "rps": 1625863.7302755557,
+          "avgUs": 31.454794433333305,
+          "minUs": 5.666,
+          "maxUs": 328.75,
+          "p50Us": 29.721999999999998,
+          "p95Us": 52.611333333333334,
+          "p99Us": 85.97233333333334
+        },
+        {
+          "name": "Techne (fast)",
+          "request": "GET /users",
+          "total": 50000,
+          "rps": 727271.3465771923,
+          "avgUs": 122.31118625333312,
+          "minUs": 91.959,
+          "maxUs": 2418.958,
+          "p50Us": 112.06966666666666,
+          "p95Us": 144.22233333333335,
+          "p99Us": 350.0276666666667
+        },
+        {
+          "name": "Techne (fast)",
+          "request": "GET /users/:id",
+          "total": 50000,
+          "rps": 610084.2414752858,
+          "avgUs": 148.30811323333342,
+          "minUs": 100.583,
+          "maxUs": 1727.958,
+          "p50Us": 129.51366666666664,
+          "p95Us": 277.88866666666667,
+          "p99Us": 514.5970000000001
+        }
+      ]
+    },
+    {
+      "title": "Slow path (static guard)",
+      "results": [
+        {
+          "name": "Techne (slow)",
+          "request": "GET /users (guarded)",
+          "total": 50000,
+          "rps": 586650.9906980518,
+          "avgUs": 153.28213000666696,
+          "minUs": 101.5,
+          "maxUs": 1339.416,
+          "p50Us": 132.97233333333335,
+          "p95Us": 330.125,
+          "p99Us": 528.3886666666666
+        },
+        {
+          "name": "Techne (slow)",
+          "request": "GET /users/:id (guarded)",
+          "total": 50000,
+          "rps": 600672.5808992855,
+          "avgUs": 149.9920321599999,
+          "minUs": 106.833,
+          "maxUs": 891.833,
+          "p50Us": 134.47166666666666,
+          "p95Us": 248.23566666666667,
+          "p99Us": 441.50033333333334
+        }
+      ]
+    },
+    {
+      "title": "Request validation",
+      "results": [
+        {
+          "name": "Techne (validation)",
+          "request": "POST /users (valid)",
+          "total": 50000,
+          "rps": 476004.0219788989,
+          "avgUs": 180.14915195333353,
+          "minUs": 120.084,
+          "maxUs": 2183.25,
+          "p50Us": 160.139,
+          "p95Us": 370.75,
+          "p99Us": 510.9863333333333
+        },
+        {
+          "name": "Techne (validation)",
+          "request": "POST /users (invalid)",
+          "total": 50000,
+          "rps": 361447.7801939842,
+          "avgUs": 247.57165080666513,
+          "minUs": 182.542,
+          "maxUs": 1376.708,
+          "p50Us": 223.736,
+          "p95Us": 470.8193333333333,
+          "p99Us": 545.5553333333334
+        }
+      ]
+    },
+    {
+      "title": "Response schema (stringifier)",
+      "results": [
+        {
+          "name": "Techne (response)",
+          "request": "GET /users/typed (schema)",
+          "total": 50000,
+          "rps": 538388.6152615463,
+          "avgUs": 167.42403163333384,
+          "minUs": 104.5,
+          "maxUs": 4469.708,
+          "p50Us": 135.05566666666667,
+          "p95Us": 390.33366666666666,
+          "p99Us": 641.1529999999999
+        },
+        {
+          "name": "Techne (response)",
+          "request": "GET /users/plain (no schema)",
+          "total": 50000,
+          "rps": 705743.5452960742,
+          "avgUs": 125.9469518866664,
+          "minUs": 97.209,
+          "maxUs": 938.083,
+          "p50Us": 116.02766666666666,
+          "p95Us": 144.30533333333332,
+          "p99Us": 343.5
+        }
+      ]
+    },
+    {
+      "title": "CORS",
+      "results": [
+        {
+          "name": "Techne (CORS)",
+          "request": "GET /cors (allow-list origin)",
+          "total": 50000,
+          "rps": 455463.45880718826,
+          "avgUs": 191.62955408666664,
+          "minUs": 142.542,
+          "maxUs": 1347.541,
+          "p50Us": 178.4026666666667,
+          "p95Us": 351.76399999999995,
+          "p99Us": 432.1526666666667
+        },
+        {
+          "name": "Techne (CORS)",
+          "request": "GET /cors (echo origin)",
+          "total": 50000,
+          "rps": 448529.2373699353,
+          "avgUs": 193.48381419333364,
+          "minUs": 134.875,
+          "maxUs": 1325.25,
+          "p50Us": 175.15266666666665,
+          "p95Us": 357.2223333333334,
+          "p99Us": 550.8056666666666
+        }
+      ]
+    },
+    {
+      "title": "Dependency injection",
+      "results": [
+        {
+          "name": "DI",
+          "request": "TopLevelService (cold)",
+          "total": 1,
+          "rps": 28503.021320259944,
+          "avgUs": 35.084,
+          "minUs": 35.084,
+          "maxUs": 35.084,
+          "p50Us": 35.084,
+          "p95Us": 35.084,
+          "p99Us": 35.084
+        },
+        {
+          "name": "DI",
+          "request": "DependencyA (cold)",
+          "total": 1,
+          "rps": 685400.9595613433,
+          "avgUs": 1.459,
+          "minUs": 1.459,
+          "maxUs": 1.459,
+          "p50Us": 1.459,
+          "p95Us": 1.459,
+          "p99Us": 1.459
+        },
+        {
+          "name": "DI",
+          "request": "TopLevelService (warm)",
+          "total": 100000,
+          "rps": 11467670.286589695,
+          "avgUs": 0.04142453999995577,
+          "minUs": 0,
+          "maxUs": 23.958,
+          "p50Us": 0.042,
+          "p95Us": 0.042,
+          "p99Us": 0.084
+        },
+        {
+          "name": "DI",
+          "request": "DependencyA (warm)",
+          "total": 100000,
+          "rps": 12703050.31995808,
+          "avgUs": 0.03676249999995569,
+          "minUs": 0,
+          "maxUs": 8.542,
+          "p50Us": 0.042,
+          "p95Us": 0.042,
+          "p99Us": 0.042
+        }
+      ]
+    },
+    {
+      "title": "Cold start",
+      "results": [
+        {
+          "name": "Cold start",
+          "request": "N=1 bootstrap",
+          "total": 3,
+          "rps": 263.4120642725437,
+          "avgUs": 3796.333333333333,
+          "minUs": 3211,
+          "maxUs": 4951,
+          "p50Us": 3227,
+          "p95Us": 4951,
+          "p99Us": 4951
+        },
+        {
+          "name": "Cold start",
+          "request": "N=10 bootstrap",
+          "total": 3,
+          "rps": 200.6152200080246,
+          "avgUs": 4984.666666666667,
+          "minUs": 4577,
+          "maxUs": 5599,
+          "p50Us": 4778,
+          "p95Us": 5599,
+          "p99Us": 5599
+        },
+        {
+          "name": "Cold start",
+          "request": "N=50 bootstrap",
+          "total": 3,
+          "rps": 198.6491855383393,
+          "avgUs": 5034,
+          "minUs": 3869,
+          "maxUs": 7310,
+          "p50Us": 3923,
+          "p95Us": 7310,
+          "p99Us": 7310
+        }
+      ]
+    },
+    {
+      "title": "Cold start (in-process)",
+      "results": [
+        {
+          "name": "Cold start (in-process)",
+          "request": "N=1 (20 iters)",
+          "total": 20,
+          "rps": 8795.070890470144,
+          "avgUs": 113.70005,
+          "minUs": 70.75,
+          "maxUs": 327,
+          "p50Us": 98.833,
+          "p95Us": 327,
+          "p99Us": 327
+        },
+        {
+          "name": "Cold start (in-process)",
+          "request": "N=10 (20 iters)",
+          "total": 20,
+          "rps": 5990.644410623929,
+          "avgUs": 166.92695,
+          "minUs": 103.584,
+          "maxUs": 513.708,
+          "p50Us": 144.666,
+          "p95Us": 513.708,
+          "p99Us": 513.708
+        },
+        {
+          "name": "Cold start (in-process)",
+          "request": "N=50 (20 iters)",
+          "total": 20,
+          "rps": 2652.5934206929605,
+          "avgUs": 376.98955,
+          "minUs": 204.5,
+          "maxUs": 1134.5,
+          "p50Us": 323.833,
+          "p95Us": 1134.5,
+          "p99Us": 1134.5
+        }
+      ]
+    },
+    {
+      "title": "Outgoing HTTP client",
+      "results": [
+        {
+          "name": "Techne HTTP client",
+          "request": "GET (bare)",
+          "total": 50000,
+          "rps": 801803.9692823902,
+          "avgUs": 1.2121939733336977,
+          "minUs": 0.916,
+          "maxUs": 277.917,
+          "p50Us": 1.0416666666666667,
+          "p95Us": 1.389,
+          "p99Us": 3.7776666666666667
+        },
+        {
+          "name": "Techne HTTP client",
+          "request": "GET (query + headers)",
+          "total": 50000,
+          "rps": 501540.79908240354,
+          "avgUs": 1.963050766666625,
+          "minUs": 1.375,
+          "maxUs": 409.666,
+          "p50Us": 1.611,
+          "p95Us": 2.4306666666666668,
+          "p99Us": 8.013666666666666
+        },
+        {
+          "name": "Techne HTTP client",
+          "request": "POST (json body)",
+          "total": 50000,
+          "rps": 627082.0497932159,
+          "avgUs": 1.560684233333162,
+          "minUs": 1.041,
+          "maxUs": 2426.375,
+          "p50Us": 1.2226666666666668,
+          "p95Us": 1.8476666666666668,
+          "p99Us": 5.889
+        },
+        {
+          "name": "Techne HTTP client",
+          "request": "POST (token + json)",
+          "total": 50000,
+          "rps": 615199.1116121948,
+          "avgUs": 1.591368620000055,
+          "minUs": 1.166,
+          "maxUs": 302.166,
+          "p50Us": 1.3473333333333333,
+          "p95Us": 1.9723333333333333,
+          "p99Us": 5.180666666666666
+        }
+      ]
+    },
+    {
+      "title": "Loopback TCP (real socket)",
+      "results": [
+        {
+          "name": "Native (socket)",
+          "request": "GET /users",
+          "total": 20000,
+          "rps": 107167.80763920386,
+          "avgUs": 387.7396536166678,
+          "minUs": 139.958,
+          "maxUs": 17171.666,
+          "p50Us": 370.5416666666667,
+          "p95Us": 421.875,
+          "p99Us": 733.7366666666667
+        },
+        {
+          "name": "Native (socket)",
+          "request": "GET /users/:id",
+          "total": 20000,
+          "rps": 112356.3910706512,
+          "avgUs": 367.15098271666653,
+          "minUs": 148.416,
+          "maxUs": 2623.083,
+          "p50Us": 368.81933333333336,
+          "p95Us": 433.0973333333334,
+          "p99Us": 876.8053333333334
+        },
+        {
+          "name": "Techne (socket)",
+          "request": "GET /users",
+          "total": 20000,
+          "rps": 96107.62296671017,
+          "avgUs": 416.1807475166668,
+          "minUs": 158.416,
+          "maxUs": 1635.417,
+          "p50Us": 449.29133333333334,
+          "p95Us": 496.4443333333333,
+          "p99Us": 793.2083333333334
+        },
+        {
+          "name": "Techne (socket)",
+          "request": "GET /users/:id",
+          "total": 20000,
+          "rps": 97692.53338909452,
+          "avgUs": 401.5254791666662,
+          "minUs": 149.291,
+          "maxUs": 2254,
+          "p50Us": 430.2083333333333,
+          "p95Us": 501.38899999999995,
+          "p99Us": 800.25
+        }
+      ]
+    }
+  ],
+  "memory": [
+    {
+      "routes": 1,
+      "bootMs": 3.108417,
+      "afterBoot": {
+        "rssBytes": 16761504,
+        "heapUsedBytes": 2029226,
+        "heapTotalBytes": 2479104
+      },
+      "afterLoad": {
+        "rssBytes": 29098704,
+        "heapUsedBytes": 2425570,
+        "heapTotalBytes": 2774016
+      },
+      "perRouteKb": null,
+      "loadGrowthMb": 11.765670776367188
+    },
+    {
+      "routes": 10,
+      "bootMs": 4.006875,
+      "afterBoot": {
+        "rssBytes": 17580704,
+        "heapUsedBytes": 2103340,
+        "heapTotalBytes": 2511872
+      },
+      "afterLoad": {
+        "rssBytes": 29016784,
+        "heapUsedBytes": 2509548,
+        "heapTotalBytes": 2806784
+      },
+      "perRouteKb": 88.88888888888889,
+      "loadGrowthMb": 10.906295776367188
+    },
+    {
+      "routes": 50,
+      "bootMs": 4.0235,
+      "afterBoot": {
+        "rssBytes": 18842296,
+        "heapUsedBytes": 2531514,
+        "heapTotalBytes": 2905088
+      },
+      "afterLoad": {
+        "rssBytes": 29573840,
+        "heapUsedBytes": 2906320,
+        "heapTotalBytes": 3101696
+      },
+      "perRouteKb": 41.46986607142857,
+      "loadGrowthMb": 10.234397888183594
+    },
+    {
+      "routes": 200,
+      "bootMs": 5.578167,
+      "afterBoot": {
+        "rssBytes": 21365456,
+        "heapUsedBytes": 3411247,
+        "heapTotalBytes": 4215808
+      },
+      "afterLoad": {
+        "rssBytes": 31638248,
+        "heapUsedBytes": 3808562,
+        "heapTotalBytes": 4445184
+      },
+      "perRouteKb": 22.593200376884422,
+      "loadGrowthMb": 9.796897888183594
+    },
+    {
+      "routes": 500,
+      "bootMs": 9.097583,
+      "afterBoot": {
+        "rssBytes": 26313424,
+        "heapUsedBytes": 5190745,
+        "heapTotalBytes": 6658048
+      },
+      "afterLoad": {
+        "rssBytes": 35422952,
+        "heapUsedBytes": 5600940,
+        "heapTotalBytes": 6887424
+      },
+      "perRouteKb": 18.693480711422847,
+      "loadGrowthMb": 8.687522888183594
+    }
+  ]
+}
